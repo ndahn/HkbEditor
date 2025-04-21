@@ -1,0 +1,75 @@
+-> object19114 hkbStateMachine::StateInfo
+    - generator: object2111
+    
+    -> object2111 CustomManualSelectorGenerator
+        - name: "AttackRightLight1_CMSG"
+        - animId: 30000
+        - enableScript: true
+        - enableTae: true
+        - generators[59]:
+            - object3164
+            - object3165
+            - object3166
+            - object3167
+            - object3168
+            - object3169
+            - object3170
+            - object3171
+            - object3172
+            - object3173
+            - object3174
+            - object3175
+            - object3176
+            - object3177
+            - object3178
+            - object3179
+            - object3180
+            - object3181
+            - object3182
+            - object3183
+            - object3184
+            - object3185
+            - object3186
+            - object3187
+            - object3188
+            - object3189
+            - object3190
+            - object3191
+            - object3192
+            - object3193
+            - object3194
+            - object3195
+            - object3196
+            - object3197
+            - object3198
+            - object3199
+            - object3200
+            - object3201
+            - object3202
+            - object3203
+            - object3204
+            - object3205
+            - object3206
+            - object3207
+            - object3208
+            - object3209
+            - object3210
+            - object3211
+            - object3212
+            - object3213
+            - object3214
+            - object3215
+            - object3216
+            - object3217
+            - object3218
+            - object3219
+            - object3220
+            - object3221
+            - object3222
+
+        -> object3164 hkbClipGenerator
+            - name: "a023_030000_hkx_AutoSet_00"
+            - animationName: "a023_030000"
+
+        -> object3165 hkbClipGenerator
+            ...
