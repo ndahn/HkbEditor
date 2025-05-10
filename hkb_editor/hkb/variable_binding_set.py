@@ -1,6 +1,6 @@
 from enum import IntEnum
 
-from .new_base import HkbObject
+from .base import HkbObject
 
 
 class HkbVariableBinding(HkbObject):

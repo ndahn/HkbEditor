@@ -1,24 +1,94 @@
-from dataclasses import dataclass, field
-
-from .hkb_base import HkbObject, HkbReference
-from .variable_binding_set import VariableBindingSet
+from .base import HkbObject, HkbArray, HkbReference
 
 
-@dataclass
-class ManualSelectorGenerator(HkbObject):
-    name: str = "Jump_F HandCondition Selector"
-    variableBindingSet: VariableBindingSet = None
-    generators: list[HkbReference] = field(default_factory=list)
+class HkbManualSelectorGenerator(HkbObject):
+    @classmethod
+    def create(
+        self,
+        id: str,
+        generators: HkbArray = None,
+        selectedGeneratorIndex: int = -1,
+        indexSelector: HkbReference = "object0",
+        selectedIndexCanChangeAfterActivate: bool = False,
+        generatorChangedTransitionEffect: str = "",  # TODO hkbTransitionEffect
+        sentOnClipEnd: str = "",  # TODO hkbEventProperty
+        generatorPreDeleteIndex: HkbArray = None,
+        endOfClipEventId: int = -1,
+    ):
+        super().create(
+            id,
+            "type318",
+            generators or HkbArray(),
+            selectedGeneratorIndex,
+            indexSelector,
+            selectedIndexCanChangeAfterActivate,
+            generatorChangedTransitionEffect,
+            sentOnClipEnd,
+            generatorPreDeleteIndex or HkbArray(),
+            endOfClipEventId,
+        )
 
-    # These are sometimes used
-    selectedIndexCanChangeAfterActivate: bool = True
-    generatorChangedTransitionEffect: HkbReference = "object0"
-    userData: int = 0
+    @property
+    def generators(self):
+        return self.get("generators")
 
-    # These never seem to be used
-    propertyBag: list = field(default_factory=list)
-    selectedGeneratorIndex: int = 0
-    indexSelector: HkbReference = "object0"
-    sentOnClipEnd: dict = field(default_factory=dict)
-    generatorPreDeleteIndex: list = field(default_factory=list)
-    endOfClipEventId: int = -1
+    @property
+    def selectedGeneratorIndex(self):
+        return self.get("selectedGeneratorIndex")
+
+    @property
+    def indexSelector(self):
+        return self.get("indexSelector")
+
+    @property
+    def selectedIndexCanChangeAfterActivate(self):
+        return self.get("selectedIndexCanChangeAfterActivate")
+
+    @property
+    def generatorChangedTransitionEffect(self):
+        return self.get("generatorChangedTransitionEffect")
+
+    @property
+    def sentOnClipEnd(self):
+        return self.get("sentOnClipEnd")
+
+    @property
+    def generatorPreDeleteIndex(self):
+        return self.get("generatorPreDeleteIndex")
+
+    @property
+    def endOfClipEventId(self):
+        return self.get("endOfClipEventId")
+
+    @generators.setter
+    def generators(self, val):
+        self.set("generators", val)
+    
+    @selectedGeneratorIndex.setter
+    def selectedGeneratorIndex(self, val):
+        self.set("selectedGeneratorIndex", val)
+    
+    @indexSelector.setter
+    def indexSelector(self, val):
+        self.set("indexSelector", val)
+    
+    @selectedIndexCanChangeAfterActivate.setter
+    def selectedIndexCanChangeAfterActivate(self, val):
+        self.set("selectedIndexCanChangeAfterActivate", val)
+    
+    @generatorChangedTransitionEffect.setter
+    def generatorChangedTransitionEffect(self, val):
+        self.set("generatorChangedTransitionEffect", val)
+    
+    @sentOnClipEnd.setter
+    def sentOnClipEnd(self, val):
+        self.set("sentOnClipEnd", val)
+    
+    @generatorPreDeleteIndex.setter
+    def generatorPreDeleteIndex(self, val):
+        self.set("generatorPreDeleteIndex", val)
+    
+    @endOfClipEventId.setter
+    def endOfClipEventId(self, val):
+        self.set("endOfClipEventId", val)
+    

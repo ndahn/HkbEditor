@@ -1,4 +1,4 @@
-from .new_base import HkbObject, HkbReference
+from .base import HkbObject, HkbReference
 
 
 class HkbScriptGenerator(HkbObject):

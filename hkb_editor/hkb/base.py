@@ -13,7 +13,7 @@ class HkbArray(list):
         super().__init__(elements)
 
 
-class HkbObject:
+class XmlObject:
     @classmethod
     def create(cls, id: str, typeid: str, **fields):
         obj = ET.Element("object", {"id": id, "typeid": typeid})
@@ -26,6 +26,7 @@ class HkbObject:
         return cls(obj)
 
     def __init__(self, xml_node: ET.Element):
+        # TODO userdata name variableBindingSet, propertyBag
         self._node = xml_node
         self._id = xml_node.attrib["id"]
         self._fields = {}
@@ -133,6 +134,61 @@ def _set_field_value(elem: ET.Element, name: str, val: Any):
             subname = subfield.attrib["name"]
             if subname in val:
                 _set_field_value(subfield, subname, val[subname])
+
+
+class HkbObject(XmlObject):
+    @classmethod
+    def create(
+        cls,
+        id: str,
+        typeid: str,
+        name: str = "",
+        userData: int = 0,
+        variableBindingSet: str = "",  # TODO VariableBindingSet
+        propertyBag: HkbArray = "",  # TODO DefaultPropertyBack
+        **fields
+    ):
+        super().create(
+            id,
+            typeid,
+            name=name,
+            userData=userData,
+            variableBindingSet=variableBindingSet,
+            propertyBag=propertyBag,
+            **fields
+        )
+
+    @property
+    def name(self):
+        return self.get("name")
+        
+    @property
+    def userData(self):
+        return self.get("userData")
+        
+    @property
+    def variableBindingSet(self):
+        return self.get("variableBindingSet")
+        
+    @property
+    def propertyBag(self):
+        return self.get("propertyBag")
+        
+    @name.setter
+    def name(self, val):
+        self.set("name", val)
+
+    @userData.setter
+    def userData(self, val):
+        self.set("userData", val)
+
+    @variableBindingSet.setter
+    def variableBindingSet(self, val):
+        self.set("variableBindingSet", val)
+
+    @propertyBag.setter
+    def propertyBag(self, val):
+        self.set("propertyBag", val)
 
 
 def _append_value(parent: ET.Element, val: Any):

@@ -1,17 +1,23 @@
 from enum import IntEnum
 
-from .new_base import HkbObject, HkbReference, HkbArray
+from .base import HkbObject, HkbReference, HkbArray
+
+
+# StateInfo flags:
+# 3584 = FLAG_ALLOW_SELF_TRANSITION_BY_TRANSITION_FROM_ANY_STATE, FLAG_IS_GLOBAL_WILDCARD, FLAG_IS_LOCAL_WILDCARD
+# 3072 = FLAG_IS_GLOBAL_WILDCARD, FLAG_IS_LOCAL_WILDCARD
 
 
 class HkbStateMachine(HkbObject):
     class StartStateMode(IntEnum):
         DEFAULT = 0
-        # TODO add remaining values
 
     class SelfTransitionMode(IntEnum):
-        NO_TRANSITION = 0
+        # Also sometimes called NO_TRANSITION (probably old name)
+        CONTINUE_IF_CYCLIC_BLEND_IF_ACYCLIC = 0
         CONTINUE = 1
-        # TODO add remaining values
+        RESET = 2
+        BLEND = 3
 
     @classmethod
     def create(
@@ -29,8 +35,8 @@ class HkbStateMachine(HkbObject):
         maxSimultaneousTransitions: int = 0,
         startStateMode: StartStateMode = StartStateMode.DEFAULT,
         selfTransitionMode: SelfTransitionMode = SelfTransitionMode.NO_TRANSITION,
-        states: HkbArray = [],  # [StateInfo]
-        wildcardTransitions: HkbArray = [],  # TransitionInfoArray
+        states: HkbArray = None,  # [StateInfo]
+        wildcardTransitions: HkbArray = None,  # TransitionInfoArray
     ):
         return super().create(
             id,
