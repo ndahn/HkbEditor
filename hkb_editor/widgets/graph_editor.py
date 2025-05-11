@@ -146,7 +146,9 @@ class GraphEditor:
 
             # Canvas
             # TODO use set_item_height/width to resize dynamically
-            with dpg.child_window(always_auto_resize=True, auto_resize_x=True, auto_resize_y=True):
+            with dpg.child_window(
+                always_auto_resize=True, auto_resize_x=True, auto_resize_y=True
+            ):
                 with dpg.drawlist(800, 800, tag=f"{self.tag}_canvas"):
                     dpg.add_draw_node(tag=f"{self.tag}_canvas_root")
 
@@ -212,14 +214,14 @@ class GraphEditor:
 
         _, delta_x, delta_y = mouse_delta
         self.last_drag = (delta_x, delta_y)
-        self.look_at(
-            self.origin[0] + delta_x,
-            self.origin[1] + delta_y
-        )
+        self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
 
     def _on_mouse_release(self) -> None:
         if self.dragging:
-            self.set_origin(self.origin[0] + self.last_drag[0], self.origin[1] + self.last_drag[1])
+            self.set_origin(
+                self.origin[0] + self.last_drag[0], 
+                self.origin[1] + self.last_drag[1]
+            )
             self.last_drag = (0.0, 0.0)
             self.dragging = False
 
@@ -269,7 +271,6 @@ class GraphEditor:
             self._unfold_node(node)
             parent_id = node.id
 
-
     def _select_node(self, node: Node):
         self._deselect_active_node()
         self._unfold_node(node)
@@ -288,7 +289,7 @@ class GraphEditor:
             return
 
         self.set_highlight(self.selected_node, False)
-        #self._fold_node(self.selected_node)
+        # self._fold_node(self.selected_node)
         self._clear_attributes()
 
         self.selected_node = None
@@ -309,7 +310,7 @@ class GraphEditor:
         ):
             dpg.add_text(node.id)
             dpg.add_separator()
-            
+
             for item in self.get_node_menu_items(node):
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
 
@@ -353,7 +354,7 @@ class GraphEditor:
         w = max_len * 5.3 + margin * 2
         h = text_h * len(lines) + margin * 2
 
-        zoom_factor = self.layout.zoom_factor ** self.zoom
+        zoom_factor = self.layout.zoom_factor**self.zoom
         px *= zoom_factor
         py *= zoom_factor
         w *= zoom_factor
@@ -362,9 +363,9 @@ class GraphEditor:
         with dpg.draw_node(tag=node_id, parent=f"{self.tag}_canvas_root"):
             # Background
             dpg.draw_rectangle(
-                (px, py), 
-                (px + w, py + h), 
-                fill=(62, 62, 62, 255), 
+                (px, py),
+                (px + w, py + h),
+                fill=(62, 62, 62, 255),
                 color=(255, 255, 255, 255),
                 thickness=1,
                 tag=f"{node_id}_box",
@@ -374,18 +375,12 @@ class GraphEditor:
             # TODO font and styling
             for i, text in enumerate(lines):
                 dpg.draw_text(
-                    (px + margin, py + margin + text_h * i), 
+                    (px + margin, py + margin + text_h * i),
                     text,
                     size=10 * zoom_factor,
                 )
 
-        node = Node(
-            node_id, 
-            parent_id,
-            level,
-            (px, py),
-            (w, h)
-        )
+        node = Node(node_id, parent_id, level, (px, py), (w, h))
 
         self.visible_nodes[node_id] = node
         self.on_node_created(node_id)
@@ -425,7 +420,7 @@ class GraphEditor:
 
         dpg.delete_item(node.id)
         del self.visible_nodes[node.id]
-        
+
         # Delete relations
         for parent_id in self.graph.predecessors(node.id):
             if dpg.does_item_exist(f"{parent_id}_TO_{node.id}"):
