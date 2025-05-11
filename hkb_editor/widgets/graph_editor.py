@@ -21,6 +21,7 @@ class Node:
     level: int
     pos: tuple[float, float]
     size: tuple[float, float]
+    folded: bool = True
     data: Any = None
 
     @property
@@ -73,6 +74,7 @@ class GraphEditor:
         self.root: Node = None
         self.selected_node: Node = None
         self.origin: tuple[float, float] = (0.0, 0.0)
+        self.dragging = False
         self.last_drag: tuple[float, float] = (0.0, 0.0)
         self.zoom = 0
         self.zoom_min = -3
@@ -170,17 +172,23 @@ class GraphEditor:
 
     # Callbacks
     def _on_mouse_click(self, sender, button: int) -> None:
-        self.dragging = False
-        print("click")
+        # TODO move into mouse_up
+        if self.dragging:
+            return
 
         mx, my = dpg.get_drawing_mouse_pos()
+        ox, oy = self.origin
         if dpg.is_item_hovered(f"{self.tag}_canvas"):
             for node in self.visible_nodes.values():
-                if node.contains(mx, my):
-                    print("DEBUG click on " + node.id)
-                    self._select_node(node)
+                if node.contains(mx - ox, my - oy):
+                    if button == dpg.mvMouseButton_Left:
+                        if self.selected_node == node:
+                            self._fold_node(node)
+                            self._deselect_active_node()
+                        else:
+                            self._select_node(node)
 
-                    if button == dpg.mvMouseButton_Right:
+                    elif button == dpg.mvMouseButton_Right:
                         self._open_node_menu(node)
 
                     break
@@ -221,11 +229,13 @@ class GraphEditor:
 
         zoom_point = dpg.get_drawing_mouse_pos()
         self.origin = (self.origin[0] + zoom_point[0], self.origin[1] + zoom_point[1])
-        self.zoom += min(max(wheel_delta, self.zoom_min), self.zoom_max)
+        self.zoom = min(max(self.zoom + wheel_delta, self.zoom_min), self.zoom_max)
 
+        visible = list(self.visible_nodes.values())
         self._clear_canvas()
-        print("TODO redraw everything!")
-        # TODO redraw everything that should be visible
+
+        for node in visible:
+            self._create_node(node.id, node.parent, node.level)
 
     def set_origin(self, new_x: float, new_y: float) -> None:
         self.origin = (new_x, new_y)
@@ -243,26 +253,26 @@ class GraphEditor:
 
     def _clear_canvas(self):
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
+        self.visible_nodes.clear()
+        self.selected_node = None
+        self.root = None
+        self.set_origin(0.0, 0.0)
+
+    def _isolate(self, node: Node):
+        dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
+        self.visible_nodes.clear()
+
+        required_visible = nx.shortest_path(self.graph, self.root.id, node.id)
+        parent_id = None
+        for level, node_id in enumerate(required_visible):
+            node = self._create_node(node_id, parent_id, level)
+            self._unfold_node(node)
+            parent_id = node.id
+
 
     def _select_node(self, node: Node):
-        if self.selected_node == node:
-            return
-
-        if self.selected_node:
-            # TODO the graph should only store strings, since we don't want to persist the node's 
-            # data. However, since node.__hash__ hashes the ID, retrieving by Node might still work?
-            if self.selected_node.id in self.graph.predecessors(node.id):
-                # In case a child of the active node was selected
-                self.set_highlight(node, False)
-            else:
-                self._deselect_active_node()
-
-        # Make sure the parent exists and is unfolded
-        if node != self.root:
-            level = nx.shortest_path_length(self.graph, self.root, node.id)
-            for parent_id in self.graph.predecessors(node.id):
-                parent_node = self._create_node(parent_id, level - 1)
-                self._unfold_node(parent_node)
+        self._deselect_active_node()
+        self._unfold_node(node)
 
         # Update the attributes panel
         self._clear_attributes()
@@ -278,14 +288,14 @@ class GraphEditor:
             return
 
         self.set_highlight(self.selected_node, False)
-        self._fold_node(self.selected_node)
+        #self._fold_node(self.selected_node)
         self._clear_attributes()
 
         self.selected_node = None
 
     def set_highlight(self, node: Node, highlighted: bool) -> None:
         color = (255, 0, 0, 255) if highlighted else (255, 255, 255, 255)
-        dpg.configure_item(f"{node.id}_border", color=color)
+        dpg.configure_item(f"{node.id}_box", color=color)
 
     def _open_node_menu(self, node: Node) -> None:
         def on_item_select(sender, app_data, selected_item: str):
@@ -307,11 +317,11 @@ class GraphEditor:
         if not dpg.does_item_exist(node.id):
             raise KeyError(f"Tried to unfold non-existing node {node.id}")
 
-        p_connect = (node.x + node.width, node.y + node.height / 2)
-
         for child_id in self.graph.successors(node.id):
             child_node = self._create_node(child_id, node.id, node.level + 1)
             self._create_relation(node, child_node)
+
+        node.folded = False
 
     def _fold_node(self, node: Node) -> None:
         for child_id in self.graph.successors(node.id):
@@ -319,9 +329,11 @@ class GraphEditor:
             # TODO can there be multiple parents? If so, check if there's another parent visible
             self._delete_node(child_node)
 
-    def _create_node(self, node_id: str, parent_id: str, level: int):
+        node.folded = True
+
+    def _create_node(self, node_id: str, parent_id: str, level: int) -> Node:
         if node_id in self.visible_nodes:
-            return
+            return self.visible_nodes[node_id]
 
         row = 0
         for n in self.visible_nodes.values():
@@ -338,28 +350,34 @@ class GraphEditor:
         lines = [s.center(max_len) for s in lines]
 
         text_h = 10
-        w = max_len * 1.5 + margin * 2
+        w = max_len * 5.3 + margin * 2
         h = text_h * len(lines) + margin * 2
+
+        zoom_factor = self.layout.zoom_factor ** self.zoom
+        px *= zoom_factor
+        py *= zoom_factor
+        w *= zoom_factor
+        h *= zoom_factor
 
         with dpg.draw_node(tag=node_id, parent=f"{self.tag}_canvas_root"):
             # Background
             dpg.draw_rectangle(
-                (px, py), (px + w, py + h), fill=(62, 62, 62, 255), tag=f"{node_id}_bg"
-            )
-
-            # Border
-            dpg.draw_rectangle(
-                (px, py),
-                (px + w - 2, py + h - 2),
+                (px, py), 
+                (px + w, py + h), 
+                fill=(62, 62, 62, 255), 
                 color=(255, 255, 255, 255),
-                thickness=2,
-                tag=f"{node_id}_border",
+                thickness=1,
+                tag=f"{node_id}_box",
             )
 
             # Text
             # TODO font and styling
             for i, text in enumerate(lines):
-                dpg.draw_text((px + margin, py + margin + text_h * i), text)
+                dpg.draw_text(
+                    (px + margin, py + margin + text_h * i), 
+                    text,
+                    size=10 * zoom_factor,
+                )
 
         node = Node(
             node_id, 
@@ -375,13 +393,17 @@ class GraphEditor:
         return node
 
     def _create_relation(self, node_a: Node, node_b: Node):
+        tag = f"{node_a.id}_TO_{node_b.id}"
+        if dpg.does_item_exist(tag):
+            return
+
         ax = node_a.x + node_a.width
         ay = node_a.y + node_a.height / 2
         bx = node_b.x
         by = node_b.y + node_b.height / 2
 
         # Manhatten line
-        mid_x = (bx[0] - ax[0]) / 2
+        mid_x = ax + (bx - ax) / 2
         dpg.draw_polygon(
             [
                 (ax, ay),
@@ -389,7 +411,7 @@ class GraphEditor:
                 (mid_x, by),
                 (bx, by),
             ],
-            tag=f"{node_a.id}_TO_{node_b.id}",
+            tag=tag,
             parent=node_a.id,
         )
 
@@ -403,6 +425,11 @@ class GraphEditor:
 
         dpg.delete_item(node.id)
         del self.visible_nodes[node.id]
+        
+        # Delete relations
+        for parent_id in self.graph.predecessors(node.id):
+            if dpg.does_item_exist(f"{parent_id}_TO_{node.id}"):
+                dpg.delete_item(f"{parent_id}_TO_{node.id}")
 
     def _clear_attributes(self):
         dpg.delete_item(f"{self.tag}_attributes", children_only=True)
