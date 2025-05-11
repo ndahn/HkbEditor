@@ -11,11 +11,11 @@ class BehaviorEditor(GraphEditor):
         self.beh: Behavior = None
         self._node_menus = {}
 
-    def load_behavior(self, path: str):
+    def _do_load_from_file(self, file_path: str):
         # TODO verify it's the expected xml file
         from ..parser import parse_behavior
 
-        beh = parse_behavior(path)
+        beh = parse_behavior(file_path)
 
         sm_type = beh.types.by_name["hkbStateMachine"]
         items = []

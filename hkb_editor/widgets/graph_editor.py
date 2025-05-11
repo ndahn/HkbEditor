@@ -185,12 +185,32 @@ class GraphEditor:
         g = self.graph = nx.DiGraph()
 
         g.add_node("A")
-        g.add_node("B")
-        g.add_node("C")
+        g.add_node("AB1")
+        g.add_node("AB2")
+        g.add_node("AB3")
+        g.add_node("AB1C1")
+        g.add_node("AB1C2")
+        g.add_node("AB2C1")
+        g.add_node("AB3C1")
+        g.add_node("AB3C2")
+        g.add_node("AB3C3")
+        g.add_node("AB3C4")
+        g.add_node("AB2C1D1")
+        g.add_node("AB2C1D2")
 
         # Add edges
-        g.add_edge("A", "B")
-        g.add_edge("B", "C")
+        g.add_edge("A", "AB1")
+        g.add_edge("A", "AB2")
+        g.add_edge("A", "AB3")
+        g.add_edge("AB1", "AB1C1")
+        g.add_edge("AB1", "AB1C2")
+        g.add_edge("AB2", "AB2C1")
+        g.add_edge("AB3", "AB3C1")
+        g.add_edge("AB3", "AB3C2")
+        g.add_edge("AB3", "AB3C3")
+        g.add_edge("AB3", "AB3C4")
+        g.add_edge("AB2C1", "AB2C1D1")
+        g.add_edge("AB2C1", "AB2C1D2")
 
         self._on_root_selected("", "A")
 
@@ -278,8 +298,7 @@ class GraphEditor:
                 elif button == dpg.mvMouseButton_Right:
                     self._open_canvas_menu()
                 elif button == dpg.mvMouseButton_Middle:
-                    # TODO return to origin
-                    pass
+                    self.set_origin(0.0, 0.0)
 
     def _on_mouse_down(self) -> None:
         if dpg.is_item_hovered(f"{self.tag}_canvas"):
