@@ -1,8 +1,60 @@
 from typing import Any
+from os import path
 from dataclasses import dataclass
-from itertools import chain
 from dearpygui import dearpygui as dpg
 import networkx as nx
+import tkinter as tk
+from tkinter import filedialog
+
+
+def open_file_dialog(
+    *,
+    title: str = None,
+    default_dir: str = None,
+    default_file: str = None,
+    filetypes: list[tuple[str, str]] = None,
+) -> str:
+    if not title:
+        title = "Select file to load"
+
+    # dpg file dialog sucks, so we use the tk one instead
+    root = tk.Tk()
+    root.withdraw()
+
+    ret = filedialog.askopenfilename(
+        title=title,
+        filetypes=filetypes,
+        initialdir=default_dir,
+        initialfile=default_file,
+    )
+
+    root.destroy()
+    return ret
+
+
+def save_file_dialog(
+    *,
+    title: str = None,
+    default_dir: str = None,
+    default_file: str = None,
+    filetypes: list[tuple[str, str]] = None,
+) -> str:
+    if not title:
+        title = "Select file to load"
+
+    # dpg file dialog sucks, so we use the tk one instead
+    root = tk.Tk()
+    root.withdraw()
+
+    ret = filedialog.asksaveasfilename(
+        title=title,
+        filetypes=filetypes,
+        initialdir=default_dir,
+        initialfile=default_file,
+    )
+
+    root.destroy()
+    return ret
 
 
 @dataclass
@@ -68,7 +120,8 @@ class GraphEditor:
             tag = dpg.generate_uuid()
 
         self.tag: str = tag
-        self.graph = nx.DiGraph()
+        self.loaded_file: str = None
+        self.graph: nx.DiGraph = None
         self.layout = Layout()
         self.visible_nodes: dict[int, Node] = {}
         self.root: Node = None
@@ -83,6 +136,9 @@ class GraphEditor:
         self._setup_content()
 
     # These should be implemented by subclasses
+    def get_supported_file_extensions(self) -> list[tuple[str, str]]:
+        return []
+
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
         return {}
 
@@ -115,8 +171,18 @@ class GraphEditor:
             )
 
     def open_file(self):
+        ret = open_file_dialog(
+            default_dir=path.dirname(self.loaded_file or ""),
+            filetypes=self.get_supported_file_extensions(),
+        )
+
+        if ret:
+            self._do_load_from_file(ret)
+            self.loaded_file = ret
+
+    def _do_load_from_file(self, file_path: str) -> None:
         # TODO just test data
-        g = self.graph
+        g = self.graph = nx.DiGraph()
 
         g.add_node("A")
         g.add_node("B")
@@ -129,6 +195,17 @@ class GraphEditor:
         self._on_root_selected("", "A")
 
     def save_file(self):
+        ret = save_file_dialog(
+            default_dir=path.dirname(self.loaded_file or ""),
+            default_file=path.basename(self.loaded_file or ""),
+            filetypes=self.get_supported_file_extensions(),
+        )
+
+        if ret:
+            self._do_write_to_file(ret)
+            self.loaded_file = ret
+
+    def _do_write_to_file(self, file_path: str) -> None:
         pass
 
     def _setup_content(self):
@@ -219,8 +296,7 @@ class GraphEditor:
     def _on_mouse_release(self) -> None:
         if self.dragging:
             self.set_origin(
-                self.origin[0] + self.last_drag[0], 
-                self.origin[1] + self.last_drag[1]
+                self.origin[0] + self.last_drag[0], self.origin[1] + self.last_drag[1]
             )
             self.last_drag = (0.0, 0.0)
             self.dragging = False
@@ -231,7 +307,7 @@ class GraphEditor:
 
         zoom_point = dpg.get_drawing_mouse_pos()
         self.origin = (self.origin[0] + zoom_point[0], self.origin[1] + zoom_point[1])
-        self.zoom = min(max(self.zoom + wheel_delta, self.zoom_min), self.zoom_max)
+        self.zoom = min(max(self.zoom - wheel_delta, self.zoom_min), self.zoom_max)
 
         visible = list(self.visible_nodes.values())
         self._clear_canvas()
