@@ -1,7 +1,7 @@
 import argparse
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.parser import parse_behavior
+from HkbEditor.hkb_editor.old.parser import parse_behavior
 from hkb_editor.widgets import BehaviorEditor
 
 

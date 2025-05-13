@@ -2,7 +2,7 @@ from typing import Any
 from xml.etree import ElementTree
 import networkx as nx
 
-from behavior import Behavior
+from HkbEditor.hkb_editor.old.behavior import Behavior
 from hkb_types.hkb_base import HkbObject, HkbType, HkbReference, HkbArray
 
 

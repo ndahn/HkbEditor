@@ -1,7 +1,7 @@
 from dearpygui import dearpygui as dpg
 
 from .graph_editor import GraphEditor
-from hkb_editor.behavior import Behavior
+from HkbEditor.hkb_editor.old.behavior import Behavior
 
 
 class BehaviorEditor(GraphEditor):
@@ -13,7 +13,7 @@ class BehaviorEditor(GraphEditor):
 
     def _do_load_from_file(self, file_path: str):
         # TODO verify it's the expected xml file
-        from ..parser import parse_behavior
+        from ..old.parser import parse_behavior
 
         beh = parse_behavior(file_path)
 

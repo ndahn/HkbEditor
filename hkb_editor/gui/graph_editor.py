@@ -292,7 +292,6 @@ class GraphEditor:
 
                     break
             else:
-                print("DEBUG click canvas")
                 if button == dpg.mvMouseButton_Left:
                     self._deselect_active_node()
                 elif button == dpg.mvMouseButton_Right:
