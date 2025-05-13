@@ -1,4 +1,4 @@
-from typing import Any, Type, Iterator
+from typing import Any, Type, Generator
 import struct
 import xml.etree.ElementTree as ET
 
@@ -165,7 +165,7 @@ class HkbArray(XmlValueHandler):
     def __len__(self) -> int:
         return self._count
 
-    def __iter__(self) -> Iterator[XmlValueHandler]:
+    def __iter__(self) -> Generator[XmlValueHandler, None, None]:
         for i in range(self._count):
             yield self[i]
 
@@ -237,8 +237,7 @@ class HkbRecord(XmlValueHandler):
 
     def get(self) -> dict[str, XmlValueHandler]:
         ret = {}
-        for f in self.element.findall("field"):
-            fname = f.attrib["name"]
+        for fname, _ in self.fields():
             ret[fname] = self[fname]  # TODO should we unpack?
 
         return ret
@@ -247,12 +246,16 @@ class HkbRecord(XmlValueHandler):
         for key, val in values.items():
             self[key] = val  # TODO should we pack?
 
-    def _get_field_element(self, name: str) -> ET.Element:
+    def fields(self) -> Generator[tuple[str, ET.Element], None, None]:
+        for f in self.element.findall("field"):
+            yield f.attrib["name"], f
+
+    def get_field_element(self, name: str) -> ET.Element:
         return next(
-            (f for f in self.element.findall("field") if f.attrib["name"] == name), None
+            (f for fname, f in self.fields() if fname == name), None
         )
 
-    def _get_field_type(self, name: str) -> str:
+    def get_field_type(self, name: str) -> str:
         for fname, ftype in type_registry.get_fields(self.type_id):
             if fname == name:
                 return ftype
@@ -260,11 +263,11 @@ class HkbRecord(XmlValueHandler):
         return None
 
     def __getattr__(self, name: str) -> XmlValueHandler:
-        field_el = self._get_field_element(name)
+        field_el = self.get_field_element(name)
         if field_el is None:
             raise AttributeError(f"No field '{name}'")
 
-        type_id = self._get_field_type(name)
+        type_id = self.get_field_type(name)
         return wrap_element(field_el, type_id)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -272,11 +275,11 @@ class HkbRecord(XmlValueHandler):
             super().__setattr__(name, value)
             return
 
-        field_el = self._get_field_element(name)
+        field_el = self.get_field_element(name)
         if field_el is None:
             raise AttributeError(f"No field named '{name}'")
 
-        ftype = self._get_field_type(name)
+        ftype = self.get_field_type(name)
         if isinstance(value, XmlValueHandler):
             if value.type_id != ftype:
                 raise ValueError(f"Non-matching value type {value.type_id}")

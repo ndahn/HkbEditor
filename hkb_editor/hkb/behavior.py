@@ -1,7 +1,10 @@
+from typing import Generator
+from collections import deque
 import xml.etree.ElementTree as ET
+import networkx as nx
 
 from .type_registry import type_registry
-from .hkb_types import HkbRecord, HkbArray, HkbString
+from .hkb_types import HkbRecord, HkbArray, HkbString, HkbPointer, wrap_element, get_value_handler
 
 
 class HavokBehavior:
@@ -25,6 +28,34 @@ class HavokBehavior:
         self.events: HkbArray = strings_obj.eventNames
         self.variables: HkbArray = strings_obj.variableNames
         self.animations: HkbArray = strings_obj.animationNames
+
+    def find_objects_by_type(self, type_id: str) -> Generator[HkbRecord, None, None]:
+        for obj in self.objects.values():
+            if obj.type_id == type_id:
+                yield obj
+
+    def build_graph(self, root_id: str):
+        g = nx.DiGraph()
+
+        todo: deque[tuple[str, ET.Element]] = deque()
+
+        def expand(elem: ET.Element, parent_id: str) -> None:
+            todo.extend((parent_id, ptr) for ptr in elem.element.findall(".//pointer"))
+
+        root = self.objects[root_id]
+        expand(root, root_id)
+        g.add_node(root_id)
+
+        while todo:
+            # popleft: breadth first, pop(right): depth first
+            parent_id, pointer_elem = todo.pop()
+            pointer_id = pointer_elem.attrib["id"]
+            g.add_edge(parent_id, pointer_id)
+
+            obj = self.objects[pointer_id]
+            expand(obj.element, obj.id)
+
+        return g
 
     def add_event(self, event_name: str) -> int:
         self.events.append(HkbString.new(event_name))
