@@ -74,7 +74,6 @@ class Node:
     pos: tuple[float, float]
     size: tuple[float, float]
     folded: bool = True
-    data: Any = None
 
     @property
     def x(self) -> float:
@@ -139,8 +138,14 @@ class GraphEditor:
     def get_supported_file_extensions(self) -> list[tuple[str, str]]:
         return []
 
+    def get_roots(self) -> list[str]:
+        return []
+
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
         return {}
+
+    def set_node_attribute(self, node: Node, key: str, val: Any) -> None:
+        pass
 
     def get_node_frontpage(self, node: Node) -> list[str]:
         return [f"<{node}>"]
@@ -179,6 +184,9 @@ class GraphEditor:
         if ret:
             self._do_load_from_file(ret)
             self.loaded_file = ret
+            self._clear_canvas()
+            dpg.set_value(f"{self.tag}_roots", self.get_roots())
+            dpg.set_value(f"{self.tag}_roots_filter")
 
     def _do_load_from_file(self, file_path: str) -> None:
         # TODO just test data
@@ -235,11 +243,23 @@ class GraphEditor:
         with dpg.group(horizontal=True):
             # Roots
             with dpg.child_window(width=200):
-                dpg.add_input_text(tag=f"{self.tag}_roots_filter")
-                dpg.add_group(tag=f"{self.tag}_roots_pinned")
-                dpg.add_listbox(
-                    [], tag=f"{self.tag}_roots_list", callback=self._on_root_selected
+                dpg.add_input_text(
+                    hint="Filter",
+                    tag=f"{self.tag}_roots_filter",
+                    callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
+                    user_data=f"{self.tag}_roots_table"
                 )
+                # Tables are more flexible with item design and support filtering
+                with dpg.table(
+                    header_row=True,
+                    delay_search=True,
+                    row_background=True,
+                    no_host_extendX=True,
+                    policy=dpg.mvTable_SizingFixedFit,
+                    scrollY=True,
+                    tag=f"{self.tag}_roots_table",
+                ):
+                    dpg.add_table_column(label="Name")
 
             # Canvas
             # TODO use set_item_height/width to resize dynamically
@@ -254,9 +274,24 @@ class GraphEditor:
                 dpg.set_value(f"{self.tag}_attribute_filter", filter_string)
 
             with dpg.child_window():
-                dpg.add_input_text(hint="Filter", callback=_update_attr_filter)
-                with dpg.child_window():
-                    dpg.add_filter_set(tag=f"{self.tag}_attribute_filter")
+                dpg.add_text(tag=f"{self.tag}_attributes_title")
+                dpg.add_input_text(
+                    hint="Filter",
+                    tag=f"{self.tag}_attribute_filter",
+                    callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
+                    user_data=f"{self.tag}_attributes_table",
+                )
+                with dpg.table(
+                    header_row=True,
+                    delay_search=True,
+                    row_background=True,
+                    no_host_extendX=True,
+                    policy=dpg.mvTable_SizingFixedFit,
+                    scrollY=True,
+                    tag=f"{self.tag}_attributes_table",
+                ):
+                    dpg.add_table_column(label="Key")
+                    dpg.add_table_column(label="Value")
 
             with dpg.handler_registry():
                 dpg.add_mouse_click_handler(callback=self._on_mouse_click)
@@ -275,29 +310,32 @@ class GraphEditor:
         if self.dragging:
             return
 
+        if not dpg.is_item_hovered(f"{self.tag}_canvas"):
+            return
+
         mx, my = dpg.get_drawing_mouse_pos()
         ox, oy = self.origin
-        if dpg.is_item_hovered(f"{self.tag}_canvas"):
-            for node in self.visible_nodes.values():
-                if node.contains(mx - ox, my - oy):
-                    if button == dpg.mvMouseButton_Left:
-                        if self.selected_node == node:
-                            self._fold_node(node)
-                            self._deselect_active_node()
-                        else:
-                            self._select_node(node)
 
-                    elif button == dpg.mvMouseButton_Right:
-                        self._open_node_menu(node)
-
-                    break
-            else:
+        for node in self.visible_nodes.values():
+            if node.contains(mx - ox, my - oy):
                 if button == dpg.mvMouseButton_Left:
-                    self._deselect_active_node()
+                    if self.selected_node == node:
+                        self._fold_node(node)
+                        self._deselect_active_node()
+                    else:
+                        self._select_node(node)
+
                 elif button == dpg.mvMouseButton_Right:
-                    self._open_canvas_menu()
-                elif button == dpg.mvMouseButton_Middle:
-                    self.set_origin(0.0, 0.0)
+                    self._open_node_menu(node)
+
+                break
+        else:
+            if button == dpg.mvMouseButton_Left:
+                self._deselect_active_node()
+            elif button == dpg.mvMouseButton_Right:
+                self._open_canvas_menu()
+            elif button == dpg.mvMouseButton_Middle:
+                self.set_origin(0.0, 0.0)
 
     def _on_mouse_down(self) -> None:
         if dpg.is_item_hovered(f"{self.tag}_canvas"):
@@ -371,8 +409,7 @@ class GraphEditor:
 
         # Update the attributes panel
         self._clear_attributes()
-        for key, val in self.get_node_attributes(node):
-            self._add_attribute(key, val, node)
+        self._update_attributes(node)
 
         self.set_highlight(node, True)
         self.selected_node = node
@@ -520,23 +557,43 @@ class GraphEditor:
             if dpg.does_item_exist(f"{parent_id}_TO_{node.id}"):
                 dpg.delete_item(f"{parent_id}_TO_{node.id}")
 
-    def _clear_attributes(self):
+    def _update_roots(self) -> None:
+        # TODO make sure we don't delete columns
+        print("##### ", dpg.get_item_state(f"{self.tag}_roots_table"))
+        dpg.delete_item(f"{self.tag}_roots_table", children_only=True)
+
+        roots = self.get_roots()
+        for root in roots:
+            with dpg.table_row(filter_key=root):
+                dpg.add_text(root)
+
+    def _clear_attributes(self) -> None:
+        # TODO make sure columns are not deleted
         dpg.delete_item(f"{self.tag}_attributes", children_only=True)
+        dpg.set_value(f"{self.tag}_attributes_title", "")
+
+    def _update_attributes(self, node: Node) -> None:
+        dpg.set_title(f"{self.tag}_attributes_title", node.id)
+
+        for key, val in self.get_node_attributes(node):
+            with dpg.table_row(
+                filter_key=key,
+                parent=f"{self.tag}_attributes_table",
+            ):
+                self._add_attribute(key, val, node)
 
     def _add_attribute(self, key: str, val: Any, node: Node) -> None:
         tag = f"{node.id}_{key}"
 
         def update_node_attribute(sender: str, new_val: Any, attribute: str):
-            # TODO
-            print("TODO update node attribute")
+            self.set_node_attribute(node, attribute, new_val)
 
-        # TODO
         if isinstance(val, str):
             dpg.add_input_text(
                 label=key,
                 filter_key=key,
                 tag=tag,
-                callback=self._update_node_attribute,
+                callback=update_node_attribute,
                 user_data=key,
                 default_value=val,
             )
@@ -545,7 +602,7 @@ class GraphEditor:
                 label=key,
                 filter_key=key,
                 tag=tag,
-                callback=self._update_node_attribute,
+                callback=update_node_attribute,
                 user_data=key,
                 default_value=val,
             )
@@ -554,7 +611,7 @@ class GraphEditor:
                 label=key,
                 filter_key=key,
                 tag=tag,
-                callback=self._update_node_attribute,
+                callback=update_node_attribute,
                 user_data=key,
                 default_value=val,
             )
@@ -563,11 +620,12 @@ class GraphEditor:
                 label=key,
                 filter_key=key,
                 tag=tag,
-                callback=self._update_node_attribute,
+                callback=update_node_attribute,
                 user_data=key,
                 default_value=val,
             )
         else:
+            # TODO
             dpg.add_button(
                 label=key,
                 filter_key=key,
