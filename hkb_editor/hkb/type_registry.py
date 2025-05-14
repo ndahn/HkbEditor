@@ -1,5 +1,9 @@
 from typing import Any
+from logging import getLogger
 import xml.etree.ElementTree as ET
+
+
+_logger = getLogger("TypeRegistry")
 
 
 class TypeRegistry:
@@ -16,7 +20,7 @@ class TypeRegistry:
             # Seems to be inherited from the parent types
             fmt = self._resolve_attribute(root, type_id, "format", "value")
             if fmt is None:
-                print(f"Could not resolve format of type {type_id}")
+                _logger.warning("Could not resolve format of type %s", type_id)
             else:
                 fmt = int(fmt)
 
@@ -57,12 +61,12 @@ class TypeRegistry:
             
         return val
 
-    def find_type_by_name(self, type_name: str) -> tuple[str, dict]:
+    def find_type_by_name(self, type_name: str) -> str:
         for tid, t in self.types.items():
             if t["name"] == type_name:
-                return tid, t
+                return tid
 
-        return None, None
+        return None
 
     def get_name(self, type_id: str) -> str:
         return self.types[type_id]["name"]

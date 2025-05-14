@@ -575,9 +575,9 @@ class GraphEditor:
         dpg.add_table_column(label="Value", parent=f"{self.tag}_attributes_table")
 
     def _update_attributes(self, node: Node) -> None:
-        dpg.set_title(f"{self.tag}_attributes_title", node.id)
+        dpg.set_value(f"{self.tag}_attributes_title", node.id)
 
-        for key, val in self.get_node_attributes(node):
+        for key, val in self.get_node_attributes(node).items():
             with dpg.table_row(
                 filter_key=key,
                 parent=f"{self.tag}_attributes_table",

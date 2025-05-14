@@ -26,7 +26,7 @@ class HavokBehavior:
             self.objects["object0"] = HkbRecord.new({}, t_void, "object0")
 
         # There's a special object storing the string values referenced from HKS
-        strings_type_id, _ = type_registry.find_type_by_name("hkbBehaviorGraphStringData")
+        strings_type_id = type_registry.find_type_by_name("hkbBehaviorGraphStringData")
         strings_id = root.find(f".//object[@typeid='{strings_type_id}']").attrib["id"]
         strings_obj = self.objects[strings_id]
 

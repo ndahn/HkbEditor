@@ -24,7 +24,7 @@ class BehaviorEditor(GraphEditor):
         return [("Behavior XML", ".xml")]
 
     def get_roots(self) -> list[str]:
-        sm_type, _ = self.beh.type_registry.find_type_by_name("hkbStateMachine")
+        sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
         self.roots = list(self.beh.find_objects_by_type(sm_type))
         return self.roots
 
@@ -42,11 +42,17 @@ class BehaviorEditor(GraphEditor):
 
     def get_node_frontpage(self, node_id: str) -> list[str]:
         obj = self.beh.objects[node_id]
-        return [
-            obj.name.get(),
-            node_id,
-            self.beh.type_registry.get_name(obj.type_id),
-        ]
+        try:
+            return [
+                obj.name.get(),
+                node_id,
+                self.beh.type_registry.get_name(obj.type_id),
+            ]
+        except AttributeError:
+            return [
+                node_id,
+                self.beh.type_registry.get_name(obj.type_id),
+            ]
 
     def get_node_frontpage_short(self, node_id: str) -> str:
         return self.beh.objects[node_id].name.get()

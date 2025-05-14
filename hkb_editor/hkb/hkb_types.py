@@ -54,10 +54,10 @@ class HkbInteger(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get(self) -> int:
-        return int(self.element["value"])
+        return int(self.element.attrib["value"])
 
     def set(self, value: int) -> None:
-        self.element["value"] = value
+        self.element.attrib["value"] = value
 
 
 class HkbFloat(XmlValueHandler):
