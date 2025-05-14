@@ -1,5 +1,6 @@
 from typing import Any
 from os import path
+from logging import getLogger
 from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
 import networkx as nx
@@ -118,6 +119,7 @@ class GraphEditor:
         if tag in (0, None, ""):
             tag = dpg.generate_uuid()
 
+        self.logger = getLogger(self.__class__.__name__)
         self.tag: str = tag
         self.loaded_file: str = None
         self.graph: nx.DiGraph = None
@@ -468,9 +470,15 @@ class GraphEditor:
             if n.level == level:
                 row += 1
 
-        # TODO does not adjust if there are particularly wide nodes in a level
-        px = self.layout.node0_margin[0] + level * self.layout.gap_x
-        py = self.layout.node0_margin[1] + row * self.layout.step_y
+        max_width = 0
+        max_height = 0
+
+        for other in self.visible_nodes.values():
+            max_width = max(max_width, other.width)
+            max_height = max(max_height, other.height)
+
+        px = self.layout.node0_margin[0] + level * (max_width + self.layout.gap_x)
+        py = self.layout.node0_margin[1] + row * (max_height + self.layout.step_y)
 
         margin = self.layout.text_margin
         lines = self.get_node_frontpage(node_id)
