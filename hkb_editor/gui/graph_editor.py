@@ -138,8 +138,11 @@ class GraphEditor:
     def get_supported_file_extensions(self) -> list[tuple[str, str]]:
         return []
 
-    def get_roots(self) -> list[str]:
+    def get_roots(self) -> list[Node]:
         return []
+
+    def make_node(self, node_id) -> None:
+        pass
 
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
         return {}
@@ -147,11 +150,11 @@ class GraphEditor:
     def set_node_attribute(self, node: Node, key: str, val: Any) -> None:
         pass
 
-    def get_node_frontpage(self, node: Node) -> list[str]:
-        return [f"<{node}>"]
+    def get_node_frontpage(self, node_id: str) -> list[str]:
+        return [f"<{node_id}>"]
 
-    def get_node_children(self, node: Node) -> list[str]:
-        return []
+    def get_node_frontpage_short(self, node_id: str) -> str:
+        return node_id
 
     def get_node_menu_items(self, node: Node) -> list[str]:
         return []
@@ -160,9 +163,6 @@ class GraphEditor:
         pass
 
     def on_node_selected(self, node: Node) -> None:
-        pass
-
-    def on_node_created(self, node: Node) -> None:
         pass
 
     def create_menu(self):
@@ -185,9 +185,8 @@ class GraphEditor:
             self._do_load_from_file(ret)
             self.loaded_file = ret
             self._clear_canvas()
-            dpg.set_value(f"{self.tag}_roots", self.get_roots())
-            dpg.set_value(f"{self.tag}_roots_filter")
-
+            self._update_roots()
+    
     def _do_load_from_file(self, file_path: str) -> None:
         # TODO just test data
         g = self.graph = nx.DiGraph()
@@ -220,8 +219,8 @@ class GraphEditor:
         g.add_edge("AB2C1", "AB2C1D1")
         g.add_edge("AB2C1", "AB2C1D2")
 
-        self._on_root_selected("", "A")
-
+        self._on_root_selected("", "", "A")
+        
     def save_file(self):
         ret = save_file_dialog(
             default_dir=path.dirname(self.loaded_file or ""),
@@ -247,19 +246,18 @@ class GraphEditor:
                     hint="Filter",
                     tag=f"{self.tag}_roots_filter",
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
-                    user_data=f"{self.tag}_roots_table"
+                    user_data=f"{self.tag}_roots_table",
                 )
                 # Tables are more flexible with item design and support filtering
-                with dpg.table(
+                dpg.add_table(
                     header_row=True,
                     delay_search=True,
                     row_background=True,
                     no_host_extendX=True,
-                    policy=dpg.mvTable_SizingFixedFit,
+                    #policy=dpg.mvTable_SizingFixedFit,
                     scrollY=True,
                     tag=f"{self.tag}_roots_table",
-                ):
-                    dpg.add_table_column(label="Name")
+                )
 
             # Canvas
             # TODO use set_item_height/width to resize dynamically
@@ -281,7 +279,7 @@ class GraphEditor:
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                     user_data=f"{self.tag}_attributes_table",
                 )
-                with dpg.table(
+                dpg.add_table(
                     header_row=True,
                     delay_search=True,
                     row_background=True,
@@ -289,9 +287,7 @@ class GraphEditor:
                     policy=dpg.mvTable_SizingFixedFit,
                     scrollY=True,
                     tag=f"{self.tag}_attributes_table",
-                ):
-                    dpg.add_table_column(label="Key")
-                    dpg.add_table_column(label="Value")
+                )
 
             with dpg.handler_registry():
                 dpg.add_mouse_click_handler(callback=self._on_mouse_click)
@@ -381,7 +377,7 @@ class GraphEditor:
             dpg.create_translation_matrix((px, py)),
         )
 
-    def _on_root_selected(self, sender: str, node_id: str):
+    def _on_root_selected(self, sender: str, app_data: str, node_id: str):
         self._clear_canvas()
         self.root = self._create_node(node_id, None, 0)
 
@@ -512,13 +508,10 @@ class GraphEditor:
                 )
 
         node = Node(node_id, parent_id, level, (px, py), (w, h))
-
         self.visible_nodes[node_id] = node
-        self.on_node_created(node_id)
-
         return node
 
-    def _create_relation(self, node_a: Node, node_b: Node):
+    def _create_relation(self, node_a: Node, node_b: Node) -> None:
         tag = f"{node_a.id}_TO_{node_b.id}"
         if dpg.does_item_exist(tag):
             return
@@ -541,7 +534,7 @@ class GraphEditor:
             parent=node_a.id,
         )
 
-    def _delete_node(self, node: Node):
+    def _delete_node(self, node: Node) -> None:
         if not node:
             return
 
@@ -558,19 +551,28 @@ class GraphEditor:
                 dpg.delete_item(f"{parent_id}_TO_{node.id}")
 
     def _update_roots(self) -> None:
-        # TODO make sure we don't delete columns
-        print("##### ", dpg.get_item_state(f"{self.tag}_roots_table"))
         dpg.delete_item(f"{self.tag}_roots_table", children_only=True)
+        
+        # Columns are in slot 0, rows in slot 1, so we could delete only the rows. However,
+        # this way subclasses of the editor can customize what to show
+        dpg.add_table_column(label="Name", parent=f"{self.tag}_roots_table")
 
         roots = self.get_roots()
         for root in roots:
-            with dpg.table_row(filter_key=root):
-                dpg.add_text(root)
+            with dpg.table_row(filter_key=str(root), parent=f"{self.tag}_roots_table"):
+                label = self.get_node_frontpage_short(root.id)
+                dpg.add_selectable(
+                    label=label, user_data=root.id, callback=self._on_root_selected
+                )
 
     def _clear_attributes(self) -> None:
-        # TODO make sure columns are not deleted
-        dpg.delete_item(f"{self.tag}_attributes", children_only=True)
         dpg.set_value(f"{self.tag}_attributes_title", "")
+        
+        dpg.delete_item(f"{self.tag}_attributes_table", children_only=True)
+        
+        # Unfortunately, the columns get deleted, too
+        dpg.add_table_column(label="Key", parent=f"{self.tag}_attributes_table")
+        dpg.add_table_column(label="Value", parent=f"{self.tag}_attributes_table")
 
     def _update_attributes(self, node: Node) -> None:
         dpg.set_title(f"{self.tag}_attributes_title", node.id)

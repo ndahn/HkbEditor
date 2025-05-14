@@ -20,6 +20,9 @@ class XmlValueHandler:
     def set(self, value: Any) -> None:
         raise NotImplementedError()
 
+    def __str__(self) -> str:
+        return str(self.get())
+
 
 class HkbString(XmlValueHandler):
     @classmethod
@@ -33,10 +36,10 @@ class HkbString(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get(self) -> str:
-        return self.element["value"]
+        return self.element.attrib["value"]
 
     def set(self, value: str) -> None:
-        self.element["value"] = value
+        self.element.attrib["value"] = value
 
 
 class HkbInteger(XmlValueHandler):
@@ -75,7 +78,7 @@ class HkbFloat(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get(self) -> float:
-        return float(self.element["dec"])
+        return float(self.element.attrib["dec"])
 
     def set(self, value: float) -> None:
         self.element.attrib["dec"] = value
@@ -94,10 +97,10 @@ class HkbBool(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get(self) -> bool:
-        return self.element["value"].lower() == "true"
+        return self.element.attrib["value"].lower() == "true"
 
     def set(self, value: bool) -> None:
-        self.element["value"] = "true" if value else "false"
+        self.element.attrib["value"] = "true" if value else "false"
 
     def to_xml(self) -> ET.Element:
         val = "true" if self.get() else "false"
@@ -116,10 +119,10 @@ class HkbPointer(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get(self) -> str:
-        return self.element["id"]
+        return self.element.attrib["id"]
 
     def set(self, value: str) -> None:
-        self.element["id"] = value
+        self.element.attrib["id"] = value
 
     def to_xml(self) -> ET.Element:
         return ET.Element("pointer", id=self.get())
@@ -216,19 +219,19 @@ class HkbArray(XmlValueHandler):
 
 class HkbRecord(XmlValueHandler):
     @classmethod
-    def new(cls, values: dict[str, Any], type_id: str) -> "HkbInteger":
-        record = HkbRecord(ET.Element("record"), type_id, None)
+    def new(cls, values: dict[str, Any], type_id: str, id: str = None) -> "HkbRecord":
+        record = HkbRecord(ET.Element("record"), type_id, id)
         record.set(values)
         return record
 
     @classmethod
     def from_object(self, element: ET.Element) -> "HkbRecord":
         record = element.find("record")
-        type_id = element.attrib["type_id"]
+        type_id = element.attrib["typeid"]
         id = element.attrib["id"]
         return HkbRecord(record, type_id, id)
 
-    def __init__(self, element: ET.Element, type_id: str, id: str):
+    def __init__(self, element: ET.Element, type_id: str, id: str = None):
         assert element.tag == "record"
         assert type_id
 
@@ -238,13 +241,13 @@ class HkbRecord(XmlValueHandler):
     def get(self) -> dict[str, XmlValueHandler]:
         ret = {}
         for fname, _ in self.fields():
-            ret[fname] = self[fname]  # TODO should we unpack?
+            ret[fname] = getattr(self, fname)
 
         return ret
 
     def set(self, values: dict[str, XmlValueHandler]) -> None:
         for key, val in values.items():
-            self[key] = val  # TODO should we pack?
+            setattr(self, key, val)
 
     def fields(self) -> Generator[tuple[str, ET.Element], None, None]:
         for f in self.element.findall("field"):
@@ -331,10 +334,7 @@ def get_value_handler(type_id: str) -> Type[XmlValueHandler]:
 
 def wrap_element(element: ET.Element, type_id: str = None) -> XmlValueHandler:
     if element.tag == "object":
-        type_id = element.attrib["type_id"]
-        id = element.attrib["id"]
-        element = next(iter(element))
-        return HkbRecord(element, type_id, id)
+        return HkbRecord.from_object(element)
 
     if element.tag == "field":
         element = next(iter(element))

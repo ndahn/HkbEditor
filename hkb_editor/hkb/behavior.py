@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 import networkx as nx
 
 from .type_registry import type_registry
-from .hkb_types import HkbRecord, HkbArray, HkbString, HkbPointer, wrap_element, get_value_handler
+from .hkb_types import HkbRecord, HkbArray, HkbString, wrap_element, get_value_handler
 
 
 class HavokBehavior:
@@ -20,9 +20,14 @@ class HavokBehavior:
             for obj in root.findall(".//object")
         }
 
+        if "object0" not in self.objects:
+            # Treated as None
+            t_void = self.type_registry.find_type_by_name("void")
+            self.objects["object0"] = HkbRecord.new({}, t_void, "object0")
+
         # There's a special object storing the string values referenced from HKS
-        strings_type, _ = type_registry.find_type_by_name("hkbBehaviorGraphStringData")
-        strings_id = root.find(f".//object[@typeid={strings_type}]").attrib["id"]
+        strings_type_id, _ = type_registry.find_type_by_name("hkbBehaviorGraphStringData")
+        strings_id = root.find(f".//object[@typeid='{strings_type_id}']").attrib["id"]
         strings_obj = self.objects[strings_id]
 
         self.events: HkbArray = strings_obj.eventNames
@@ -40,10 +45,10 @@ class HavokBehavior:
         todo: deque[tuple[str, ET.Element]] = deque()
 
         def expand(elem: ET.Element, parent_id: str) -> None:
-            todo.extend((parent_id, ptr) for ptr in elem.element.findall(".//pointer"))
+            todo.extend((parent_id, ptr) for ptr in elem.findall(".//pointer"))
 
         root = self.objects[root_id]
-        expand(root, root_id)
+        expand(root.element, root_id)
         g.add_node(root_id)
 
         while todo:

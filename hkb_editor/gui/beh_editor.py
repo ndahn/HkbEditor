@@ -1,100 +1,64 @@
+from typing import Any
 from dearpygui import dearpygui as dpg
 
-from .graph_editor import GraphEditor
-from HkbEditor.hkb_editor.old.behavior import Behavior
+from .graph_editor import GraphEditor, Node
+from hkb.behavior import HavokBehavior
+from hkb.hkb_types import HkbRecord
 
 
 class BehaviorEditor(GraphEditor):
     def __init__(self, tag: str | int = 0):
         super().__init__(tag)
 
-        self.beh: Behavior = None
-        self._node_menus = {}
+        self.beh: HavokBehavior = None
+        self.roots: list[HkbRecord] = None
 
     def _do_load_from_file(self, file_path: str):
-        # TODO verify it's the expected xml file
-        from ..old.parser import parse_behavior
+        self.beh = HavokBehavior(file_path)
 
-        beh = parse_behavior(file_path)
+    def _do_write_to_file(self, file_path):
+        # TODO
+        pass
 
-        sm_type = beh.types.by_name["hkbStateMachine"]
-        items = []
+    def get_supported_file_extensions(self):
+        return [("Behavior XML", ".xml")]
 
-        for sm in beh.objects.by_type[sm_type]:
-            key = f"{sm.name ({sm.id})}"
-            items.append(key)
+    def get_roots(self) -> list[str]:
+        sm_type, _ = self.beh.type_registry.find_type_by_name("hkbStateMachine")
+        self.roots = list(self.beh.find_objects_by_type(sm_type))
+        return self.roots
 
-        dpg.configure_item(f"{self.tag}_roots_list", items=items)
+    def _on_root_selected(self, sender: str, app_data: str, node_id: str) -> None:
+        self.graph = self.beh.build_graph(node_id)
+        super()._on_root_selected(sender, app_data, node_id)
 
-    def get_node_attributes(self, node: str | int):
-        return self.beh.objects[node].fields()
+    def get_node_attributes(self, node: Node) -> dict[str, Any]:
+        obj: HkbRecord = self.beh.objects[node.id]
+        return {k: v.get() for k,v in obj.get().items()}
 
-    def get_node_frontpage(self, node_id: str | int):
-        node = self.beh.objects.by_id[node_id]
-        node_name = node.get_name()
-        node_type = node.typeid
-        node_type_name = self.beh.types.by_id[node_type].name
+    def set_node_attribute(self, node: Node, key: str, val: Any) -> None:
+        obj: HkbRecord = self.beh.objects[node.id]
+        obj[key] = val
 
-        lines = [
-            f"{node_id}",
-            f"<{node_type_name}>",
+    def get_node_frontpage(self, node_id: str) -> list[str]:
+        obj = self.beh.objects[node_id]
+        return [
+            obj.name.get(),
+            node_id,
+            self.beh.type_registry.get_name(obj.type_id),
         ]
 
-        if node_name:
-            lines.append(f"{node_name}")
+    def get_node_frontpage_short(self, node_id: str) -> str:
+        return self.beh.objects[node_id].name.get()
 
-        return lines
+    def get_node_menu_items(self, node: Node) -> list[str]:
+        return []
 
-    def get_node_children(self, node_id: str):
-        # TODO
-        node = self.beh.objects[node_id]
+    def on_node_menu_item_selected(node: Node, selected_item: str) -> None:
+        pass
 
-    def on_node_created(self, node_id: str | int):
-        node = self.beh.objects[node_id]
-
-        # Add a right click menu
-        with dpg.popup(
-            parent=node_id, 
-            mousebutton=dpg.mvMouseButton_Right, 
-        ) as node_menu:
-            dpg.add_text(node_id)
-            dpg.add_separator()
-
-            if isinstance(node, HkbStateMachine):
-                # TODO add stateinfo
-                pass
-            elif isinstance(node, HkbStateInfo):
-                pass
-            elif isinstance(node, HkbVariableBindingSet):
-                pass
-            elif isinstance(node, HkbLayerGenerator):
-                pass
-            elif isinstance(node, HkbLayer):
-                pass
-            elif isinstance(node, HkbManualSelectorGenerator):
-                pass
-            elif isinstance(node, CustomManualSelectorGenerator):
-                pass
-            elif isinstance(node, HkbScriptGenerator):
-                pass
-
-            dpg.add_separator()
-            dpg.add_button(label="Delete", callback=delete_node)
-
-        self._node_menus[node] = node_menu
-
-    def _clear_canvas(self):
-        for item in self._node_menus.values():
-            dpg.delete_item(item)
-        self._node_menus.clear()
-        
-        super()._clear_canvas()
-
-    def _delete_node(self, node_id: str | int):
-        menu = self._node_menus.pop(node_id, None)
-        if menu is not None:
-            dpg.delete_item(menu)
-        super()._delete_node(node_id)
+    def on_node_selected(self, node: Node) -> None:
+        pass
 
     # Fleshing out common use cases here
 
