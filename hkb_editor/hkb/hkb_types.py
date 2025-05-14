@@ -78,10 +78,12 @@ class HkbFloat(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get(self) -> float:
-        return float(self.element.attrib["dec"])
+        # Behaviors use commas as decimal separators
+        return float(self.element.attrib["dec"].replace(",", "."))
 
     def set(self, value: float) -> None:
-        self.element.attrib["dec"] = value
+        # Behaviors use commas as decimal separators
+        self.element.attrib["dec"] = str(value).replace(".", ",")
         self.element.attrib["hex"] = self.float_to_ieee754(value)
 
 

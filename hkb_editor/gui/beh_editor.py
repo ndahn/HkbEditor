@@ -29,6 +29,7 @@ class BehaviorEditor(GraphEditor):
         return self.roots
 
     def _on_root_selected(self, sender: str, app_data: str, node_id: str) -> None:
+        self.logger.info("Building graph for node %s", node_id)
         self.graph = self.beh.build_graph(node_id)
         super()._on_root_selected(sender, app_data, node_id)
 
@@ -38,7 +39,8 @@ class BehaviorEditor(GraphEditor):
 
     def set_node_attribute(self, node: Node, key: str, val: Any) -> None:
         obj: HkbRecord = self.beh.objects[node.id]
-        obj[key] = val
+        # TODO implement setitem
+        setattr(obj, key, val)
 
     def get_node_frontpage(self, node_id: str) -> list[str]:
         obj = self.beh.objects[node_id]
