@@ -189,7 +189,7 @@ class GraphEditor:
             self.loaded_file = ret
             self._clear_canvas()
             self._update_roots()
-    
+
     def _do_load_from_file(self, file_path: str) -> None:
         # TODO just test data
         g = self.graph = nx.DiGraph()
@@ -223,7 +223,7 @@ class GraphEditor:
         g.add_edge("AB2C1", "AB2C1D2")
 
         self._on_root_selected("", "", "A")
-        
+
     def save_file(self):
         ret = save_file_dialog(
             default_dir=path.dirname(self.loaded_file or ""),
@@ -257,7 +257,7 @@ class GraphEditor:
                     delay_search=True,
                     row_background=True,
                     no_host_extendX=True,
-                    #policy=dpg.mvTable_SizingFixedFit,
+                    # policy=dpg.mvTable_SizingFixedFit,
                     scrollY=True,
                     tag=f"{self.tag}_roots_table",
                 )
@@ -381,6 +381,16 @@ class GraphEditor:
         )
 
     def _on_root_selected(self, sender: str, app_data: str, node_id: str):
+        if self.root and node_id == self.root.id:
+            # Prevent deselecting a root
+            dpg.set_value(f"{self.tag}_{node_id}_selectable", True)
+            return
+
+        for root in self.get_roots():
+            tag = f"{self.tag}_{root.id}_selectable"
+            if root.id != node_id and dpg.does_item_exist(tag):
+                dpg.set_value(tag, False)
+
         self._clear_canvas()
         self.root = self._create_node(node_id, None, 0)
 
@@ -486,8 +496,8 @@ class GraphEditor:
         max_len = max(len(s) for s in lines)
         lines = [s.center(max_len) for s in lines]
 
-        text_h = 10
-        w = max_len * 5.3 + margin * 2
+        text_h = 12
+        w = max_len * 6.5 + margin * 2
         h = text_h * len(lines) + margin * 2
 
         zoom_factor = self.layout.zoom_factor**self.zoom
@@ -495,6 +505,7 @@ class GraphEditor:
         py *= zoom_factor
         w *= zoom_factor
         h *= zoom_factor
+        text_offset_y = text_h * zoom_factor
 
         with dpg.draw_node(tag=node_id, parent=f"{self.tag}_canvas_root"):
             # Background
@@ -511,9 +522,9 @@ class GraphEditor:
             # TODO font and styling
             for i, text in enumerate(lines):
                 dpg.draw_text(
-                    (px + margin, py + margin + text_h * i),
+                    (px + margin, py + margin + text_offset_y * i),
                     text,
-                    size=10 * zoom_factor,
+                    size=12 * zoom_factor,
                 )
 
         node = Node(node_id, parent_id, level, (px, py), (w, h))
@@ -561,24 +572,27 @@ class GraphEditor:
 
     def _update_roots(self) -> None:
         dpg.delete_item(f"{self.tag}_roots_table", children_only=True)
-        
+
         # Columns are in slot 0, rows in slot 1, so we could delete only the rows. However,
         # this way subclasses of the editor can customize what to show
         dpg.add_table_column(label="Name", parent=f"{self.tag}_roots_table")
 
         roots = self.get_roots()
         for root in roots:
-            with dpg.table_row(filter_key=str(root), parent=f"{self.tag}_roots_table"):
-                label = self.get_node_frontpage_short(root.id)
+            label = self.get_node_frontpage_short(root.id)
+            with dpg.table_row(filter_key=label, parent=f"{self.tag}_roots_table"):
                 dpg.add_selectable(
-                    label=label, user_data=root.id, callback=self._on_root_selected
+                    label=label,
+                    user_data=root.id,
+                    callback=self._on_root_selected,
+                    tag=f"{self.tag}_{root.id}_selectable",
                 )
 
     def _clear_attributes(self) -> None:
         dpg.set_value(f"{self.tag}_attributes_title", "")
-        
+
         dpg.delete_item(f"{self.tag}_attributes_table", children_only=True)
-        
+
         # Unfortunately, the columns get deleted, too
         dpg.add_table_column(label="Key", parent=f"{self.tag}_attributes_table")
         dpg.add_table_column(label="Value", parent=f"{self.tag}_attributes_table")

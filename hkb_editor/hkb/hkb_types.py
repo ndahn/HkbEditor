@@ -14,14 +14,14 @@ class XmlValueHandler:
         self.element = element
         self.type_id = type_id
 
-    def get(self) -> Any:
+    def get_value(self) -> Any:
         raise NotImplementedError()
 
-    def set(self, value: Any) -> None:
+    def set_value(self, value: Any) -> None:
         raise NotImplementedError()
 
     def __str__(self) -> str:
-        return str(self.get())
+        return str(self.get_value())
 
 
 class HkbString(XmlValueHandler):
@@ -35,10 +35,10 @@ class HkbString(XmlValueHandler):
 
         super().__init__(element, type_id)
 
-    def get(self) -> str:
+    def get_value(self) -> str:
         return self.element.attrib["value"]
 
-    def set(self, value: str) -> None:
+    def set_value(self, value: str) -> None:
         self.element.attrib["value"] = value
 
 
@@ -53,10 +53,10 @@ class HkbInteger(XmlValueHandler):
 
         super().__init__(element, type_id)
 
-    def get(self) -> int:
+    def get_value(self) -> int:
         return int(self.element.attrib["value"])
 
-    def set(self, value: int) -> None:
+    def set_value(self, value: int) -> None:
         self.element.attrib["value"] = value
 
 
@@ -77,11 +77,11 @@ class HkbFloat(XmlValueHandler):
 
         super().__init__(element, type_id)
 
-    def get(self) -> float:
+    def get_value(self) -> float:
         # Behaviors use commas as decimal separators
         return float(self.element.attrib["dec"].replace(",", "."))
 
-    def set(self, value: float) -> None:
+    def set_value(self, value: float) -> None:
         # Behaviors use commas as decimal separators
         self.element.attrib["dec"] = str(value).replace(".", ",")
         self.element.attrib["hex"] = self.float_to_ieee754(value)
@@ -98,15 +98,11 @@ class HkbBool(XmlValueHandler):
 
         super().__init__(element, type_id)
 
-    def get(self) -> bool:
+    def get_value(self) -> bool:
         return self.element.attrib["value"].lower() == "true"
 
-    def set(self, value: bool) -> None:
+    def set_value(self, value: bool) -> None:
         self.element.attrib["value"] = "true" if value else "false"
-
-    def to_xml(self) -> ET.Element:
-        val = "true" if self.get() else "false"
-        return ET.Element("bool", value=val)
 
 
 class HkbPointer(XmlValueHandler):
@@ -120,14 +116,18 @@ class HkbPointer(XmlValueHandler):
 
         super().__init__(element, type_id)
 
-    def get(self) -> str:
-        return self.element.attrib["id"]
+    def get_value(self) -> str:
+        val = self.element.attrib["id"]
+        if val == "object0":
+            return ""
+        
+        return val
 
-    def set(self, value: str) -> None:
+    def set_value(self, value: str) -> None:
+        if value in ("", None):
+            value = "object0"
+
         self.element.attrib["id"] = value
-
-    def to_xml(self) -> ET.Element:
-        return ET.Element("pointer", id=self.get())
 
 
 class HkbArray(XmlValueHandler):
@@ -156,10 +156,10 @@ class HkbArray(XmlValueHandler):
     def _count(self, new_count: int) -> None:
         self.element.attrib["count"] = new_count
 
-    def get(self) -> list[XmlValueHandler]:
+    def get_value(self) -> list[XmlValueHandler]:
         return [wrap_element(e, self.element_type_id) for e in self.element]
 
-    def set(self, values: list[XmlValueHandler]) -> None:
+    def set_value(self, values: list[XmlValueHandler]) -> None:
         for idx, item in enumerate(values):
             if item.type_id != self.element_type_id:
                 raise ValueError(f"Non-matching value type {item.type_id} at index {idx}")
@@ -183,12 +183,12 @@ class HkbArray(XmlValueHandler):
             if value.type_id != self.element_type_id:
                 raise ValueError(f"Non-matching value type {value.type_id}")
             
-            value = value.get()
+            value = value.get_value()
 
-        self[index].set(value)
+        self[index].set_value(value)
 
     def __delitem__(self, index: int) -> None:
-        self.element[:] = [e.element for i, e in enumerate(self.get()) if e != index]
+        self.element[:] = [e.element for i, e in enumerate(self.get_value()) if e != index]
         self._counter -= 1
 
     def index(self, value: XmlValueHandler) -> int:
@@ -196,10 +196,10 @@ class HkbArray(XmlValueHandler):
             if value.type_id != self.element_type_id:
                 raise ValueError(f"Non-matching value type {value.type_id}")
 
-            value = value.get()
+            value = value.get_value()
         
         for idx, item in enumerate(self):
-            if item.get() == value:
+            if item.get_value() == value:
                 return idx
 
         raise ValueError("Item not found")
@@ -223,7 +223,7 @@ class HkbRecord(XmlValueHandler):
     @classmethod
     def new(cls, values: dict[str, Any], type_id: str, id: str = None) -> "HkbRecord":
         record = HkbRecord(ET.Element("record"), type_id, id)
-        record.set(values)
+        record.set_value(values)
         return record
 
     @classmethod
@@ -240,14 +240,14 @@ class HkbRecord(XmlValueHandler):
         super().__init__(element, type_id)
         self.id = id
 
-    def get(self) -> dict[str, XmlValueHandler]:
+    def get_value(self) -> dict[str, XmlValueHandler]:
         ret = {}
         for fname, _ in self.fields():
             ret[fname] = getattr(self, fname)
 
         return ret
 
-    def set(self, values: dict[str, XmlValueHandler]) -> None:
+    def set_value(self, values: dict[str, XmlValueHandler]) -> None:
         for key, val in values.items():
             setattr(self, key, val)
 
@@ -289,10 +289,10 @@ class HkbRecord(XmlValueHandler):
             if value.type_id != ftype:
                 raise ValueError(f"Non-matching value type {value.type_id}")
             
-            value = value.get()
+            value = value.get_value()
 
         wrapped = wrap_element(field_el, ftype)
-        wrapped.set(value)
+        wrapped.set_value(value)
 
     def as_object(self, id: str = None) -> ET.Element:
         if not id and not self.id:

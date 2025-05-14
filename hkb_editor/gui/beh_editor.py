@@ -35,7 +35,7 @@ class BehaviorEditor(GraphEditor):
 
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
         obj: HkbRecord = self.beh.objects[node.id]
-        return {k: v.get() for k,v in obj.get().items()}
+        return {k: v.get_value() for k,v in obj.get_value().items()}
 
     def set_node_attribute(self, node: Node, key: str, val: Any) -> None:
         obj: HkbRecord = self.beh.objects[node.id]
@@ -46,7 +46,7 @@ class BehaviorEditor(GraphEditor):
         obj = self.beh.objects[node_id]
         try:
             return [
-                obj.name.get(),
+                obj.name.get_value(),
                 node_id,
                 self.beh.type_registry.get_name(obj.type_id),
             ]
@@ -57,7 +57,7 @@ class BehaviorEditor(GraphEditor):
             ]
 
     def get_node_frontpage_short(self, node_id: str) -> str:
-        return self.beh.objects[node_id].name.get()
+        return self.beh.objects[node_id].name.get_value()
 
     def get_node_menu_items(self, node: Node) -> list[str]:
         return []
