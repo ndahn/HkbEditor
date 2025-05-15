@@ -60,8 +60,8 @@ def save_file_dialog(
 
 @dataclass
 class Layout:
-    gap_x: int = 50
-    step_y: int = 35
+    gap_x: int = 20
+    step_y: int = 20
     node0_margin: tuple[int, int] = (50, 50)
     text_margin: int = 5
     zoom_factor: float = 2.0
@@ -191,7 +191,7 @@ class GraphEditor:
             self._update_roots()
 
     def _do_load_from_file(self, file_path: str) -> None:
-        # TODO just test data
+        # Just some test data
         g = self.graph = nx.DiGraph()
 
         g.add_node("A")
@@ -244,28 +244,36 @@ class GraphEditor:
 
         with dpg.group(horizontal=True):
             # Roots
-            with dpg.child_window(width=200):
+            with dpg.child_window(
+                resizable_x=True,
+                auto_resize_x=True,
+                tag=f"{self.tag}_roots_window",
+            ):
+                dpg.add_text("Root Nodes")
                 dpg.add_input_text(
                     hint="Filter",
                     tag=f"{self.tag}_roots_filter",
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                     user_data=f"{self.tag}_roots_table",
                 )
+                dpg.add_separator()
                 # Tables are more flexible with item design and support filtering
-                dpg.add_table(
-                    header_row=True,
+                with dpg.table(
                     delay_search=True,
-                    row_background=True,
                     no_host_extendX=True,
+                    header_row=False,
                     # policy=dpg.mvTable_SizingFixedFit,
                     scrollY=True,
                     tag=f"{self.tag}_roots_table",
-                )
+                ):
+                    dpg.add_table_column(label="Name")
 
             # Canvas
-            # TODO use set_item_height/width to resize dynamically
             with dpg.child_window(
-                always_auto_resize=True, auto_resize_x=True, auto_resize_y=True
+                auto_resize_x=True,
+                auto_resize_y=True,
+                no_scrollbar=True,
+                tag=f"{self.tag}_canvas_window",
             ):
                 with dpg.drawlist(800, 800, tag=f"{self.tag}_canvas"):
                     dpg.add_draw_node(tag=f"{self.tag}_canvas_root")
@@ -274,23 +282,32 @@ class GraphEditor:
             def _update_attr_filter(sender, filter_string):
                 dpg.set_value(f"{self.tag}_attribute_filter", filter_string)
 
-            with dpg.child_window():
-                dpg.add_text(tag=f"{self.tag}_attributes_title")
+            with dpg.child_window(
+                resizable_x=True,
+                auto_resize_x=True,
+                tag=f"{self.tag}_attributes_window",
+            ):
+                dpg.add_text("Attributes")
                 dpg.add_input_text(
                     hint="Filter",
                     tag=f"{self.tag}_attribute_filter",
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                     user_data=f"{self.tag}_attributes_table",
                 )
-                dpg.add_table(
-                    header_row=True,
+                dpg.add_separator()
+
+                dpg.add_text("", tag=f"{self.tag}_attributes_title")
+                with dpg.table(
                     delay_search=True,
-                    row_background=True,
-                    no_host_extendX=True,
-                    policy=dpg.mvTable_SizingFixedFit,
+                    #no_host_extendX=True,
+                    resizable=True,
+                    policy=dpg.mvTable_SizingStretchProp,
+                    header_row=False,
                     scrollY=True,
                     tag=f"{self.tag}_attributes_table",
-                )
+                ):
+                    dpg.add_table_column(label="Value", width_stretch=True)
+                    dpg.add_table_column(label="Key")
 
             with dpg.handler_registry():
                 dpg.add_mouse_click_handler(callback=self._on_mouse_click)
@@ -302,6 +319,9 @@ class GraphEditor:
                 )
                 dpg.add_mouse_drag_handler(callback=self._on_mouse_drag)
                 dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
+
+            dpg.set_viewport_resize_callback(self._on_resize)
+            self._on_resize()
 
     # Callbacks
     def _on_mouse_click(self, sender, button: int) -> None:
@@ -318,10 +338,7 @@ class GraphEditor:
         for node in self.visible_nodes.values():
             if node.contains(mx - ox, my - oy):
                 if button == dpg.mvMouseButton_Left:
-                    if self.selected_node == node:
-                        self._fold_node(node)
-                        self._deselect_active_node()
-                    else:
+                    if self.selected_node != node:
                         self._select_node(node)
 
                 elif button == dpg.mvMouseButton_Right:
@@ -370,6 +387,14 @@ class GraphEditor:
         for node in visible:
             self._create_node(node.id, node.parent, node.level)
 
+    def _on_resize(self):
+        dpg.set_item_height(f"{self.tag}_canvas", dpg.get_viewport_height() - 50)
+
+        w = dpg.get_viewport_width() - 270
+        dpg.set_item_width(f"{self.tag}_roots_window", 200)
+        dpg.set_item_width(f"{self.tag}_canvas", int(w * 0.8))
+        dpg.set_item_width(f"{self.tag}_attributes_table", int(w * 0.2))
+
     def set_origin(self, new_x: float, new_y: float) -> None:
         self.origin = (new_x, new_y)
         self.look_at(*self.origin)
@@ -414,7 +439,7 @@ class GraphEditor:
 
     def _select_node(self, node: Node):
         self._deselect_active_node()
-        self._unfold_node(node)
+        self._isolate(node)
 
         # Update the attributes panel
         self._clear_attributes()
@@ -476,20 +501,32 @@ class GraphEditor:
         if node_id in self.visible_nodes:
             return self.visible_nodes[node_id]
 
-        row = 0
-        for n in self.visible_nodes.values():
-            if n.level == level:
-                row += 1
+        if level == 0:
+            px = self.layout.node0_margin[0]
+        else:
+            px = (
+                max(
+                    n.x + n.width
+                    for n in self.visible_nodes.values()
+                    if n.level == level - 1
+                )
+                + self.layout.gap_x
+            )
 
-        max_width = 0
-        max_height = 0
-
-        for other in self.visible_nodes.values():
-            max_width = max(max_width, other.width)
-            max_height = max(max_height, other.height)
-
-        px = self.layout.node0_margin[0] + level * (max_width + self.layout.gap_x)
-        py = self.layout.node0_margin[1] + row * (max_height + self.layout.step_y)
+        try:
+            py = (
+                max(
+                    n.y + n.height
+                    for n in self.visible_nodes.values()
+                    if n.level == level
+                )
+                + self.layout.step_y
+            )
+        except ValueError:
+            if parent_id:
+                py = self.visible_nodes[parent_id].y
+            else:
+                py = self.layout.node0_margin[1]
 
         margin = self.layout.text_margin
         lines = self.get_node_frontpage(node_id)
@@ -501,8 +538,8 @@ class GraphEditor:
         h = text_h * len(lines) + margin * 2
 
         zoom_factor = self.layout.zoom_factor**self.zoom
-        px *= zoom_factor
-        py *= zoom_factor
+        # px *= zoom_factor
+        # py *= zoom_factor
         w *= zoom_factor
         h *= zoom_factor
         text_offset_y = text_h * zoom_factor
@@ -571,11 +608,11 @@ class GraphEditor:
                 dpg.delete_item(f"{parent_id}_TO_{node.id}")
 
     def _update_roots(self) -> None:
-        dpg.delete_item(f"{self.tag}_roots_table", children_only=True)
+        dpg.delete_item(f"{self.tag}_roots_table", children_only=True, slot=1)
 
-        # Columns are in slot 0, rows in slot 1, so we could delete only the rows. However,
-        # this way subclasses of the editor can customize what to show
-        dpg.add_table_column(label="Name", parent=f"{self.tag}_roots_table")
+        # Columns will be hidden if header_row=False and no rows exist initially
+        for col in dpg.get_item_children(f"{self.tag}_roots_table", slot=0):
+            dpg.show_item(col)
 
         roots = self.get_roots()
         for root in roots:
@@ -589,16 +626,15 @@ class GraphEditor:
                 )
 
     def _clear_attributes(self) -> None:
-        dpg.set_value(f"{self.tag}_attributes_title", "")
-
-        dpg.delete_item(f"{self.tag}_attributes_table", children_only=True)
-
-        # Unfortunately, the columns get deleted, too
-        dpg.add_table_column(label="Key", parent=f"{self.tag}_attributes_table")
-        dpg.add_table_column(label="Value", parent=f"{self.tag}_attributes_table")
+        dpg.set_value(f"{self.tag}_attributes_title", "Attributes")
+        dpg.delete_item(f"{self.tag}_attributes_table", children_only=True, slot=1)
 
     def _update_attributes(self, node: Node) -> None:
         dpg.set_value(f"{self.tag}_attributes_title", node.id)
+
+        # Columns will be hidden if header_row=False and no rows exist initially
+        for col in dpg.get_item_children(f"{self.tag}_attributes_table", slot=0):
+            dpg.show_item(col)
 
         for key, val in self.get_node_attributes(node).items():
             with dpg.table_row(

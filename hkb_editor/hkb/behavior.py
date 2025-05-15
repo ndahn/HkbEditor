@@ -45,7 +45,11 @@ class HavokBehavior:
         todo: deque[tuple[str, ET.Element]] = deque()
 
         def expand(elem: ET.Element, parent_id: str) -> None:
-            todo.extend((parent_id, ptr) for ptr in elem.findall(".//pointer"))
+            todo.extend(
+                (parent_id, ptr)
+                for ptr in elem.findall(".//pointer")
+                if ptr.attrib["id"] != "object0"
+            )
 
         root = self.objects[root_id]
         expand(root.element, root_id)
