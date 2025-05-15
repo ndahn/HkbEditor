@@ -20,10 +20,12 @@ class HavokBehavior:
             for obj in root.findall(".//object")
         }
 
-        if "object0" not in self.objects:
-            # Treated as None
-            t_void = self.type_registry.find_type_by_name("void")
-            self.objects["object0"] = HkbRecord.new({}, t_void, "object0")
+        # object0 is used for null pointers, but it's better to catch those when 
+        # resolving the pointer
+        #if "object0" not in self.objects:
+        #    # Treated as None
+        #    t_void = self.type_registry.find_type_by_name("void")
+        #    self.objects["object0"] = HkbRecord.new({}, t_void, "object0")
 
         # There's a special object storing the string values referenced from HKS
         strings_type_id = type_registry.find_type_by_name("hkbBehaviorGraphStringData")

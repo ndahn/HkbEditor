@@ -642,6 +642,8 @@ class GraphEditor:
                 parent=f"{self.tag}_attributes_table",
             ):
                 self._add_attribute(key, val, node)
+                # Could show the value type, too
+                dpg.add_text(key)
 
     def _add_attribute(self, key: str, val: Any, node: Node) -> None:
         tag = f"{node.id}_{key}"
