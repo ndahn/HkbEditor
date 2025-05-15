@@ -176,6 +176,8 @@ class GraphEditor:
                 enabled=False,
                 tag="menu_file_save",
             )
+            dpg.add_separator()
+            dpg.add_menu_item(label="Exit", callback=self.exit_app)
 
     def open_file(self):
         ret = open_file_dialog(
@@ -238,6 +240,9 @@ class GraphEditor:
     def _do_write_to_file(self, file_path: str) -> None:
         pass
 
+    def exit_app(self):
+        dpg.stop_dearpygui()
+
     def _setup_content(self):
         with dpg.menu_bar():
             self.create_menu()
@@ -249,9 +254,8 @@ class GraphEditor:
                 auto_resize_x=True,
                 tag=f"{self.tag}_roots_window",
             ):
-                dpg.add_text("Root Nodes")
                 dpg.add_input_text(
-                    hint="Filter",
+                    hint="Filter Roots",
                     tag=f"{self.tag}_roots_filter",
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                     user_data=f"{self.tag}_roots_table",
@@ -279,17 +283,13 @@ class GraphEditor:
                     dpg.add_draw_node(tag=f"{self.tag}_canvas_root")
 
             # Attributes panel
-            def _update_attr_filter(sender, filter_string):
-                dpg.set_value(f"{self.tag}_attribute_filter", filter_string)
-
             with dpg.child_window(
                 resizable_x=True,
                 auto_resize_x=True,
                 tag=f"{self.tag}_attributes_window",
             ):
-                dpg.add_text("Attributes")
                 dpg.add_input_text(
-                    hint="Filter",
+                    hint="Filter Attributes",
                     tag=f"{self.tag}_attribute_filter",
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                     user_data=f"{self.tag}_attributes_table",

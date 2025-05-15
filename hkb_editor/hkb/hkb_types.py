@@ -115,6 +115,7 @@ class HkbPointer(XmlValueHandler):
             raise ValueError(f"Invalid element {element}")
 
         super().__init__(element, type_id)
+        self.subtype = type_registry.get_subtype(type_id)
 
     def get_value(self) -> str:
         val = self.element.attrib["id"]
@@ -266,6 +267,12 @@ class HkbRecord(XmlValueHandler):
                 return ftype
 
         return None
+
+    def get(self, name: str, default: Any = None, resolve: bool = True) -> XmlValueHandler:
+        ret = getattr(self, name, default)
+        if resolve and isinstance(ret, XmlValueHandler):
+            return ret.get_value()
+        return ret
 
     def __getattr__(self, name: str) -> XmlValueHandler:
         field_el = self.get_field_element(name)
