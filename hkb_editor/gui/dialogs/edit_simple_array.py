@@ -143,7 +143,7 @@ def edit_simple_array(
         with dpg.table(
             delay_search=True,
             resizable=True,
-            policy=dpg.mvTable_SizingStretchProp,
+            policy=dpg.mvTable_SizingStretchSame,
             scrollY=True,
             height=310,
         ) as table:

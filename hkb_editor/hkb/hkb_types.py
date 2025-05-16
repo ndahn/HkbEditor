@@ -9,7 +9,7 @@ class XmlValueHandler:
     @classmethod
     def new(cls, type_id: str, value: Any = None) -> "XmlValueHandler":
         raise NotImplementedError()
-    
+
     def __init__(self, element: ET.Element, type_id: str):
         self.element = element
         self.type_id = type_id
@@ -133,7 +133,7 @@ class HkbPointer(XmlValueHandler):
         val = self.element.attrib["id"]
         if val == "object0":
             return ""
-        
+
         return val
 
     def set_value(self, value: str) -> None:
@@ -176,8 +176,10 @@ class HkbArray(XmlValueHandler):
     def set_value(self, values: list[XmlValueHandler]) -> None:
         for idx, item in enumerate(values):
             if item.type_id != self.element_type_id:
-                raise ValueError(f"Non-matching value type {item.type_id} at index {idx}")
-        
+                raise ValueError(
+                    f"Non-matching value type {item.type_id} (should be {self.element_type_id})"
+                )
+
         self.element[:] = [v.element for v in values]
         self._count = len(values)
 
@@ -195,23 +197,29 @@ class HkbArray(XmlValueHandler):
     def __setitem__(self, index: int, value: Any) -> None:
         if isinstance(value, XmlValueHandler):
             if value.type_id != self.element_type_id:
-                raise ValueError(f"Non-matching value type {value.type_id}")
-            
+                raise ValueError(
+                    f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
+                )
+
             value = value.get_value()
 
         self[index].set_value(value)
 
     def __delitem__(self, index: int) -> None:
-        self.element[:] = [e.element for i, e in enumerate(self.get_value()) if e != index]
+        self.element[:] = [
+            e.element for i, e in enumerate(self.get_value()) if e != index
+        ]
         self._count -= 1
 
     def index(self, value: XmlValueHandler) -> int:
         if isinstance(value, XmlValueHandler):
             if value.type_id != self.element_type_id:
-                raise ValueError(f"Non-matching value type {value.type_id}")
+                raise ValueError(
+                    f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
+                )
 
             value = value.get_value()
-        
+
         for idx, item in enumerate(self):
             if item.get_value() == value:
                 return idx
@@ -220,14 +228,18 @@ class HkbArray(XmlValueHandler):
 
     def append(self, value: XmlValueHandler):
         if value.type_id != self.element_type_id:
-            raise ValueError(f"Non-matching value type {value.type_id}")
+            raise ValueError(
+                f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
+            )
 
         self.element.append(value.element)
         self._count += 1
 
     def insert(self, index: int, value: XmlValueHandler) -> None:
         if value.type_id != self.element_type_id:
-            raise ValueError(f"Non-matching value type {value.type_id}")
+            raise ValueError(
+                f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
+            )
 
         self.element.insert(index, value.element)
         self._count += 1
@@ -235,10 +247,30 @@ class HkbArray(XmlValueHandler):
 
 class HkbRecord(XmlValueHandler):
     @classmethod
-    def new(cls, type_id: str, values: dict[str, Any] = None, id: str = None) -> "HkbRecord":
+    def new(
+        cls, type_id: str, values: dict[str, Any] = None, id: str = None
+    ) -> "HkbRecord":
         elem = ET.Element("record")
         record = HkbRecord(elem, type_id, id)
-        record.set_value(values or {})
+
+        # Make sure the xml subtree contains all required fields
+        def create_fields(parent_elem: ET.Element, record_type_id: str):
+            for fname, ftype in type_registry.get_fields(record_type_id):
+                field_elem = ET.SubElement(parent_elem, "field", name=fname)
+                field_val = get_value_handler(ftype).new(ftype)
+
+                if isinstance(field_val, HkbRecord):
+                    create_fields(field_val.element, ftype)
+                else:
+                    field_elem.append(field_val.element)
+
+        create_fields(elem, type_id)
+
+        if values:
+            for key, val in values.items():
+                # TODO implement setitem
+                setattr(record, key, val)
+
         return record
 
     @classmethod
@@ -271,9 +303,7 @@ class HkbRecord(XmlValueHandler):
             yield f.attrib["name"], f
 
     def get_field_element(self, name: str) -> ET.Element:
-        return next(
-            (f for fname, f in self.fields() if fname == name), None
-        )
+        return next((f for fname, f in self.fields() if fname == name), None)
 
     def get_field_type(self, name: str) -> str:
         for fname, ftype in type_registry.get_fields(self.type_id):
@@ -282,7 +312,9 @@ class HkbRecord(XmlValueHandler):
 
         return None
 
-    def get(self, name: str, default: Any = None, resolve: bool = True) -> XmlValueHandler:
+    def get(
+        self, name: str, default: Any = None, resolve: bool = True
+    ) -> XmlValueHandler:
         ret = getattr(self, name, default)
         if resolve and isinstance(ret, XmlValueHandler):
             return ret.get_value()
@@ -308,8 +340,10 @@ class HkbRecord(XmlValueHandler):
         ftype = self.get_field_type(name)
         if isinstance(value, XmlValueHandler):
             if value.type_id != ftype:
-                raise ValueError(f"Non-matching value type {value.type_id}")
-            
+                raise ValueError(
+                    f"Tried to assign value with non-matching type {value.type_id} to field {name} ({ftype})"
+                )
+
             value = value.get_value()
 
         wrapped = wrap_element(field_el, ftype)

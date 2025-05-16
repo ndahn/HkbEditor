@@ -83,3 +83,11 @@ class HavokBehavior:
             HkbString.new(self.animations.element_type_id, animation_name)
         )
         return len(self.animations) - 1
+
+    def new_object_id(self) -> str:
+        last_key = max(
+            int(k[len("object") :]) 
+            for k in self.objects.keys() if k.startswith("object")
+        )
+
+        return f"object{last_key + 1}"

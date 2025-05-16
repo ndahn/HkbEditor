@@ -74,7 +74,7 @@ class TypeRegistry:
     def get_format(self, type_id: str) -> int:
         return self.types[type_id]["format"]
 
-    def get_fields(self, type_id: str) -> list[tuple]:
+    def get_fields(self, type_id: str) -> list[tuple[str, str]]:
         t = self.types[type_id]
         fields: list[tuple[str, str]] = []
 

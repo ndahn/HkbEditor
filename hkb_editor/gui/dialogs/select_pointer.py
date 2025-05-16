@@ -6,11 +6,10 @@ from hkb.behavior import HavokBehavior
 
 
 def select_pointer(
-    value_widget: str,
     beh: HavokBehavior,
-    ptr: HkbPointer,
     callback: Callable[[str, Any, XmlValueHandler], None],
-    target_type_id: str = None,
+    value_widget: str,
+    ptr: HkbPointer,
 ) -> None:
     selected = ptr.get_value()
     tag = dpg.generate_uuid()
@@ -23,7 +22,7 @@ def select_pointer(
         matches = [
             obj
             for obj in beh.objects.values()
-            if target_type_id in (None, obj.type_id)
+            if ptr.subtype in (None, obj.type_id)
             and (
                 filt in obj.id or filt in obj.type_id or filt in obj.get("name", "")
             )
@@ -49,6 +48,9 @@ def select_pointer(
 
     def on_select(sender, app_data, object_id: str):
         nonlocal selected
+        if selected == object_id:
+            return
+
         selected = object_id
 
         # Deselect all other selectables

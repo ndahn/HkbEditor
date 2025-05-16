@@ -168,6 +168,11 @@ class GraphEditor:
         pass
 
     def create_menu(self):
+        self._create_file_menu()
+        dpg.add_separator()
+        self._create_dpg_menu()
+    
+    def _create_file_menu(self):
         with dpg.menu(label="File"):
             dpg.add_menu_item(label="Open...", callback=self.open_file)
             dpg.add_menu_item(
@@ -178,6 +183,38 @@ class GraphEditor:
             )
             dpg.add_separator()
             dpg.add_menu_item(label="Exit", callback=self.exit_app)
+
+    def _create_dpg_menu(self):
+        with dpg.menu(label="dearpygui"):
+            dpg.add_menu_item(
+                label="Show About", callback=lambda: dpg.show_tool(dpg.mvTool_About)
+            )
+            dpg.add_menu_item(
+                label="Show Metrics", callback=lambda: dpg.show_tool(dpg.mvTool_Metrics)
+            )
+            dpg.add_menu_item(
+                label="Show Documentation",
+                callback=lambda: dpg.show_tool(dpg.mvTool_Doc),
+            )
+            dpg.add_menu_item(
+                label="Show Debug", callback=lambda: dpg.show_tool(dpg.mvTool_Debug)
+            )
+            dpg.add_menu_item(
+                label="Show Style Editor",
+                callback=lambda: dpg.show_tool(dpg.mvTool_Style),
+            )
+            dpg.add_menu_item(
+                label="Show Font Manager",
+                callback=lambda: dpg.show_tool(dpg.mvTool_Font),
+            )
+            dpg.add_menu_item(
+                label="Show Item Registry",
+                callback=lambda: dpg.show_tool(dpg.mvTool_ItemRegistry),
+            )
+            dpg.add_menu_item(
+                label="Show Stack Tool",
+                callback=lambda: dpg.show_tool(dpg.mvTool_Stack),
+            )
 
     def open_file(self):
         ret = open_file_dialog(
@@ -299,7 +336,7 @@ class GraphEditor:
                 dpg.add_text("", tag=f"{self.tag}_attributes_title")
                 with dpg.table(
                     delay_search=True,
-                    #no_host_extendX=True,
+                    # no_host_extendX=True,
                     resizable=True,
                     policy=dpg.mvTable_SizingStretchProp,
                     header_row=False,
@@ -470,6 +507,7 @@ class GraphEditor:
 
         with dpg.window(
             popup=True,
+            min_size=(100, 20),
             tag=f"{node.id}_menu",
             on_close=lambda: dpg.delete_item(f"{node.id}_menu"),
         ):

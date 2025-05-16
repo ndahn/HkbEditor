@@ -4,6 +4,7 @@ from dearpygui import dearpygui as dpg
 from .graph_editor import GraphEditor, Node
 from .dialogs.select_pointer import select_pointer
 from .dialogs.edit_simple_array import edit_simple_array
+from .dialogs.select_simple_array_item import select_simple_array_item
 from hkb.behavior import HavokBehavior
 from hkb.hkb_types import (
     XmlValueHandler,
@@ -27,6 +28,7 @@ class BehaviorEditor(GraphEditor):
 
     def _do_load_from_file(self, file_path: str):
         self.beh = HavokBehavior(file_path)
+        self._set_menus_enabled(True)
 
     def _do_write_to_file(self, file_path):
         # TODO
@@ -37,21 +39,25 @@ class BehaviorEditor(GraphEditor):
         super().exit_app()
 
     def create_menu(self):
-        with dpg.menu(label="File"):
-            dpg.add_menu_item(label="Open...", callback=self.open_file)
-            dpg.add_menu_item(
-                label="Save...",
-                callback=self.save_file,
-                enabled=False,
-                tag="menu_file_save",
-            )
-            dpg.add_separator()
-            dpg.add_menu_item(label="Exit", callback=self.exit_app)
+        self._create_file_menu()
 
-        with dpg.menu(label="Edit"):
-            dpg.add_menu_item(label="Variables", callback=self.open_variable_editor)
-            dpg.add_menu_item(label="Events", callback=self.open_event_editor)
-            dpg.add_menu_item(label="Animations", callback=self.open_animation_editor)
+        dpg.add_separator()
+        with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
+            dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
+            dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
+            dpg.add_separator()
+            dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
+            dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
+            dpg.add_menu_item(
+                label="Animations...", callback=self.open_animation_editor
+            )
+
+        dpg.add_separator()
+        self._create_dpg_menu()
+
+    def _set_menus_enabled(self, enabled: bool) -> None:
+        func = dpg.enable_item if enabled else dpg.disable_item
+        func(f"{self.tag}_menu_edit")
 
     def get_supported_file_extensions(self):
         return [("Behavior XML", ".xml")]
@@ -94,27 +100,48 @@ class BehaviorEditor(GraphEditor):
         return self.beh.objects[node_id].name.get_value()
 
     def get_node_menu_items(self, node: Node) -> list[str]:
+        obj = self.beh.objects.get(node.id)
+        if not obj:
+            return []
+
+        type_name = self.beh.type_registry.get_name(obj.type_id)
+
+        # TODO show useful node actions
+        # "hkbStateMachine"
+        # "hkbVariableBindingSet"
+        # "hkbLayerGenerator"
+        # "CustomManualSelectorGenerator":
+        # "hkbClipGenerator"
+        # "hkbScriptGenerator"
+
         return []
 
     def on_node_menu_item_selected(node: Node, selected_item: str) -> None:
+        # TODO implement useful node actions
         pass
 
     def on_node_selected(self, node: Node) -> None:
         pass
 
-    def _get_bound_attributes(self, record: HkbRecord) -> dict[str, int]:
+    def _get_variable_binding_set(self, record: HkbRecord) -> HkbRecord:
         if not isinstance(record, HkbRecord):
-            return {}
+            return None
 
         try:
+            # TODO we could create a specialized VariableBindingSet subclass
             binding_ptr: HkbPointer = record.variableBindingSet
-            bindings: HkbArray = self.beh.objects[binding_ptr.get].bindings
+            return self.beh.objects[binding_ptr.get]
         except (AttributeError, KeyError):
+            return None
+
+    def _get_bound_attributes(self, record: HkbRecord) -> dict[str, int]:
+        binding_set = self._get_variable_binding_set(record)
+        if not binding_set:
             return {}
 
         ret = {}
         bnd: HkbRecord
-        for bnd in bindings.get_value():
+        for bnd in binding_set.bindings:
             var_path = bnd.memberPath.get()
             var_idx = bnd.variableIndex.get()
             binding_type = bnd.bindingType.get()
@@ -130,10 +157,11 @@ class BehaviorEditor(GraphEditor):
     def _add_attribute(self, key: str, val: Any, node: Node) -> None:
         obj = self.beh.objects.get(node.id)
         bound = self._get_bound_attributes(obj)
-        self._create_attribute_widget(key, val, bound, key)
+        self._create_attribute_widget(obj, key, val, bound, key)
 
     def _create_attribute_widget(
         self,
+        source_record: HkbRecord,
         key: str,
         val: XmlValueHandler,
         bound_attributes: dict[str, int],
@@ -142,6 +170,7 @@ class BehaviorEditor(GraphEditor):
         def _update_node_attribute(
             sender, new_value: Any, handler: XmlValueHandler
         ) -> None:
+            self.on_attribute_changed(path, handler, new_value, handler.get_value())
             handler.set_value(new_value)
             dpg.set_value(sender, new_value)
 
@@ -161,19 +190,76 @@ class BehaviorEditor(GraphEditor):
             array.append(new_item)
 
             self._create_attribute_widget(
+                source_record,
                 f"{key}:{idx}",
                 new_item,
                 bound_attributes,
                 f"{path}:{idx}",
             )
 
-        def _bind_attribute(sender, app_data, path: str) -> None:
-            # TODO open dialog with variables, replace sender widget with bound item widget
-            pass
+        def _bind_attribute(sender, bound_var_idx: int, user_data: tuple[HkbRecord, str]) -> None:
+            record, path = user_data
+            binding_set = self._get_variable_binding_set(source_record)
+
+            if binding_set is None:
+                ptr_type_id = source_record.get_field_type("variableBindingSet")
+                bindings_type_id = self.beh.type_registry.get_subtype(ptr_type_id)
+                binding_id = self.beh.new_object_id()
+                binding_set = HkbRecord.new(bindings_type_id, None, binding_id)
+
+                # Assign pointer to source record
+                record.variableBindingSet.set_value(binding_id)
+                # TODO update pointer attribute widget
+                # TODO redraw graph
+
+                self.beh.objects[binding_id] = binding_set
+                # TODO append to xml, too!
+
+            bindings: HkbArray = binding_set.bindings
+            bnd: HkbRecord
+
+            for bnd in bindings:
+                if bnd.memberPath == path:
+                    bnd.variableIndex = bound_var_idx
+                    break
+            else:
+                bindings.append(
+                    HkbRecord.new(
+                        bindings.element_type_id,
+                        {
+                            "memberPath": path,
+                            "variableIndex": bound_var_idx,
+                            "bitIndex": -1,
+                            "bindingType": 0,
+                        },
+                    )
+                )
+
+            # TODO replace sender with a bound-attribute widget
 
         def _unbind_attribute(sender, app_data, path: str) -> None:
             # TODO remove from bound_attributes, replace sender widget with regular one
-            pass
+            binding_set = self._get_variable_binding_set(source_record)
+
+            if binding_set is None:
+                bindings_type_id = source_record.get_field_type("bindings")
+                binding_id = self.beh.new_object_id()
+                binding_set = HkbRecord.new(bindings_type_id, {}, binding_id)
+
+                self.beh.objects[binding_id] = binding_set
+                # TODO append to xml, too!
+
+            bindings: HkbArray = binding_set.bindings
+            bnd: HkbRecord
+
+            for idx, bnd in enumerate(bindings):
+                if bnd.memberPath == path:
+                    del bindings[idx]
+                    break
+            else:
+                return
+
+            # TODO replace sender with a regular widget
 
         if isinstance(val, HkbPointer):
             # NOTE probably bindable, but let's maybe not :)
@@ -186,7 +272,12 @@ class BehaviorEditor(GraphEditor):
                     arrow=True,
                     direction=dpg.mvDir_Right,
                     callback=lambda s, a, u: select_pointer(*u),
-                    user_data=(ptr_input, self.beh, val, _update_node_attribute, val.subtype),
+                    user_data=(
+                        self.beh,
+                        _update_node_attribute,
+                        ptr_input,
+                        val,
+                    ),
                 )
 
         elif isinstance(val, HkbArray):
@@ -206,7 +297,11 @@ class BehaviorEditor(GraphEditor):
                         # Note that array elements can be bound, too, e.g.
                         # "hands:0/controlData/targetPosition"
                         self._create_attribute_widget(
-                            f"{key}:{idx}", subval, bound_attributes, f"{path}:{idx}"
+                            source_record,
+                            f"{key}:{idx}",
+                            subval,
+                            bound_attributes,
+                            f"{path}:{idx}",
                         )
 
                     dpg.add_separator()
@@ -224,22 +319,26 @@ class BehaviorEditor(GraphEditor):
             with dpg.tree_node(label=key, filter_key=key):
                 for subkey, subval in val.get_value().items():
                     self._create_attribute_widget(
-                        subkey, subval, bound_attributes, f"{path}/{subkey}"
+                        source_record,
+                        subkey,
+                        subval,
+                        bound_attributes,
+                        f"{path}/{subkey}",
                     )
 
         else:
             widget = None
 
             # All bindable objects
-            if path in bound_attributes:
-                var_idx = bound_attributes[path]
-                var_name = self.beh.events[var_idx]
+            bound_var_idx = bound_attributes.get(path, -1)
+            if bound_var_idx >= 0:
+                bound_var_name = self.beh.events[bound_var_idx]
 
                 # TODO set theme
                 widget = dpg.add_input_text(
                     filter_key=key,
                     enabled=False,
-                    default_value=f"<{var_name}>",
+                    default_value=f"<{bound_var_name}>",
                 )
 
             elif isinstance(val, HkbString):
@@ -280,16 +379,38 @@ class BehaviorEditor(GraphEditor):
             # Add menu to bind to variable
             if widget:
                 with dpg.popup(dpg.last_item()):
-                    dpg.add_button(
+                    dpg.add_selectable(
                         label="Bind",
-                        callback=_bind_attribute,
-                        user_data=path,
+                        callback=lambda s, a, u: select_simple_array_item(*u),
+                        user_data=(
+                            self.beh.variables,
+                            _bind_attribute,
+                            widget,
+                            bound_var_idx,
+                            (source_record, path),
+                        ),
                     )
-                    dpg.add_button(
-                        label="Clear binding",
-                        callback=_unbind_attribute,
-                        user_data=path,
-                    )
+
+                    if bound_var_idx >= 0:
+                        dpg.add_selectable(
+                            label="Clear binding",
+                            callback=_unbind_attribute,
+                            user_data=(widget, None, path),
+                        )
+
+    def on_attribute_changed(
+        self, path: str, handler: XmlValueHandler, new_value: Any, prev_value: Any
+    ) -> None:
+        # TODO add to undo history, show notification
+        pass
+
+    def undo(self) -> None:
+        # TODO
+        pass
+
+    def redo(self) -> None:
+        # TODO
+        pass
 
     # Fleshing out common use cases here
     def open_variable_editor(self):
@@ -305,10 +426,7 @@ class BehaviorEditor(GraphEditor):
         )
 
     def open_animation_editor(self):
-        edit_simple_array(
-            self.beh.animations,
-            "Edit Animations"
-        )
+        edit_simple_array(self.beh.animations, "Edit Animations")
 
     def wizard_create_generator(self, parent_id: str):
         # TODO a wizard that lets the user create a new generator and attach it to another node
