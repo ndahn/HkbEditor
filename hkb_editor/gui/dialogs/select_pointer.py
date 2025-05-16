@@ -13,6 +13,7 @@ def select_pointer(
     target_type_id: str = None,
 ) -> None:
     selected = ptr.get_value()
+    tag = dpg.generate_uuid()
 
     def on_filter_update(sender, app_data, user_data):
         dpg.delete_item(table, children_only=True, slot=1)
@@ -77,17 +78,21 @@ def select_pointer(
             callback=on_filter_update,
         )
 
+        dpg.add_separator()
+
         with dpg.table(
             delay_search=True,
             resizable=True,
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
             # no_host_extendY=True,
-            height=320,
+            height=310,
         ) as table:
             dpg.add_table_column(label="ID")
             dpg.add_table_column(label="Name")
             dpg.add_table_column(label="Type")
+
+        dpg.add_separator()
 
         with dpg.group(horizontal=True):
             dpg.add_button(

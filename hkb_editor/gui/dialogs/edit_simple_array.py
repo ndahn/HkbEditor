@@ -37,13 +37,17 @@ def edit_simple_array(
 
     def get_new_entry_value(sender, app_data, callback: Callable):
         Handler = get_value_handler(array.element_type_id)
-        val = Handler.new()
+        val = Handler.new(array.element_type_id)
 
         def on_value_update(sender, app_data, user_data):
             val.set_value(app_data)
 
         def on_okay():
-            callback(val)
+            if not val.get_value():
+                return
+            
+            callback(sender, val, None)
+            dpg.delete_item(wnd)
 
         with dpg.window(
             modal=True,
@@ -63,9 +67,11 @@ def edit_simple_array(
                 return
 
         Handler = get_value_handler(array.element_type_id)
-        val = Handler.new(app_data)
+        val = Handler.new(array.element_type_id, app_data)
         array.append(val)
         fill_table()
+        dpg.split_frame()
+        dpg.set_y_scroll(table, dpg.get_y_scroll_max(table))
 
     def delete_entry(sender, app_data, index: int):
         if on_delete:
@@ -124,7 +130,7 @@ def edit_simple_array(
         width=600,
         height=400,
         label=title,
-        modal=True,
+        #modal=True,
         on_close=lambda: dpg.delete_item(dialog),
     ) as dialog:
         dpg.add_input_text(
@@ -132,20 +138,24 @@ def edit_simple_array(
             callback=lambda s, a, u: dpg.set_value(table, dpg.get_value(s)),
         )
 
+        dpg.add_separator()
+
         with dpg.table(
             delay_search=True,
             resizable=True,
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
-            height=320,
+            height=310,
         ) as table:
             dpg.add_table_column(label="Index")
             dpg.add_table_column(label="Name", width_stretch=True)
             dpg.add_table_column()
 
+        dpg.add_separator()
+
         dpg.add_button(
-            label="Add Entry",
-            small=True,
+            label="Add...",
+            #small=True,
             callback=get_new_entry_value,
             user_data=add_entry,
         )

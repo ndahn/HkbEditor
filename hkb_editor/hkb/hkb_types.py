@@ -7,7 +7,7 @@ from .type_registry import type_registry
 
 class XmlValueHandler:
     @classmethod
-    def new(cls, value: Any) -> "XmlValueHandler":
+    def new(cls, type_id: str, value: Any = None) -> "XmlValueHandler":
         raise NotImplementedError()
     
     def __init__(self, element: ET.Element, type_id: str):
@@ -26,8 +26,10 @@ class XmlValueHandler:
 
 class HkbString(XmlValueHandler):
     @classmethod
-    def new(cls, value: str) -> "HkbString":
-        return ET.Element("string", value=str(value))
+    def new(cls, type_id: str, value: str = None) -> "HkbString":
+        val = str(value) if value is not None else ""
+        elem = ET.Element("string", value=val)
+        return HkbString(elem, type_id)
 
     def __init__(self, element: ET.Element, type_id: str):
         if element.tag != "string":
@@ -44,8 +46,10 @@ class HkbString(XmlValueHandler):
 
 class HkbInteger(XmlValueHandler):
     @classmethod
-    def new(cls, value: int) -> "HkbInteger":
-        return ET.Element("integer", value=str(value))
+    def new(cls, type_id: str, value: int = None) -> "HkbInteger":
+        val = int(value) if value is not None else 0
+        elem = ET.Element("integer", value=str(val))
+        return HkbInteger(elem, type_id)
 
     def __init__(self, element: ET.Element, type_id: str):
         if element.tag != "integer":
@@ -62,8 +66,11 @@ class HkbInteger(XmlValueHandler):
 
 class HkbFloat(XmlValueHandler):
     @classmethod
-    def new(cls, value: float) -> "HkbFloat":
-        return ET.Element("real", dec=str(value), hex=cls.float_to_ieee754(value))
+    def new(cls, type_id: str, value: float = None) -> "HkbFloat":
+        val = float(value) if value is not None else 0.0
+        ieee = cls.float_to_ieee754(val)
+        elem = ET.Element("real", dec=str(val), hex=ieee)
+        return HkbFloat(elem, type_id)
 
     @classmethod
     def float_to_ieee754(cls, value: float) -> str:
@@ -89,8 +96,11 @@ class HkbFloat(XmlValueHandler):
 
 class HkbBool(XmlValueHandler):
     @classmethod
-    def new(cls, value: bool) -> "HkbBool":
-        return ET.Element("bool", value="true" if value else "false")
+    def new(cls, type_id: str, value: bool = None) -> "HkbBool":
+        val = bool(value) if value is not None else False
+        rep = "true" if value else "false"
+        elem = ET.Element("bool", value=rep)
+        return HkbBool(elem, type_id)
 
     def __init__(self, element: ET.Element, type_id: str):
         if element.tag != "bool":
@@ -107,8 +117,10 @@ class HkbBool(XmlValueHandler):
 
 class HkbPointer(XmlValueHandler):
     @classmethod
-    def new(cls, value: str) -> "HkbInteger":
-        return ET.Element("pointer", id=str(value))
+    def new(cls, type_id: str, value: str = None) -> "HkbInteger":
+        val = str(value) if value is not None else "object0"
+        elem = ET.Element("pointer", id=val)
+        return HkbPointer(elem, type_id)
 
     def __init__(self, element: ET.Element, type_id: str):
         if element.tag != "pointer":
@@ -133,14 +145,15 @@ class HkbPointer(XmlValueHandler):
 
 class HkbArray(XmlValueHandler):
     @classmethod
-    def new(cls, values: list[XmlValueHandler], element_type_id: str = None) -> "HkbArray":
-        if not element_type_id:
-            element_type_id = next(values).type_id
+    def new(cls, type_id: str, values: list[XmlValueHandler] = None) -> "HkbArray":
+        if values is None:
+            values = []
 
-        array = ET.Element("array", count=len(values), elementtypeid=element_type_id)
-        array.extend(item.element for item in values)
+        elem_type_id = type_registry.get_subtype(type_id)
+        elem = ET.Element("array", count=len(values), elementtypeid=elem_type_id)
+        elem.extend(item.element for item in values)
 
-        return array
+        return HkbArray(elem, type_id)
 
     def __init__(self, element: ET.Element, type_id: str):
         if element.tag != "array":
@@ -190,7 +203,7 @@ class HkbArray(XmlValueHandler):
 
     def __delitem__(self, index: int) -> None:
         self.element[:] = [e.element for i, e in enumerate(self.get_value()) if e != index]
-        self._counter -= 1
+        self._count -= 1
 
     def index(self, value: XmlValueHandler) -> int:
         if isinstance(value, XmlValueHandler):
@@ -222,9 +235,10 @@ class HkbArray(XmlValueHandler):
 
 class HkbRecord(XmlValueHandler):
     @classmethod
-    def new(cls, values: dict[str, Any], type_id: str, id: str = None) -> "HkbRecord":
-        record = HkbRecord(ET.Element("record"), type_id, id)
-        record.set_value(values)
+    def new(cls, type_id: str, values: dict[str, Any] = None, id: str = None) -> "HkbRecord":
+        elem = ET.Element("record")
+        record = HkbRecord(elem, type_id, id)
+        record.set_value(values or {})
         return record
 
     @classmethod

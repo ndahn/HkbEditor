@@ -155,8 +155,7 @@ class BehaviorEditor(GraphEditor):
         def _add_array_elem(array_group: str, app_data, array: HkbArray) -> None:
             subtype = array.element_type_id
             Handler = get_value_handler(subtype)
-            # TODO passing None is not supported yet
-            new_item = Handler.new(None)
+            new_item = Handler.new(subtype)
 
             idx = len(array)
             array.append(new_item)

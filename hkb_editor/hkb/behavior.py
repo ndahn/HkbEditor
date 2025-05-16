@@ -20,9 +20,9 @@ class HavokBehavior:
             for obj in root.findall(".//object")
         }
 
-        # object0 is used for null pointers, but it's better to catch those when 
+        # object0 is used for null pointers, but it's better to catch those when
         # resolving the pointer
-        #if "object0" not in self.objects:
+        # if "object0" not in self.objects:
         #    # Treated as None
         #    t_void = self.type_registry.find_type_by_name("void")
         #    self.objects["object0"] = HkbRecord.new({}, t_void, "object0")
@@ -69,13 +69,17 @@ class HavokBehavior:
         return g
 
     def add_event(self, event_name: str) -> int:
-        self.events.append(HkbString.new(event_name))
+        self.events.append(HkbString.new(self.events.element_type_id, event_name))
         return len(self.events) - 1
 
     def add_variable(self, variable_name: str) -> int:
-        self.variables.append(HkbString.new(variable_name))
+        self.variables.append(
+            HkbString.new(self.variables.element_type_id, variable_name)
+        )
         return len(self.variables) - 1
 
     def add_animation(self, animation_name: str) -> int:
-        self.animations.append(HkbString.new(animation_name))
+        self.animations.append(
+            HkbString.new(self.animations.element_type_id, animation_name)
+        )
         return len(self.animations) - 1
