@@ -2,6 +2,8 @@ from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
 from .graph_editor import GraphEditor, Node
+from .dialogs.select_pointer import select_pointer
+from .dialogs.edit_simple_array import edit_simple_array
 from hkb.behavior import HavokBehavior
 from hkb.hkb_types import (
     XmlValueHandler,
@@ -179,13 +181,13 @@ class BehaviorEditor(GraphEditor):
             with dpg.group(horizontal=True, filter_key=key):
                 ptr_input = dpg.add_input_text(
                     default_value=val.get_value(),
-                    enabled=False,
+                    readonly=True,
                 )
                 dpg.add_button(
                     arrow=True,
                     direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: self._select_pointer(*u),
-                    user_data=(ptr_input, val, _update_node_attribute, val.subtype),
+                    callback=lambda s, a, u: select_pointer(*u),
+                    user_data=(ptr_input, self.beh, val, _update_node_attribute, val.subtype),
                 )
 
         elif isinstance(val, HkbArray):
@@ -290,111 +292,24 @@ class BehaviorEditor(GraphEditor):
                         user_data=path,
                     )
 
-    def _select_pointer(
-        self,
-        value_widget: str,
-        ptr: HkbPointer,
-        callback: Callable[[str, Any, XmlValueHandler], None],
-        target_type_id: str = None,
-    ) -> None:
-        selected = ptr.get_value()
-
-        def on_filter_update(sender, app_data, user_data):
-            dpg.delete_item(table, children_only=True, slot=1)
-
-            # TODO come up with a filter syntax like "id=... & type=..."
-            filt: str = dpg.get_value(sender)
-            matches = [
-                obj
-                for obj in self.beh.objects.values()
-                if target_type_id in (None, obj.type_id)
-                and (
-                    filt in obj.id or filt in obj.type_id or filt in obj.get("name", "")
-                )
-            ]
-
-            if len(matches) > 100:
-                return
-
-            for obj in sorted(matches, key=lambda o: o.id):
-                name = obj.get("name")
-                type_name = self.beh.type_registry.get_name(obj.type_id)
-                with dpg.table_row(parent=table, user_data=obj.id):
-                    dpg.add_selectable(
-                        label=obj.id,
-                        span_columns=True,
-                        default_value=obj.id == selected,
-                        callback=on_select,
-                        user_data=obj.id,
-                        tag=f"{self.tag}_pointer_selectable_{obj.id}",
-                    )
-                    dpg.add_text(name)
-                    dpg.add_text(type_name)
-
-        def on_select(sender, app_data, object_id: str):
-            nonlocal selected
-            selected = object_id
-
-            # Deselect all other selectables
-            for row in dpg.get_item_children(table, slot=1):
-                if dpg.get_item_user_data(row) != object_id:
-                    for cell in dpg.get_item_children(row, slot=1):
-                        if dpg.get_item_type(cell) == "mvAppItemType::mvSelectable":
-                            dpg.set_value(cell, False)
-
-        def on_okay():
-            callback(value_widget, selected, ptr)
-            dpg.delete_item(dialog)
-
-        def on_cancel():
-            dpg.delete_item(dialog)
-
-        with dpg.window(
-            width=600,
-            height=400,
-            label="Select Pointer",
-            modal=True,
-            on_close=lambda: dpg.delete_item(dialog),
-        ) as dialog:
-            # Way too many options, instead fill the table according to user input
-            dpg.add_input_text(
-                hint="Find Object...",
-                callback=on_filter_update,
-            )
-
-            with dpg.table(
-                delay_search=True,
-                # no_host_extendX=True,
-                resizable=True,
-                policy=dpg.mvTable_SizingStretchProp,
-                scrollY=True,
-                # no_host_extendY=True,
-                height=320,
-            ) as table:
-                dpg.add_table_column(label="ID")
-                dpg.add_table_column(label="Name")
-                dpg.add_table_column(label="Type")
-
-            with dpg.group(horizontal=True):
-                dpg.add_button(
-                    label="Okay",
-                    callback=on_okay,
-                )
-                dpg.add_button(
-                    label="Cancel",
-                    callback=on_cancel,
-                )
-
     # Fleshing out common use cases here
     def open_variable_editor(self):
-        # TODO append to variableNames array
-        pass
+        edit_simple_array(
+            self.beh.variables,
+            "Edit Variables",
+        )
 
     def open_event_editor(self):
-        pass
+        edit_simple_array(
+            self.beh.events,
+            "Edit Events",
+        )
 
     def open_animation_editor(self):
-        pass
+        edit_simple_array(
+            self.beh.animations,
+            "Edit Animations"
+        )
 
     def wizard_create_generator(self, parent_id: str):
         # TODO a wizard that lets the user create a new generator and attach it to another node
