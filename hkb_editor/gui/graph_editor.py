@@ -1,5 +1,6 @@
 from typing import Any
 from os import path
+from time import time
 from logging import getLogger
 from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
@@ -64,7 +65,7 @@ class Layout:
     step_y: int = 20
     node0_margin: tuple[int, int] = (50, 50)
     text_margin: int = 5
-    zoom_factor: float = 2.0
+    zoom_factor: float = 1.5
 
 
 @dataclass
@@ -122,6 +123,7 @@ class GraphEditor:
         self.logger = getLogger(self.__class__.__name__)
         self.tag: str = tag
         self.loaded_file: str = None
+        self.last_save: float = 0.0
         self.graph: nx.DiGraph = None
         self.layout = Layout()
         self.visible_nodes: dict[int, Node] = {}
@@ -226,6 +228,7 @@ class GraphEditor:
             self.logger.info("Loading file %s", ret)
             self._do_load_from_file(ret)
             self.loaded_file = ret
+            self.last_save = 0.0
             self._clear_canvas()
             self._update_roots()
 
@@ -273,6 +276,7 @@ class GraphEditor:
         if ret:
             self._do_write_to_file(ret)
             self.loaded_file = ret
+            self.last_save = time()
 
     def _do_write_to_file(self, file_path: str) -> None:
         pass
@@ -418,11 +422,7 @@ class GraphEditor:
         self.origin = (self.origin[0] + zoom_point[0], self.origin[1] + zoom_point[1])
         self.zoom = min(max(self.zoom - wheel_delta, self.zoom_min), self.zoom_max)
 
-        visible = list(self.visible_nodes.values())
-        self._clear_canvas()
-
-        for node in visible:
-            self._create_node(node.id, node.parent, node.level)
+        self._regenerate_canvas()
 
     def _on_resize(self):
         dpg.set_item_height(f"{self.tag}_canvas", dpg.get_viewport_height() - 50)
@@ -463,6 +463,19 @@ class GraphEditor:
         self.root = None
         self.set_origin(0.0, 0.0)
 
+    def _regenerate_canvas(self):
+        visible = list(self.visible_nodes.values())
+        selected = self.selected_node
+        
+        dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
+        self.visible_nodes.clear()
+        
+        for node in visible:
+            self._create_node(node.id, node.parent, node.level)
+
+        if selected:
+            self._select_node(selected)
+
     def _isolate(self, node: Node):
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
         self.visible_nodes.clear()
@@ -470,9 +483,9 @@ class GraphEditor:
         required_visible = nx.shortest_path(self.graph, self.root.id, node.id)
         parent_id = None
         for level, node_id in enumerate(required_visible):
-            node = self._create_node(node_id, parent_id, level)
-            self._unfold_node(node)
-            parent_id = node.id
+            n = self._create_node(node_id, parent_id, level)
+            self._unfold_node(n)
+            parent_id = n.id
 
     def _select_node(self, node: Node):
         self._deselect_active_node()

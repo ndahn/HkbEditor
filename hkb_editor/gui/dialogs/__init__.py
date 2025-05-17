@@ -1,0 +1,3 @@
+from .edit_simple_array import edit_simple_array_dialog
+from .select_simple_array_item import select_simple_array_item_dialog
+from .select_pointer import select_pointer_dialog

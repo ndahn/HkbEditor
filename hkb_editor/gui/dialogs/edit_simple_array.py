@@ -16,7 +16,7 @@ from hkb.hkb_types import (
 _logger = getLogger("EditSimpleArray")
 
 
-def edit_simple_array(
+def edit_simple_array_dialog(
     array: HkbArray,
     title: str = "Edit Array",
     *,

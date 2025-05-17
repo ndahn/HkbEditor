@@ -1,15 +1,15 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
-from hkb.hkb_types import HkbPointer, XmlValueHandler
+from hkb.hkb_types import HkbPointer
 from hkb.behavior import HavokBehavior
 
 
-def select_pointer(
+def select_pointer_dialog(
     beh: HavokBehavior,
-    callback: Callable[[str, Any, XmlValueHandler], None],
-    value_widget: str,
+    callback: Callable[[str, str, Any], None],
     ptr: HkbPointer,
+    user_data: Any = None,
 ) -> None:
     selected = ptr.get_value()
     tag = dpg.generate_uuid()
@@ -61,7 +61,7 @@ def select_pointer(
                         dpg.set_value(cell, False)
 
     def on_okay():
-        callback(value_widget, selected, ptr)
+        callback(dialog, selected, user_data)
         dpg.delete_item(dialog)
 
     def on_cancel():

@@ -5,10 +5,9 @@ from hkb.hkb_types import HkbArray, XmlValueHandler
 from hkb.behavior import HavokBehavior
 
 
-def select_simple_array_item(
+def select_simple_array_item_dialog(
     array: HkbArray,
-    callback: Callable[[str, int, XmlValueHandler], None],
-    value_widget: str,
+    callback: Callable[[str, int, Any], None],
     selected: int = -1,
     user_data: Any = None,
 ) -> None:
@@ -32,7 +31,7 @@ def select_simple_array_item(
         if selected < 0:
             return
 
-        callback(value_widget, selected, user_data)
+        callback(dialog, selected, user_data)
         dpg.delete_item(dialog)
 
     def on_cancel():

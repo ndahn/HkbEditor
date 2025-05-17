@@ -1,10 +1,18 @@
-from typing import Any, Callable
+from typing import Any
 from dearpygui import dearpygui as dpg
 
 from .graph_editor import GraphEditor, Node
-from .dialogs.select_pointer import select_pointer
-from .dialogs.edit_simple_array import edit_simple_array
-from .dialogs.select_simple_array_item import select_simple_array_item
+from .dialogs import (
+    select_pointer_dialog,
+    edit_simple_array_dialog,
+)
+from .workflows.bind_attribute import (
+    bindable_attribute,
+    select_variable_to_bind,
+    get_bound_attributes,
+    set_bindable_attribute_state,
+    unbind_attribute
+)
 from hkb.behavior import HavokBehavior
 from hkb.hkb_types import (
     XmlValueHandler,
@@ -31,12 +39,24 @@ class BehaviorEditor(GraphEditor):
         self._set_menus_enabled(True)
 
     def _do_write_to_file(self, file_path):
-        # TODO
-        pass
+        self.beh.tree.write(file_path)
 
     def exit_app(self):
-        # TODO ask for confirmation
-        super().exit_app()
+        with dpg.window(
+            label="Exit?",
+            modal=True,
+            on_close=lambda: dpg.delete_item(wnd),
+        ) as wnd:
+            if self.last_save == 0.0:
+                dpg.add_text(f"You have not saved yet. Exit anyways?")
+            else:
+                dpg.add_text(f"It has been {self.last_save:.0f}s since your last save. Exit?")
+            
+            dpg.add_separator()
+
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Exit", callback=dpg.stop_dearpygui)
+                dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(wnd))
 
     def create_menu(self):
         self._create_file_menu()
@@ -123,40 +143,9 @@ class BehaviorEditor(GraphEditor):
     def on_node_selected(self, node: Node) -> None:
         pass
 
-    def _get_variable_binding_set(self, record: HkbRecord) -> HkbRecord:
-        if not isinstance(record, HkbRecord):
-            return None
-
-        try:
-            # TODO we could create a specialized VariableBindingSet subclass
-            binding_ptr: HkbPointer = record.variableBindingSet
-            return self.beh.objects[binding_ptr.get]
-        except (AttributeError, KeyError):
-            return None
-
-    def _get_bound_attributes(self, record: HkbRecord) -> dict[str, int]:
-        binding_set = self._get_variable_binding_set(record)
-        if not binding_set:
-            return {}
-
-        ret = {}
-        bnd: HkbRecord
-        for bnd in binding_set.bindings:
-            var_path = bnd.memberPath.get()
-            var_idx = bnd.variableIndex.get()
-            binding_type = bnd.bindingType.get()
-            if binding_type != 0:
-                self.logger.error(
-                    "Unknown binding type %i (%s:%i)", binding_type, var_path, var_idx
-                )
-            else:
-                ret[var_path] = var_idx
-
-        return ret
-
     def _add_attribute(self, key: str, val: Any, node: Node) -> None:
         obj = self.beh.objects.get(node.id)
-        bound = self._get_bound_attributes(obj)
+        bound = get_bound_attributes(self.beh, obj)
         self._create_attribute_widget(obj, key, val, bound, key)
 
     def _create_attribute_widget(
@@ -167,7 +156,7 @@ class BehaviorEditor(GraphEditor):
         bound_attributes: dict[str, int],
         path: str = "",
     ):
-        def _update_node_attribute(
+        def update_node_attribute(
             sender, new_value: Any, handler: XmlValueHandler
         ) -> None:
             self.on_attribute_changed(path, handler, new_value, handler.get_value())
@@ -177,9 +166,19 @@ class BehaviorEditor(GraphEditor):
         def _delete_array_elem(
             sender, app_data, user_data: tuple[HkbArray, int]
         ) -> None:
-            # TODO note that this may screw up variable binding sets!
             array, idx = user_data
-            pass
+            
+            # TODO this may screw up variable binding sets!
+            del array[idx]
+
+            # Records potentially contain pointers which will affect the graph
+            Handler = get_value_handler(array.element_type_id)
+            if Handler in (HkbRecord, HkbPointer):
+                self._regenerate_canvas()
+
+            # TODO this is a bit expensive, managing index updates is just so tedious
+            self._clear_attributes()
+            self._update_attributes(self.selected_node)
 
         def _add_array_elem(array_group: str, app_data, array: HkbArray) -> None:
             subtype = array.element_type_id
@@ -196,73 +195,29 @@ class BehaviorEditor(GraphEditor):
                 bound_attributes,
                 f"{path}:{idx}",
             )
+            
+            # Records potentially contain pointers which will affect the graph
+            if isinstance(new_item, (HkbRecord, HkbPointer)):
+                self._regenerate_canvas()
 
-        def _bind_attribute(sender, bound_var_idx: int, user_data: tuple[HkbRecord, str]) -> None:
-            record, path = user_data
-            binding_set = self._get_variable_binding_set(source_record)
+            # TODO appending to the end is easy, inserting in between requires index updates
+            self._clear_attributes()
+            self._update_attributes(self.selected_node)
 
-            if binding_set is None:
-                ptr_type_id = source_record.get_field_type("variableBindingSet")
-                bindings_type_id = self.beh.type_registry.get_subtype(ptr_type_id)
-                binding_id = self.beh.new_object_id()
-                binding_set = HkbRecord.new(bindings_type_id, None, binding_id)
-
-                # Assign pointer to source record
-                record.variableBindingSet.set_value(binding_id)
-                # TODO update pointer attribute widget
-                # TODO redraw graph
-
-                self.beh.objects[binding_id] = binding_set
-                # TODO append to xml, too!
-
-            bindings: HkbArray = binding_set.bindings
-            bnd: HkbRecord
-
-            for bnd in bindings:
-                if bnd.memberPath == path:
-                    bnd.variableIndex = bound_var_idx
-                    break
-            else:
-                bindings.append(
-                    HkbRecord.new(
-                        bindings.element_type_id,
-                        {
-                            "memberPath": path,
-                            "variableIndex": bound_var_idx,
-                            "bitIndex": -1,
-                            "bindingType": 0,
-                        },
-                    )
-                )
-
-            # TODO replace sender with a bound-attribute widget
-
-        def _unbind_attribute(sender, app_data, path: str) -> None:
-            # TODO remove from bound_attributes, replace sender widget with regular one
-            binding_set = self._get_variable_binding_set(source_record)
-
-            if binding_set is None:
-                bindings_type_id = source_record.get_field_type("bindings")
-                binding_id = self.beh.new_object_id()
-                binding_set = HkbRecord.new(bindings_type_id, {}, binding_id)
-
-                self.beh.objects[binding_id] = binding_set
-                # TODO append to xml, too!
-
-            bindings: HkbArray = binding_set.bindings
-            bnd: HkbRecord
-
-            for idx, bnd in enumerate(bindings):
-                if bnd.memberPath == path:
-                    del bindings[idx]
-                    break
-            else:
-                return
-
-            # TODO replace sender with a regular widget
-
+        # NOTE pointers are probably bindable, but let's maybe not :)
         if isinstance(val, HkbPointer):
-            # NOTE probably bindable, but let's maybe not :)
+            def on_pointer_select(sender, new_value: str, ptr_widget: str):
+                update_node_attribute(ptr_widget, new_value, val)
+
+                # Changing a pointer will change the rendered graph
+                self._regenerate_canvas()
+
+                # If the binding set pointer changed we should regenerate all attribute widgets
+                vbs_type_id = self.beh.type_registry.find_type_by_name("hkbVariableBindingSet")
+                if val.type_id == vbs_type_id:
+                    self._clear_attributes()
+                    self._update_attributes(self.selected_node)
+            
             with dpg.group(horizontal=True, filter_key=key):
                 ptr_input = dpg.add_input_text(
                     default_value=val.get_value(),
@@ -271,13 +226,8 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_button(
                     arrow=True,
                     direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: select_pointer(*u),
-                    user_data=(
-                        self.beh,
-                        _update_node_attribute,
-                        ptr_input,
-                        val,
-                    ),
+                    callback=lambda s, a, u: select_pointer_dialog(*u),
+                    user_data=(self.beh, on_pointer_select, val, ptr_input)
                 )
 
         elif isinstance(val, HkbArray):
@@ -327,76 +277,71 @@ class BehaviorEditor(GraphEditor):
                     )
 
         else:
-            widget = None
+            with bindable_attribute(filter_key=key, tag=f"{self.tag}_{path}") as bindable:
+                if isinstance(val, HkbString):
+                    dpg.add_input_text(
+                        filter_key=key,
+                        callback=update_node_attribute,
+                        user_data=val,
+                        default_value=val.get_value(),
+                    )
 
-            # All bindable objects
-            bound_var_idx = bound_attributes.get(path, -1)
-            if bound_var_idx >= 0:
-                bound_var_name = self.beh.events[bound_var_idx]
+                elif isinstance(val, HkbInteger):
+                    dpg.add_input_int(
+                        filter_key=key,
+                        callback=update_node_attribute,
+                        user_data=val,
+                        default_value=val.get_value(),
+                    )
 
-                # TODO set theme
-                widget = dpg.add_input_text(
-                    filter_key=key,
-                    enabled=False,
-                    default_value=f"<{bound_var_name}>",
-                )
+                elif isinstance(val, HkbFloat):
+                    dpg.add_input_double(
+                        filter_key=key,
+                        callback=update_node_attribute,
+                        user_data=val,
+                        default_value=val.get_value(),
+                    )
 
-            elif isinstance(val, HkbString):
-                widget = dpg.add_input_text(
-                    filter_key=key,
-                    callback=lambda s, a, u: self._select_pointer(*u),
-                    user_data=(widget, val, _update_node_attribute),
-                    default_value=val.get_value(),
-                )
+                elif isinstance(val, HkbBool):
+                    dpg.add_checkbox(
+                        filter_key=key,
+                        callback=update_node_attribute,
+                        user_data=val,
+                        default_value=val.get_value(),
+                    )
 
-            elif isinstance(val, HkbInteger):
-                widget = dpg.add_input_int(
-                    filter_key=key,
-                    callback=lambda s, a, u: self._select_pointer(*u),
-                    user_data=(widget, val, _update_node_attribute),
-                    default_value=val.get_value(),
-                )
+                else:
+                    self.logger.error("Cannot handle attribute %s (%s)", key, val)
+                    bindable = None
 
-            elif isinstance(val, HkbFloat):
-                widget = dpg.add_input_double(
-                    filter_key=key,
-                    callback=lambda s, a, u: self._select_pointer(*u),
-                    user_data=(widget, val, _update_node_attribute),
-                    default_value=val.get_value(),
-                )
+            # Add menu to bind attribute to variable
+            if bindable:
+                bound_var_idx = bound_attributes.get(path, -1)
+                set_bindable_attribute_state(self.beh, bindable, bound_var_idx)
 
-            elif isinstance(val, HkbBool):
-                dpg.add_checkbox(
-                    filter_key=key,
-                    callback=lambda s, a, u: self._select_pointer(*u),
-                    user_data=(widget, val, _update_node_attribute),
-                    default_value=val.get_value(),
-                )
+                # TODO react to variable binding set creation
 
-            else:
-                self.logger.error("Cannot handle attribute %s (%s)", key, val)
+                with dpg.popup(bindable):
+                    dpg.add_text(key)
+                    dpg.add_separator()
 
-            # Add menu to bind to variable
-            if widget:
-                with dpg.popup(dpg.last_item()):
                     dpg.add_selectable(
                         label="Bind",
-                        callback=lambda s, a, u: select_simple_array_item(*u),
+                        callback=lambda s, a, u: select_variable_to_bind(*u),
                         user_data=(
-                            self.beh.variables,
-                            _bind_attribute,
-                            widget,
+                            self.beh,
+                            source_record,
+                            bindable,
+                            path,
                             bound_var_idx,
-                            (source_record, path),
                         ),
                     )
 
-                    if bound_var_idx >= 0:
-                        dpg.add_selectable(
-                            label="Clear binding",
-                            callback=_unbind_attribute,
-                            user_data=(widget, None, path),
-                        )
+                    dpg.add_selectable(
+                        label="Clear binding",
+                        callback=lambda s, a, u: unbind_attribute(*u),
+                        user_data=(self.beh, source_record, bindable, path),
+                    )
 
     def on_attribute_changed(
         self, path: str, handler: XmlValueHandler, new_value: Any, prev_value: Any
@@ -414,19 +359,19 @@ class BehaviorEditor(GraphEditor):
 
     # Fleshing out common use cases here
     def open_variable_editor(self):
-        edit_simple_array(
+        edit_simple_array_dialog(
             self.beh.variables,
             "Edit Variables",
         )
 
     def open_event_editor(self):
-        edit_simple_array(
+        edit_simple_array_dialog(
             self.beh.events,
             "Edit Events",
         )
 
     def open_animation_editor(self):
-        edit_simple_array(self.beh.animations, "Edit Animations")
+        edit_simple_array_dialog(self.beh.animations, "Edit Animations")
 
     def wizard_create_generator(self, parent_id: str):
         # TODO a wizard that lets the user create a new generator and attach it to another node

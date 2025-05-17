@@ -68,6 +68,19 @@ class HavokBehavior:
 
         return g
 
+    def add_object(self, record: HkbRecord, id: str = None) -> str:
+        if id is None:
+            if record.id:
+                id = record.id
+            else:
+                id = self.new_object_id()
+
+        record.id = id
+        self.tree.getroot().append(record.as_object())
+        self.objects[id] = record
+
+        return id
+
     def add_event(self, event_name: str) -> int:
         self.events.append(HkbString.new(self.events.element_type_id, event_name))
         return len(self.events) - 1
