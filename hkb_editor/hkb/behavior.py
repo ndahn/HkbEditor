@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 import networkx as nx
 
 from .type_registry import type_registry
-from .hkb_types import HkbRecord, HkbArray, HkbString, wrap_element, get_value_handler
+from .hkb_types import HkbRecord, HkbArray, HkbString
 
 
 class HavokBehavior:
@@ -68,6 +68,14 @@ class HavokBehavior:
 
         return g
 
+    def new_object_id(self) -> str:
+        last_key = max(
+            int(k[len("object") :]) 
+            for k in self.objects.keys() if k.startswith("object")
+        )
+
+        return f"object{last_key + 1}"
+
     def add_object(self, record: HkbRecord, id: str = None) -> str:
         if id is None:
             if record.id:
@@ -81,26 +89,18 @@ class HavokBehavior:
 
         return id
 
-    def add_event(self, event_name: str) -> int:
+    def create_event(self, event_name: str) -> int:
         self.events.append(HkbString.new(self.events.element_type_id, event_name))
         return len(self.events) - 1
 
-    def add_variable(self, variable_name: str) -> int:
+    def create_variable(self, variable_name: str) -> int:
         self.variables.append(
             HkbString.new(self.variables.element_type_id, variable_name)
         )
         return len(self.variables) - 1
 
-    def add_animation(self, animation_name: str) -> int:
+    def create_animation(self, animation_name: str) -> int:
         self.animations.append(
             HkbString.new(self.animations.element_type_id, animation_name)
         )
         return len(self.animations) - 1
-
-    def new_object_id(self) -> str:
-        last_key = max(
-            int(k[len("object") :]) 
-            for k in self.objects.keys() if k.startswith("object")
-        )
-
-        return f"object{last_key + 1}"

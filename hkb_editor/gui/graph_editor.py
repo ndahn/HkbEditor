@@ -470,11 +470,15 @@ class GraphEditor:
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
         self.visible_nodes.clear()
         
+        last_node = None
         for node in visible:
-            self._create_node(node.id, node.parent, node.level)
+            last_node = self._create_node(node.id, node.parent, node.level)
+            self._unfold_node(last_node)
 
         if selected:
             self._select_node(selected)
+        elif last_node:
+            self._fold_node(last_node)
 
     def _isolate(self, node: Node):
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)

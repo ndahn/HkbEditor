@@ -207,6 +207,13 @@ class BehaviorEditor(GraphEditor):
         # NOTE pointers are probably bindable, but let's maybe not :)
         if isinstance(val, HkbPointer):
             def on_pointer_select(sender, new_value: str, ptr_widget: str):
+                # Update the graph
+                try:
+                    self.graph.add_edge(source_record.id, new_value)
+                    self.graph.remove_edge(source_record.id, val.get_value())
+                except:
+                    pass
+
                 update_node_attribute(ptr_widget, new_value, val)
 
                 # Changing a pointer will change the rendered graph
@@ -316,10 +323,18 @@ class BehaviorEditor(GraphEditor):
 
             # Add menu to bind attribute to variable
             if bindable:
+                # TODO add to common menu with copy/cut/paste
                 bound_var_idx = bound_attributes.get(path, -1)
                 set_bindable_attribute_state(self.beh, bindable, bound_var_idx)
 
-                # TODO react to variable binding set creation
+                def on_binding_established(sender, selected_idx: int, user_data: Any):
+                    # If a new binding set was created the graph will change
+
+                    # TODO if a binding set was created we need to add it to the graph!
+
+                    self._regenerate_canvas()
+                    self._clear_attributes()
+                    self._update_attributes(self.selected_node)
 
                 with dpg.popup(bindable):
                     dpg.add_text(key)
@@ -334,6 +349,7 @@ class BehaviorEditor(GraphEditor):
                             bindable,
                             path,
                             bound_var_idx,
+                            on_binding_established,
                         ),
                     )
 
@@ -346,11 +362,11 @@ class BehaviorEditor(GraphEditor):
     def on_attribute_changed(
         self, path: str, handler: XmlValueHandler, new_value: Any, prev_value: Any
     ) -> None:
-        # TODO add to undo history, show notification
+        # TODO add to undo history
         pass
 
     def undo(self) -> None:
-        # TODO
+        # TODO undo change, show notification
         pass
 
     def redo(self) -> None:
