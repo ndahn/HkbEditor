@@ -11,7 +11,7 @@ from .workflows.bind_attribute import (
     select_variable_to_bind,
     get_bound_attributes,
     set_bindable_attribute_state,
-    unbind_attribute
+    unbind_attribute,
 )
 from hkb.behavior import HavokBehavior
 from hkb.hkb_types import (
@@ -50,8 +50,10 @@ class BehaviorEditor(GraphEditor):
             if self.last_save == 0.0:
                 dpg.add_text(f"You have not saved yet. Exit anyways?")
             else:
-                dpg.add_text(f"It has been {self.last_save:.0f}s since your last save. Exit?")
-            
+                dpg.add_text(
+                    f"It has been {self.last_save:.0f}s since your last save. Exit?"
+                )
+
             dpg.add_separator()
 
             with dpg.group(horizontal=True):
@@ -143,189 +145,56 @@ class BehaviorEditor(GraphEditor):
     def on_node_selected(self, node: Node) -> None:
         pass
 
-    def _add_attribute(self, key: str, val: Any, node: Node) -> None:
+    def _add_attribute(self, attribute: str, val: Any, node: Node) -> None:
         obj = self.beh.objects.get(node.id)
-        bound = get_bound_attributes(self.beh, obj)
-        self._create_attribute_widget(obj, key, val, bound, key)
+        self._create_attribute_widget(obj, val, attribute)
 
     def _create_attribute_widget(
         self,
         source_record: HkbRecord,
-        key: str,
-        val: XmlValueHandler,
-        bound_attributes: dict[str, int],
+        value: XmlValueHandler,
         path: str = "",
     ):
-        def update_node_attribute(
-            sender, new_value: Any, handler: XmlValueHandler
-        ) -> None:
-            self.on_attribute_changed(path, handler, new_value, handler.get_value())
-            handler.set_value(new_value)
-            dpg.set_value(sender, new_value)
-
-        def _delete_array_elem(
-            sender, app_data, user_data: tuple[HkbArray, int]
-        ) -> None:
-            array, idx = user_data
-            
-            # TODO this may screw up variable binding sets!
-            del array[idx]
-
-            # Records potentially contain pointers which will affect the graph
-            Handler = get_value_handler(array.element_type_id)
-            if Handler in (HkbRecord, HkbPointer):
-                self._regenerate_canvas()
-
-            # TODO this is a bit expensive, managing index updates is just so tedious
-            self._clear_attributes()
-            self._update_attributes(self.selected_node)
-
-        def _add_array_elem(array_group: str, app_data, array: HkbArray) -> None:
-            subtype = array.element_type_id
-            Handler = get_value_handler(subtype)
-            new_item = Handler.new(subtype)
-
-            idx = len(array)
-            array.append(new_item)
-
-            self._create_attribute_widget(
-                source_record,
-                f"{key}:{idx}",
-                new_item,
-                bound_attributes,
-                f"{path}:{idx}",
-            )
-            
-            # Records potentially contain pointers which will affect the graph
-            if isinstance(new_item, (HkbRecord, HkbPointer)):
-                self._regenerate_canvas()
-
-            # TODO appending to the end is easy, inserting in between requires index updates
-            self._clear_attributes()
-            self._update_attributes(self.selected_node)
+        tag = f"{self.tag}_attribute_{path}"
+        bindable = False
 
         # NOTE pointers are probably bindable, but let's maybe not :)
-        if isinstance(val, HkbPointer):
-            def on_pointer_select(sender, new_value: str, ptr_widget: str):
-                # Update the graph
-                try:
-                    self.graph.add_edge(source_record.id, new_value)
-                    self.graph.remove_edge(source_record.id, val.get_value())
-                except:
-                    pass
+        if isinstance(value, HkbPointer):
+            widget = self._create_attribute_widget_pointer(source_record, value, path, tag=tag)
 
-                update_node_attribute(ptr_widget, new_value, val)
+        # NOTE these will all live inside the same table row
+        elif isinstance(value, HkbArray):
+            widget = self._create_attribute_widget_array(source_record, value, path, tag=tag)
 
-                # Changing a pointer will change the rendered graph
-                self._regenerate_canvas()
-
-                # If the binding set pointer changed we should regenerate all attribute widgets
-                vbs_type_id = self.beh.type_registry.find_type_by_name("hkbVariableBindingSet")
-                if val.type_id == vbs_type_id:
-                    self._clear_attributes()
-                    self._update_attributes(self.selected_node)
-            
-            with dpg.group(horizontal=True, filter_key=key):
-                ptr_input = dpg.add_input_text(
-                    default_value=val.get_value(),
-                    readonly=True,
-                )
-                dpg.add_button(
-                    arrow=True,
-                    direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: select_pointer_dialog(*u),
-                    user_data=(self.beh, on_pointer_select, val, ptr_input)
-                )
-
-        elif isinstance(val, HkbArray):
-            # Organize members in a foldable section
-            # NOTE these will all live inside the same table row
-            with dpg.tree_node(label=key, filter_key=key) as array_group:
-                for idx, subval in enumerate(val.get_value()):
-                    with dpg.group(horizontal=True):
-                        # Allow deleting elements
-                        dpg.add_button(
-                            label="(-)",
-                            small=True,
-                            callback=_delete_array_elem,
-                            user_data=(val, idx),
-                        )
-                        # Descend into the array
-                        # Note that array elements can be bound, too, e.g.
-                        # "hands:0/controlData/targetPosition"
-                        self._create_attribute_widget(
-                            source_record,
-                            f"{key}:{idx}",
-                            subval,
-                            bound_attributes,
-                            f"{path}:{idx}",
-                        )
-
-                    dpg.add_separator()
-
-                # Allow adding elements
-                dpg.add_button(
-                    label="(+)",
-                    small=True,
-                    callback=lambda s, a, u: _add_array_elem(*u),
-                    user_data=(array_group, key, val),
-                )
-
-        elif isinstance(val, HkbRecord):
-            # NOTE these will all live inside the same table row
-            with dpg.tree_node(label=key, filter_key=key):
-                for subkey, subval in val.get_value().items():
-                    self._create_attribute_widget(
-                        source_record,
-                        subkey,
-                        subval,
-                        bound_attributes,
-                        f"{path}/{subkey}",
-                    )
+        # NOTE these will all live inside the same table row
+        elif isinstance(value, HkbRecord):
+            widget = self._create_attribute_widget_record(source_record, value, path, tag=tag)
 
         else:
-            with bindable_attribute(filter_key=key, tag=f"{self.tag}_{path}") as bindable:
-                if isinstance(val, HkbString):
-                    dpg.add_input_text(
-                        filter_key=key,
-                        callback=update_node_attribute,
-                        user_data=val,
-                        default_value=val.get_value(),
-                    )
+            widget = self._create_attribute_widget_simple(
+                source_record, value, path, tag=tag
+            )
 
-                elif isinstance(val, HkbInteger):
-                    dpg.add_input_int(
-                        filter_key=key,
-                        callback=update_node_attribute,
-                        user_data=val,
-                        default_value=val.get_value(),
-                    )
+            bindable = bool(widget)
 
-                elif isinstance(val, HkbFloat):
-                    dpg.add_input_double(
-                        filter_key=key,
-                        callback=update_node_attribute,
-                        user_data=val,
-                        default_value=val.get_value(),
-                    )
+        if not widget:
+            return
 
-                elif isinstance(val, HkbBool):
-                    dpg.add_checkbox(
-                        filter_key=key,
-                        callback=update_node_attribute,
-                        user_data=val,
-                        default_value=val.get_value(),
-                    )
+        # Create a context menu for the widget
+        with dpg.popup(widget):
+            dpg.add_text(path.split("/")[-1])
+            dpg.add_separator()
 
-                else:
-                    self.logger.error("Cannot handle attribute %s (%s)", key, val)
-                    bindable = None
+            # TODO
+            dpg.add_selectable(label="Cut", callback=None)
+            dpg.add_selectable(label="Copy", callback=None)
+            dpg.add_selectable(label="Paste", callback=None)
 
-            # Add menu to bind attribute to variable
             if bindable:
                 # TODO add to common menu with copy/cut/paste
+                bound_attributes = get_bound_attributes(self.beh, source_record)
                 bound_var_idx = bound_attributes.get(path, -1)
-                set_bindable_attribute_state(self.beh, bindable, bound_var_idx)
+                set_bindable_attribute_state(self.beh, widget, bound_var_idx)
 
                 def on_binding_established(sender, selected_idx: int, user_data: Any):
                     # If a new binding set was created the graph will change
@@ -336,34 +205,220 @@ class BehaviorEditor(GraphEditor):
                     self._clear_attributes()
                     self._update_attributes(self.selected_node)
 
-                with dpg.popup(bindable):
-                    dpg.add_text(key)
-                    dpg.add_separator()
+                dpg.add_separator()
+                dpg.add_selectable(
+                    label="Bind",
+                    callback=lambda s, a, u: select_variable_to_bind(*u),
+                    user_data=(
+                        self.beh,
+                        source_record,
+                        widget,
+                        path,
+                        bound_var_idx,
+                        on_binding_established,
+                    ),
+                )
 
-                    dpg.add_selectable(
-                        label="Bind",
-                        callback=lambda s, a, u: select_variable_to_bind(*u),
-                        user_data=(
-                            self.beh,
-                            source_record,
-                            bindable,
-                            path,
-                            bound_var_idx,
-                            on_binding_established,
-                        ),
+                dpg.add_selectable(
+                    label="Clear binding",
+                    callback=lambda s, a, u: unbind_attribute(*u),
+                    user_data=(self.beh, source_record, widget, path),
+                )
+
+    def _create_attribute_widget_pointer(
+        self,
+        source_record: HkbRecord,
+        pointer: HkbPointer,
+        path: str,
+        tag: str = 0,
+    ) -> str:
+        attribute = path.split("/")[-1]
+
+        def on_pointer_select(sender, new_value: str, ptr_widget: str):
+            # Update the graph
+            pointer.set_value(new_value)
+
+            try:
+                self.graph.add_edge(source_record.id, new_value)
+                self.graph.remove_edge(source_record.id, pointer.get_value())
+            except:
+                pass
+
+            self.on_attribute_update(ptr_widget, new_value, pointer)
+
+            # Changing a pointer will change the rendered graph
+            self._regenerate_canvas()
+
+            # If the binding set pointer changed we should regenerate all attribute widgets
+            vbs_type_id = self.beh.type_registry.find_type_by_name(
+                "hkbVariableBindingSet"
+            )
+            if pointer.type_id == vbs_type_id:
+                self._clear_attributes()
+                self._update_attributes(self.selected_node)
+
+        with dpg.group(horizontal=True, filter_key=attribute, tag=tag) as group:
+            ptr_input = dpg.add_input_text(
+                default_value=pointer.get_value(),
+                readonly=True,
+            )
+            dpg.add_button(
+                arrow=True,
+                direction=dpg.mvDir_Right,
+                callback=lambda s, a, u: select_pointer_dialog(*u),
+                user_data=(self.beh, on_pointer_select, pointer, ptr_input),
+            )
+
+        return group
+
+    def _create_attribute_widget_array(
+        self,
+        source_record: HkbRecord,
+        array: HkbArray,
+        path: str,
+        tag: str = 0,
+    ) -> str:
+        attribute = path.split("/")[-1]
+
+        def delete_array_elem(sender, app_data, index: int) -> None:
+            # TODO this may screw up variable binding sets!
+            del array[index]
+
+            # Records potentially contain pointers which will affect the graph
+            Handler = get_value_handler(array.element_type_id)
+            if Handler in (HkbRecord, HkbPointer):
+                self._regenerate_canvas()
+
+            # TODO this is a bit expensive, but managing index updates is just so tedious
+            self._clear_attributes()
+            self._update_attributes(self.selected_node)
+
+        def add_array_elem() -> None:
+            subtype = array.element_type_id
+            Handler = get_value_handler(subtype)
+            new_item = Handler.new(subtype)
+
+            idx = len(array)
+            array.append(new_item)
+
+            self._create_attribute_widget(
+                source_record,
+                new_item,
+                f"{path}:{idx}",
+            )
+
+            # Records potentially contain pointers which will affect the graph
+            if isinstance(new_item, (HkbRecord, HkbPointer)):
+                self._regenerate_canvas()
+
+            # TODO appending to the end is easy, inserting in between requires index updates
+            self._clear_attributes()
+            self._update_attributes(self.selected_node)
+
+        # Organize members in a foldable section
+        with dpg.tree_node(
+            label=attribute, filter_key=attribute, tag=tag
+        ) as array_group:
+            for idx, subval in enumerate(array):
+                with dpg.group(horizontal=True):
+                    # Allow deleting elements
+                    dpg.add_button(
+                        label="(-)",
+                        small=True,
+                        callback=delete_array_elem,
+                        user_data=(array, idx),
+                    )
+                    # Descend into the array
+                    # Note that array elements can be bound, too, e.g.
+                    # "hands:0/controlData/targetPosition"
+                    self._create_attribute_widget(
+                        source_record,
+                        subval,
+                        f"{path}:{idx}",
                     )
 
-                    dpg.add_selectable(
-                        label="Clear binding",
-                        callback=lambda s, a, u: unbind_attribute(*u),
-                        user_data=(self.beh, source_record, bindable, path),
-                    )
+                dpg.add_separator()
 
-    def on_attribute_changed(
-        self, path: str, handler: XmlValueHandler, new_value: Any, prev_value: Any
+            # Allow adding elements
+            dpg.add_button(
+                label="(+)",
+                small=True,
+                callback=add_array_elem,
+            )
+
+        return array_group
+
+    def _create_attribute_widget_record(
+        self,
+        source_record: HkbRecord,
+        record: HkbRecord,
+        path: str,
+        tag: str = 0,
+    ) -> str:
+        attribute = path.split("/")[-1]
+
+        with dpg.tree_node(label=attribute, filter_key=attribute, tag=tag):
+            for subkey, subval in record.get_value().items():
+                self._create_attribute_widget(
+                    source_record,
+                    subval,
+                    f"{path}/{subkey}",
+                )
+
+    def _create_attribute_widget_simple(
+        self,
+        source_record: HkbRecord,
+        value: XmlValueHandler,
+        path: str,
+        tag: str = 0,
+    ) -> str:
+        attribute = path.split("/")[-1]
+
+        with bindable_attribute(filter_key=attribute, tag=tag) as bindable:
+            if isinstance(value, HkbString):
+                dpg.add_input_text(
+                    filter_key=attribute,
+                    callback=self.on_attribute_update,
+                    user_data=value,
+                    default_value=value.get_value(),
+                )
+
+            elif isinstance(value, HkbInteger):
+                dpg.add_input_int(
+                    filter_key=attribute,
+                    callback=self.on_attribute_update,
+                    user_data=value,
+                    default_value=value.get_value(),
+                )
+
+            elif isinstance(value, HkbFloat):
+                dpg.add_input_double(
+                    filter_key=attribute,
+                    callback=self.on_attribute_update,
+                    user_data=value,
+                    default_value=value.get_value(),
+                )
+
+            elif isinstance(value, HkbBool):
+                dpg.add_checkbox(
+                    filter_key=attribute,
+                    callback=self.on_attribute_update,
+                    user_data=value,
+                    default_value=value.get_value(),
+                )
+
+            else:
+                self.logger.error("Cannot handle attribute %s (%s)", attribute, value)
+                return None
+
+        return bindable
+
+    def on_attribute_update(
+        self, sender, new_value: Any, handler: XmlValueHandler
     ) -> None:
-        # TODO add to undo history
-        pass
+        # TODO create and manage undo history
+        handler.set_value(new_value)
+        dpg.set_value(sender, new_value)
 
     def undo(self) -> None:
         # TODO undo change, show notification
