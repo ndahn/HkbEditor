@@ -15,12 +15,13 @@ _logger = getLogger("BindAttribute")
 def bindable_attribute(
     filter_key: str = "",
     tag: str = 0,
+    **kwargs,
 ) -> Generator[str, None, None]:
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
     try:
-        with dpg.group(filter_key=filter_key, tag=tag):
+        with dpg.group(filter_key=filter_key, tag=tag, **kwargs):
             dpg.add_input_text(
                 readonly=True,
                 default_value="",

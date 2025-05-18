@@ -1,5 +1,6 @@
 from typing import Any
 from os import path
+import shutil
 from time import time
 from logging import getLogger
 from dataclasses import dataclass
@@ -57,6 +58,14 @@ def save_file_dialog(
 
     root.destroy()
     return ret
+
+
+def get_default_layout_path():
+    return path.join(path.dirname(__file__), "default_layout.ini")
+
+
+def get_custom_layout_path():
+    return path.join(path.dirname(__file__), "user_layout.ini")
 
 
 @dataclass
@@ -173,7 +182,29 @@ class GraphEditor:
         self._create_file_menu()
         dpg.add_separator()
         self._create_dpg_menu()
-    
+
+    def _save_layout(self):
+        dpg.save_init_file(get_custom_layout_path())
+        self.logger.info("Saved custom layout")
+
+    def _restore_default_layout(self):
+        # NOTE not really restoring rather than removing the custom layout
+        try:
+            shutil.move(get_custom_layout_path(), get_custom_layout_path() + ".old")
+
+            with dpg.window(
+                label="Layout Restored",
+                modal=True,
+                autosize=True,
+                min_size=(100, 50),
+                on_close=lambda: dpg.delete_item(wnd),
+            ) as wnd:
+                dpg.add_text("Layout restored - restart to apply!")
+                dpg.add_separator()
+                dpg.add_button(label="Okay", callback=lambda: dpg.delete_item(wnd))
+        except FileNotFoundError:
+            pass
+
     def _create_file_menu(self):
         with dpg.menu(label="File"):
             dpg.add_menu_item(label="Open...", callback=self.open_file)
@@ -183,6 +214,15 @@ class GraphEditor:
                 enabled=False,
                 tag="menu_file_save",
             )
+            dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="Save layout as default", callback=self._save_layout
+            )
+            dpg.add_menu_item(
+                label="Restore factory layout", callback=self._restore_default_layout
+            )
+
             dpg.add_separator()
             dpg.add_menu_item(label="Exit", callback=self.exit_app)
 
@@ -285,18 +325,21 @@ class GraphEditor:
         dpg.stop_dearpygui()
 
     def _setup_content(self):
-        with dpg.menu_bar():
+        with dpg.viewport_menu_bar():
             self.create_menu()
 
         with dpg.group(horizontal=True):
             # Roots
-            with dpg.child_window(
-                resizable_x=True,
-                auto_resize_x=True,
+            with dpg.window(
+                label="Root Nodes",
+                autosize=True,
+                no_title_bar=True,
+                no_close=True,
+                no_scrollbar=True,
                 tag=f"{self.tag}_roots_window",
             ):
                 dpg.add_input_text(
-                    hint="Filter Roots",
+                    hint="Filter",
                     tag=f"{self.tag}_roots_filter",
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                     user_data=f"{self.tag}_roots_table",
@@ -314,9 +357,11 @@ class GraphEditor:
                     dpg.add_table_column(label="Name")
 
             # Canvas
-            with dpg.child_window(
-                auto_resize_x=True,
-                auto_resize_y=True,
+            with dpg.window(
+                label="Graph",
+                autosize=True,
+                no_title_bar=True,
+                no_close=True,
                 no_scrollbar=True,
                 tag=f"{self.tag}_canvas_window",
             ):
@@ -324,31 +369,36 @@ class GraphEditor:
                     dpg.add_draw_node(tag=f"{self.tag}_canvas_root")
 
             # Attributes panel
-            with dpg.child_window(
-                resizable_x=True,
-                auto_resize_x=True,
+            with dpg.window(
+                label="Attributes",
+                autosize=True,
+                no_title_bar=True,
+                no_close=True,
+                no_scrollbar=True,
                 tag=f"{self.tag}_attributes_window",
             ):
                 dpg.add_input_text(
-                    hint="Filter Attributes",
+                    hint="Filter",
                     tag=f"{self.tag}_attribute_filter",
                     callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                     user_data=f"{self.tag}_attributes_table",
                 )
                 dpg.add_separator()
 
-                dpg.add_text("", tag=f"{self.tag}_attributes_title")
-                with dpg.table(
-                    delay_search=True,
-                    # no_host_extendX=True,
-                    resizable=True,
-                    policy=dpg.mvTable_SizingStretchProp,
-                    header_row=False,
-                    scrollY=True,
-                    tag=f"{self.tag}_attributes_table",
-                ):
-                    dpg.add_table_column(label="Value", width_stretch=True)
-                    dpg.add_table_column(label="Key")
+                # Child window is needed to fix table sizing            
+                with dpg.child_window(border=False):
+                    dpg.add_text("", tag=f"{self.tag}_attributes_title")
+                    with dpg.table(
+                        delay_search=True,
+                        no_host_extendX=True,
+                        resizable=True,
+                        borders_innerV=True,
+                        policy=dpg.mvTable_SizingFixedFit,
+                        header_row=False,
+                        tag=f"{self.tag}_attributes_table",
+                    ):
+                        dpg.add_table_column(label="Value", width_stretch=True)
+                        dpg.add_table_column(label="Key", width_fixed=True)
 
             with dpg.handler_registry():
                 dpg.add_mouse_click_handler(callback=self._on_mouse_click)
@@ -427,10 +477,10 @@ class GraphEditor:
     def _on_resize(self):
         dpg.set_item_height(f"{self.tag}_canvas", dpg.get_viewport_height() - 50)
 
-        w = dpg.get_viewport_width() - 270
-        dpg.set_item_width(f"{self.tag}_roots_window", 200)
-        dpg.set_item_width(f"{self.tag}_canvas", int(w * 0.8))
-        dpg.set_item_width(f"{self.tag}_attributes_table", int(w * 0.2))
+        # w = dpg.get_viewport_width() - 270
+        # dpg.set_item_width(f"{self.tag}_roots_window", 200)
+        # dpg.set_item_width(f"{self.tag}_canvas", int(w * 0.8))
+        # dpg.set_item_width(f"{self.tag}_attributes_table", int(w * 0.2))
 
     def set_origin(self, new_x: float, new_y: float) -> None:
         self.origin = (new_x, new_y)
@@ -466,10 +516,10 @@ class GraphEditor:
     def _regenerate_canvas(self):
         visible = list(self.visible_nodes.values())
         selected = self.selected_node
-        
+
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
         self.visible_nodes.clear()
-        
+
         last_node = None
         for node in visible:
             last_node = self._create_node(node.id, node.parent, node.level)
@@ -709,6 +759,7 @@ class GraphEditor:
         if isinstance(val, str):
             dpg.add_input_text(
                 label=key,
+                width=-1,
                 filter_key=key,
                 tag=tag,
                 callback=update_node_attribute,

@@ -160,15 +160,21 @@ class BehaviorEditor(GraphEditor):
 
         # NOTE pointers are probably bindable, but let's maybe not :)
         if isinstance(value, HkbPointer):
-            widget = self._create_attribute_widget_pointer(source_record, value, path, tag=tag)
+            widget = self._create_attribute_widget_pointer(
+                source_record, value, path, tag=tag
+            )
 
         # NOTE these will all live inside the same table row
         elif isinstance(value, HkbArray):
-            widget = self._create_attribute_widget_array(source_record, value, path, tag=tag)
+            widget = self._create_attribute_widget_array(
+                source_record, value, path, tag=tag
+            )
 
         # NOTE these will all live inside the same table row
         elif isinstance(value, HkbRecord):
-            widget = self._create_attribute_widget_record(source_record, value, path, tag=tag)
+            widget = self._create_attribute_widget_record(
+                source_record, value, path, tag=tag
+            )
 
         else:
             widget = self._create_attribute_widget_simple(
@@ -183,6 +189,7 @@ class BehaviorEditor(GraphEditor):
         # Create a context menu for the widget
         with dpg.popup(widget):
             dpg.add_text(path.split("/")[-1])
+            dpg.add_text(f"<{value.type_id}>")
             dpg.add_separator()
 
             # TODO
@@ -207,7 +214,7 @@ class BehaviorEditor(GraphEditor):
 
                 dpg.add_separator()
                 dpg.add_selectable(
-                    label="Bind",
+                    label="Bind Variable",
                     callback=lambda s, a, u: select_variable_to_bind(*u),
                     user_data=(
                         self.beh,
@@ -261,6 +268,7 @@ class BehaviorEditor(GraphEditor):
             ptr_input = dpg.add_input_text(
                 default_value=pointer.get_value(),
                 readonly=True,
+                width=-30,  # TODO is there no better solution?
             )
             dpg.add_button(
                 arrow=True,
@@ -317,7 +325,7 @@ class BehaviorEditor(GraphEditor):
 
         # Organize members in a foldable section
         with dpg.tree_node(
-            label=attribute, filter_key=attribute, tag=tag
+            label=attribute, filter_key=attribute, span_full_width=True, tag=tag
         ) as array_group:
             for idx, subval in enumerate(array):
                 with dpg.group(horizontal=True):
@@ -374,7 +382,7 @@ class BehaviorEditor(GraphEditor):
     ) -> str:
         attribute = path.split("/")[-1]
 
-        with bindable_attribute(filter_key=attribute, tag=tag) as bindable:
+        with bindable_attribute(filter_key=attribute, tag=tag, width=-1) as bindable:
             if isinstance(value, HkbString):
                 dpg.add_input_text(
                     filter_key=attribute,
@@ -408,7 +416,12 @@ class BehaviorEditor(GraphEditor):
                 )
 
             else:
-                self.logger.error("Cannot handle attribute %s (%s)", attribute, value)
+                self.logger.error(
+                    "Cannot handle attribute %s (%s) of object %s",
+                    path,
+                    value,
+                    source_record.id,
+                )
                 return None
 
         return bindable
