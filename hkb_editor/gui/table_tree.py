@@ -39,6 +39,10 @@ def is_row_visible(table: str, row: str | int) -> bool:
     return is_row_index_visible(table, row_level, row_idx)
 
 
+def get_row_node_item(row: str):
+    return dpg.get_item_user_data(row)[2]
+
+
 def on_row_clicked(sender, value, user_data):
     # Make sure it happens quickly and without flickering
     with dpg.mutex():

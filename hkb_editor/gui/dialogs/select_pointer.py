@@ -24,24 +24,24 @@ def select_pointer_dialog(
             for obj in beh.objects.values()
             if ptr.subtype in (None, obj.type_id)
             and (
-                filt in obj.id or filt in obj.type_id or filt in obj.get("name", "")
+                filt in obj.object_id or filt in obj.type_id or filt in obj.get("name", "")
             )
         ]
 
         if len(matches) > 100:
             return
 
-        for obj in sorted(matches, key=lambda o: o.id):
+        for obj in sorted(matches, key=lambda o: o.object_id):
             name = obj.get("name")
             type_name = beh.type_registry.get_name(obj.type_id)
-            with dpg.table_row(parent=table, user_data=obj.id):
+            with dpg.table_row(parent=table, user_data=obj.object_id):
                 dpg.add_selectable(
-                    label=obj.id,
+                    label=obj.object_id,
                     span_columns=True,
-                    default_value=obj.id == selected,
+                    default_value=obj.object_id == selected,
                     callback=on_select,
-                    user_data=obj.id,
-                    tag=f"{tag}_pointer_selectable_{obj.id}",
+                    user_data=obj.object_id,
+                    tag=f"{tag}_pointer_selectable_{obj.object_id}",
                 )
                 dpg.add_text(name)
                 dpg.add_text(type_name)

@@ -23,7 +23,7 @@ class XmlValueHandler:
     def __str__(self) -> str:
         return str(self.get_value())
 
-    def xml_str(self) -> str:
+    def xml(self) -> str:
         ET.indent(self.element)
         return ET.tostring(self.element, encoding="unicode")
 
@@ -252,10 +252,10 @@ class HkbArray(XmlValueHandler):
 class HkbRecord(XmlValueHandler):
     @classmethod
     def new(
-        cls, type_id: str, values: dict[str, Any] = None, id: str = None
+        cls, type_id: str, values: dict[str, Any] = None, object_id: str = None
     ) -> "HkbRecord":
         elem = ET.Element("record")
-        record = HkbRecord(elem, type_id, id)
+        record = HkbRecord(elem, type_id, object_id)
 
         # Make sure the xml subtree contains all required fields
         def create_fields(parent_elem: ET.Element, record_type_id: str):
@@ -281,15 +281,15 @@ class HkbRecord(XmlValueHandler):
     def from_object(self, element: ET.Element) -> "HkbRecord":
         record = element.find("record")
         type_id = element.attrib["typeid"]
-        id = element.attrib["id"]
-        return HkbRecord(record, type_id, id)
+        object_id = element.attrib["id"]
+        return HkbRecord(record, type_id, object_id)
 
-    def __init__(self, element: ET.Element, type_id: str, id: str = None):
+    def __init__(self, element: ET.Element, type_id: str, object_id: str = None):
         assert element.tag == "record"
         assert type_id
 
         super().__init__(element, type_id)
-        self.id = id
+        self.object_id = object_id
 
     def get_value(self) -> dict[str, XmlValueHandler]:
         ret = {}
@@ -333,7 +333,7 @@ class HkbRecord(XmlValueHandler):
         return wrap_element(field_el, type_id)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in {"element", "type_id", "id"}:
+        if name in {"element", "type_id", "object_id"}:
             super().__setattr__(name, value)
             return
 
@@ -354,11 +354,11 @@ class HkbRecord(XmlValueHandler):
         wrapped.set_value(value)
 
     def as_object(self, id: str = None) -> ET.Element:
-        if not id and not self.id:
+        if not id and not self.object_id:
             raise ValueError(f"Object does not have an ID and no ID was provided")
 
         if not id:
-            id = self.id
+            id = self.object_id
 
         obj = ET.Element("object", type_id=self.type_id, id=id)
         obj.append(self.element)
@@ -400,5 +400,5 @@ def wrap_element(element: ET.Element, type_id: str = None) -> XmlValueHandler:
     if element.tag == "field":
         element = next(iter(element))
 
-    handler = get_value_handler(type_id)
-    return handler(element, type_id)
+    Handler = get_value_handler(type_id)
+    return Handler(element, type_id)

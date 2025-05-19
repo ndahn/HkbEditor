@@ -499,9 +499,9 @@ class GraphEditor:
             dpg.set_value(f"{self.tag}_{node_id}_selectable", True)
             return
 
-        for root in self.get_roots():
-            tag = f"{self.tag}_{root.id}_selectable"
-            if root.id != node_id and dpg.does_item_exist(tag):
+        for root_id in self.get_roots():
+            tag = f"{self.tag}_{root_id}_selectable"
+            if root_id != node_id and dpg.does_item_exist(tag):
                 dpg.set_value(tag, False)
 
         self._clear_canvas()
@@ -721,15 +721,15 @@ class GraphEditor:
         for col in dpg.get_item_children(f"{self.tag}_roots_table", slot=0):
             dpg.show_item(col)
 
-        roots = self.get_roots()
-        for root in roots:
-            label = self.get_node_frontpage_short(root.id)
+        root_ids = self.get_roots()
+        for root_id in root_ids:
+            label = self.get_node_frontpage_short(root_id)
             with dpg.table_row(filter_key=label, parent=f"{self.tag}_roots_table"):
                 dpg.add_selectable(
                     label=label,
-                    user_data=root.id,
+                    user_data=root_id,
                     callback=self._on_root_selected,
-                    tag=f"{self.tag}_{root.id}_selectable",
+                    tag=f"{self.tag}_{root_id}_selectable",
                 )
 
     def _clear_attributes(self) -> None:

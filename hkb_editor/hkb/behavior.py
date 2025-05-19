@@ -64,7 +64,7 @@ class HavokBehavior:
             g.add_edge(parent_id, pointer_id)
 
             obj = self.objects[pointer_id]
-            expand(obj.element, obj.id)
+            expand(obj.element, obj.object_id)
 
         return g
 
@@ -78,12 +78,12 @@ class HavokBehavior:
 
     def add_object(self, record: HkbRecord, id: str = None) -> str:
         if id is None:
-            if record.id:
-                id = record.id
+            if record.object_id:
+                id = record.object_id
             else:
                 id = self.new_object_id()
 
-        record.id = id
+        record.object_id = id
         self.tree.getroot().append(record.as_object())
         self.objects[id] = record
 

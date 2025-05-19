@@ -6,7 +6,7 @@ from .dialogs import (
     select_pointer_dialog,
     edit_simple_array_dialog,
 )
-from .table_tree import table_tree_node, table_tree_leaf
+from .table_tree import table_tree_node, table_tree_leaf, get_row_node_item
 from .workflows.bind_attribute import (
     bindable_attribute,
     select_variable_to_bind,
@@ -33,7 +33,6 @@ class BehaviorEditor(GraphEditor):
         super().__init__(tag)
 
         self.beh: HavokBehavior = None
-        self.roots: list[HkbRecord] = None
 
     def _do_load_from_file(self, file_path: str):
         self.beh = HavokBehavior(file_path)
@@ -87,8 +86,7 @@ class BehaviorEditor(GraphEditor):
 
     def get_roots(self) -> list[str]:
         sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
-        self.roots = list(self.beh.find_objects_by_type(sm_type))
-        return self.roots
+        return [obj.object_id for obj in self.beh.find_objects_by_type(sm_type)]
 
     def _on_root_selected(self, sender: str, app_data: str, node_id: str) -> None:
         self.logger.info("Building graph for node %s", node_id)
@@ -158,12 +156,13 @@ class BehaviorEditor(GraphEditor):
     ):
         tag = f"{self.tag}_attribute_{path}"
         attribute = path.split("/")[-1]
-        bindable = False
+        widget = tag
 
         if isinstance(value, HkbRecord):
             with table_tree_node(
                 attribute, table=f"{self.tag}_attributes_table", folded=True, tag=tag
             ):
+                widget = get_row_node_item(tag)
                 for subkey, subval in value.get_value().items():
                     self._create_attribute_widget(
                         source_record, subval, f"{path}/{subkey}"
@@ -173,6 +172,7 @@ class BehaviorEditor(GraphEditor):
             with table_tree_node(
                 attribute, table=f"{self.tag}_attributes_table", folded=True, tag=tag
             ):
+                widget = get_row_node_item(tag)
                 for idx, subval in enumerate(value):
                     self._create_attribute_widget(
                         source_record, subval, f"{path}:{idx}"
@@ -189,7 +189,6 @@ class BehaviorEditor(GraphEditor):
                     )
 
         elif isinstance(value, HkbPointer):
-            bindable = True
             with table_tree_leaf(
                 table=f"{self.tag}_attributes_table",
             ):
@@ -197,14 +196,14 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_text(attribute)
 
         else:
-            bindable = True
             with table_tree_leaf(
                 table=f"{self.tag}_attributes_table",
             ):
                 self._create_attribute_widget_simple(source_record, value, path, tag)
                 dpg.add_text(attribute)
 
-        # self._create_attribute_menu(tag, source_record, value, path, bindable)
+        
+        self._create_attribute_menu(widget, source_record, value, path)
 
     def _create_attribute_menu(
         self,
@@ -212,8 +211,18 @@ class BehaviorEditor(GraphEditor):
         source_record: HkbRecord,
         value: XmlValueHandler,
         path: str,
-        bindable: bool = False,
     ):
+        # Should never happen, but development is funny ~
+        if value is None:
+            self.logger.error(
+                "%s->%s is None, this should never happen", 
+                source_record.object_id, 
+                path
+            )
+            return
+
+        is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
+
         # Create a context menu for the widget
         with dpg.popup(widget):
             dpg.add_text(path.split("/")[-1])
@@ -221,11 +230,12 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             # TODO
-            dpg.add_selectable(label="Cut", callback=None)
+            if is_simple:
+                dpg.add_selectable(label="Cut", callback=None)
             dpg.add_selectable(label="Copy", callback=None)
             dpg.add_selectable(label="Paste", callback=None)
 
-            if bindable:
+            if is_simple:
                 # TODO add to common menu with copy/cut/paste
                 bound_attributes = get_bound_attributes(self.beh, source_record)
                 bound_var_idx = bound_attributes.get(path, -1)
@@ -274,8 +284,8 @@ class BehaviorEditor(GraphEditor):
             pointer.set_value(new_value)
 
             try:
-                self.graph.add_edge(source_record.id, new_value)
-                self.graph.remove_edge(source_record.id, pointer.get_value())
+                self.graph.add_edge(source_record.object_id, new_value)
+                self.graph.remove_edge(source_record.object_id, pointer.get_value())
             except:
                 pass
 
@@ -337,7 +347,7 @@ class BehaviorEditor(GraphEditor):
             self.logger.info(
                 "Added new element of type %s to array %s->%s",
                 subtype,
-                source_record.id,
+                source_record.object_id,
                 path,
             )
 
@@ -421,7 +431,10 @@ class BehaviorEditor(GraphEditor):
                     "Cannot handle attribute %s (%s) of object %s",
                     path,
                     value,
-                    source_record.id,
+                    source_record.object_id,
+                )
+                self.logger.debug(
+                    "The offending record is \n%s" ,source_record.xml()
                 )
                 return None
 
