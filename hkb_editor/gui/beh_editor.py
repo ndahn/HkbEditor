@@ -3,6 +3,19 @@ from xml.etree import ElementTree as ET
 from dearpygui import dearpygui as dpg
 import pyperclip
 
+from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.hkb_types import (
+    XmlValueHandler,
+    HkbRecord,
+    HkbPointer,
+    HkbArray,
+    HkbString,
+    HkbInteger,
+    HkbFloat,
+    HkbBool,
+    get_value_handler,
+)
+
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
     select_pointer_dialog,
@@ -15,18 +28,6 @@ from .workflows.bind_attribute import (
     get_bound_attributes,
     set_bindable_attribute_state,
     unbind_attribute,
-)
-from hkb.behavior import HavokBehavior
-from hkb.hkb_types import (
-    XmlValueHandler,
-    HkbRecord,
-    HkbPointer,
-    HkbArray,
-    HkbString,
-    HkbInteger,
-    HkbFloat,
-    HkbBool,
-    get_value_handler,
 )
 from . import style
 
@@ -63,18 +64,28 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_button(label="Exit", callback=dpg.stop_dearpygui)
                 dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(wnd))
 
-    def create_menu(self):
+    def create_app_menu(self):
         self._create_file_menu()
-
         dpg.add_separator()
+
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
-            dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
-            dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
+            dpg.add_menu_item(label="Undo (ctrl-z)", enabled=False, callback=self.undo)
+            dpg.add_menu_item(label="Redo (ctrl-y)", enabled=False, callback=self.redo)
             dpg.add_separator()
             dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
             dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
             dpg.add_menu_item(
                 label="Animations...", callback=self.open_animation_editor
+            )
+
+        with dpg.menu(
+            label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
+        ):
+            dpg.add_menu_item(
+                label="Load skeleton...", enabled=False, callback=self.load_bone_names
+            )
+            dpg.add_menu_item(
+                label="Create CMSG...", enabled=False, callback=self.create_cmsg
             )
 
         dpg.add_separator()
@@ -91,7 +102,11 @@ class BehaviorEditor(GraphEditor):
 
     def get_roots(self) -> list[str]:
         sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
-        return [obj.object_id for obj in self.beh.find_objects_by_type(sm_type)]
+        roots = [
+            (obj.name.get_value(), obj.object_id)
+            for obj in self.beh.find_objects_by_type(sm_type)
+        ]
+        return [r[1] for r in sorted(roots)]
 
     def _on_root_selected(self, sender: str, app_data: str, node_id: str) -> None:
         self.logger.info("Building graph for node %s", node_id)
@@ -436,13 +451,13 @@ class BehaviorEditor(GraphEditor):
             # Copy & paste
             dpg.add_separator()
             if is_simple:
-                # Not clear how cut should work on records and lists 
+                # Not clear how cut should work on records and lists
                 dpg.add_selectable(
                     label="Cut",
                     callback=self._cut_value,
                     user_data=(widget, value),
                 )
-            
+
             dpg.add_selectable(
                 label="Copy",
                 callback=self._copy_value,
@@ -527,15 +542,15 @@ class BehaviorEditor(GraphEditor):
     ) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
-        
+
         widget, _ = user_data
         val = dpg.get_value(widget)
-        
+
         try:
             pyperclip.copy(str(val))
         except:
             pass
-        
+
         # Pyperclip (or rather copy/paste) can be a bit finnicky, so
         self.logger.info("Copied value:\n%s", val)
 
@@ -547,12 +562,12 @@ class BehaviorEditor(GraphEditor):
 
         _, value = user_data
         val = value.xml().strip().strip("\n")
-        
+
         try:
             pyperclip.copy(val)
         except:
             pass
-        
+
         self.logger.info("Copied value:\n%s", val)
 
     def _paste_value(
@@ -592,6 +607,10 @@ class BehaviorEditor(GraphEditor):
     def open_animation_editor(self):
         edit_simple_array_dialog(self.beh.animations, "Edit Animations")
 
-    def wizard_create_generator(self, parent_id: str):
+    def load_bone_names(self):
+        # TODO not sure how hkbBoneWeightArray works as they have very different weight counts
+        pass
+
+    def create_cmsg(self):
         # TODO a wizard that lets the user create a new generator and attach it to another node
         pass

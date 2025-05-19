@@ -3,10 +3,10 @@ from logging import getLogger
 from contextlib import contextmanager
 from dearpygui import dearpygui as dpg
 
-from hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
-from hkb.behavior import HavokBehavior
-from gui.dialogs import select_simple_array_item_dialog
-from gui import style
+from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
+from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.gui.dialogs import select_simple_array_item_dialog
+from hkb_editor.gui import style
 
 
 _logger = getLogger(__name__)

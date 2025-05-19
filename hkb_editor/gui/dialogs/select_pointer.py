@@ -1,8 +1,8 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
-from hkb.hkb_types import HkbPointer
-from hkb.behavior import HavokBehavior
+from hkb_editor.hkb.hkb_types import HkbPointer
+from hkb_editor.hkb.behavior import HavokBehavior
 
 
 def select_pointer_dialog(

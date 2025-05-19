@@ -191,7 +191,7 @@ class GraphEditor:
     def on_node_selected(self, node: Node) -> None:
         pass
 
-    def create_menu(self):
+    def create_app_menu(self):
         self._create_file_menu()
         dpg.add_separator()
         self._create_dpg_menu()
@@ -351,14 +351,13 @@ class GraphEditor:
 
     def _setup_content(self):
         with dpg.viewport_menu_bar():
-            self.create_menu()
+            self.create_app_menu()
 
         with dpg.group(horizontal=True):
             # Roots
             with dpg.window(
                 label="Root Nodes",
                 autosize=True,
-                no_title_bar=True,
                 no_close=True,
                 no_scrollbar=True,
                 tag=f"{self.tag}_roots_window",
@@ -385,7 +384,6 @@ class GraphEditor:
             with dpg.window(
                 label="Graph",
                 autosize=True,
-                no_title_bar=True,
                 no_close=True,
                 no_scrollbar=True,
                 tag=f"{self.tag}_canvas_window",
@@ -397,7 +395,6 @@ class GraphEditor:
             with dpg.window(
                 label="Attributes",
                 autosize=True,
-                no_title_bar=True,
                 no_close=True,
                 no_scrollbar=True,
                 tag=f"{self.tag}_attributes_window",
@@ -656,6 +653,8 @@ class GraphEditor:
         if node_id in self.visible_nodes:
             return self.visible_nodes[node_id]
 
+        zoom_factor = self.layout.zoom_factor**self.zoom
+
         if level == 0:
             px = self.layout.node0_margin[0]
         else:
@@ -665,7 +664,7 @@ class GraphEditor:
                     for n in self.visible_nodes.values()
                     if n.level == level - 1
                 )
-                + self.layout.gap_x
+                + self.layout.gap_x * zoom_factor
             )
 
         try:
@@ -675,7 +674,7 @@ class GraphEditor:
                     for n in self.visible_nodes.values()
                     if n.level == level
                 )
-                + self.layout.step_y
+                + self.layout.step_y * zoom_factor
             )
         except ValueError:
             if parent_id:
@@ -698,7 +697,6 @@ class GraphEditor:
         w = max_len * 6.5 + margin * 2
         h = text_h * len(lines) + margin * 2
 
-        zoom_factor = self.layout.zoom_factor**self.zoom
         # px *= zoom_factor
         # py *= zoom_factor
         w *= zoom_factor

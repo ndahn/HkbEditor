@@ -3,9 +3,9 @@ import logging
 from dearpygui import dearpygui as dpg
 import pyperclip
 
-from gui import BehaviorEditor
-from gui.graph_editor import get_default_layout_path, get_custom_layout_path
-from gui.style import setup_styles
+from hkb_editor.gui import BehaviorEditor
+from hkb_editor.gui.graph_editor import get_default_layout_path, get_custom_layout_path
+from hkb_editor.gui.style import setup_styles
 
 
 # Logging setup

@@ -1,2 +1,3 @@
 *.xml
+dpg_demo.py
 __pycache__

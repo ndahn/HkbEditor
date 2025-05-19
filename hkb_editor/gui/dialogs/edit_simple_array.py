@@ -2,7 +2,7 @@ from typing import Any, Callable
 from logging import getLogger
 from dearpygui import dearpygui as dpg
 
-from hkb.hkb_types import (
+from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
     HkbArray,
     HkbString,

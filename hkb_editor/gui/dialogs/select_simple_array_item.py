@@ -1,8 +1,7 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
-from hkb.hkb_types import HkbArray, XmlValueHandler
-from hkb.behavior import HavokBehavior
+from hkb_editor.hkb.hkb_types import HkbArray
 
 
 def select_simple_array_item_dialog(
