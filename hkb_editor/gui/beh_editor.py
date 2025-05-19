@@ -265,7 +265,7 @@ class BehaviorEditor(GraphEditor):
                 readonly=True,
                 width=-30,  # TODO is there no better solution?
             )
-            dpg.bind_item_theme(ptr_input, style.bound_attribute_theme)
+            dpg.bind_item_theme(ptr_input, style.pointer_attribute_theme)
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,
@@ -445,7 +445,7 @@ class BehaviorEditor(GraphEditor):
                 bound_var_name = self.beh.variables[bound_var_idx]
                 dpg.add_text(
                     f"bound: {bound_var_name}",
-                    color=style.blue,
+                    color=style.pink,
                 )
 
             # Copy & paste

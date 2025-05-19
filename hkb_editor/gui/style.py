@@ -16,13 +16,18 @@ black = (0, 0, 0, 255)
 
 
 bound_attribute_theme = None
+pointer_attribute_theme = None
 
 
-# TODO Setup properly and use
 def setup_styles():
     global bound_attribute_theme
+    global pointer_attribute_theme
 
     with dpg.theme() as bound_attribute_theme:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Text, pink)
+    
+    with dpg.theme() as pointer_attribute_theme:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Text, blue)
     
