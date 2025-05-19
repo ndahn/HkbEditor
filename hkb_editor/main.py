@@ -4,8 +4,10 @@ from dearpygui import dearpygui as dpg
 
 from gui import BehaviorEditor
 from gui.graph_editor import get_default_layout_path, get_custom_layout_path
+from gui.style import setup_styles
 
 
+# TODO setup logging properly
 _logger = getLogger("Main")
 
 
@@ -25,6 +27,7 @@ def main():
     dpg.configure_app(docking=True, docking_space=True, init_file=layout)
     dpg.create_viewport(title="Behditor")
 
+    setup_styles()
     with dpg.window() as main_window:
         app = BehaviorEditor("graph_editor")
 

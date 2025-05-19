@@ -23,6 +23,10 @@ class XmlValueHandler:
     def __str__(self) -> str:
         return str(self.get_value())
 
+    def xml_str(self) -> str:
+        ET.indent(self.element)
+        return ET.tostring(self.element, encoding="unicode")
+
 
 class HkbString(XmlValueHandler):
     @classmethod
@@ -261,8 +265,8 @@ class HkbRecord(XmlValueHandler):
 
                 if isinstance(field_val, HkbRecord):
                     create_fields(field_val.element, ftype)
-                else:
-                    field_elem.append(field_val.element)
+                
+                field_elem.append(field_val.element)
 
         create_fields(elem, type_id)
 

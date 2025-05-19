@@ -6,6 +6,7 @@ from .dialogs import (
     select_pointer_dialog,
     edit_simple_array_dialog,
 )
+from .table_tree import table_tree_node, table_tree_leaf
 from .workflows.bind_attribute import (
     bindable_attribute,
     select_variable_to_bind,
@@ -145,7 +146,7 @@ class BehaviorEditor(GraphEditor):
     def on_node_selected(self, node: Node) -> None:
         pass
 
-    def _add_attribute(self, attribute: str, val: Any, node: Node) -> None:
+    def _add_attribute_row_contents(self, attribute: str, val: Any, node: Node) -> None:
         obj = self.beh.objects.get(node.id)
         self._create_attribute_widget(obj, val, attribute)
 
@@ -153,39 +154,66 @@ class BehaviorEditor(GraphEditor):
         self,
         source_record: HkbRecord,
         value: XmlValueHandler,
-        path: str = "",
+        path: str,
     ):
         tag = f"{self.tag}_attribute_{path}"
+        attribute = path.split("/")[-1]
         bindable = False
 
-        # NOTE pointers are probably bindable, but let's maybe not :)
-        if isinstance(value, HkbPointer):
-            widget = self._create_attribute_widget_pointer(
-                source_record, value, path, tag=tag
-            )
+        if isinstance(value, HkbRecord):
+            with table_tree_node(
+                attribute, table=f"{self.tag}_attributes_table", folded=True, tag=tag
+            ):
+                for subkey, subval in value.get_value().items():
+                    self._create_attribute_widget(
+                        source_record, subval, f"{path}/{subkey}"
+                    )
 
-        # NOTE these will all live inside the same table row
         elif isinstance(value, HkbArray):
-            widget = self._create_attribute_widget_array(
-                source_record, value, path, tag=tag
-            )
+            with table_tree_node(
+                attribute, table=f"{self.tag}_attributes_table", folded=True, tag=tag
+            ):
+                for idx, subval in enumerate(value):
+                    self._create_attribute_widget(
+                        source_record, subval, f"{path}:{idx}"
+                    )
+                    # self._create_attribute_widget_array_item(
+                    #    source_record, subval, f"{path}:{idx}"
+                    # )
+                with table_tree_leaf(
+                    table=f"{self.tag}_attributes_table",
+                    tag=f"{self.tag}_attribute_{path}_arraybuttons",
+                ):
+                    self._create_attribute_widget_array_buttons(
+                        source_record, value, path
+                    )
 
-        # NOTE these will all live inside the same table row
-        elif isinstance(value, HkbRecord):
-            widget = self._create_attribute_widget_record(
-                source_record, value, path, tag=tag
-            )
+        elif isinstance(value, HkbPointer):
+            bindable = True
+            with table_tree_leaf(
+                table=f"{self.tag}_attributes_table",
+            ):
+                self._create_attribute_widget_pointer(source_record, value, path, tag)
+                dpg.add_text(attribute)
 
         else:
-            widget = self._create_attribute_widget_simple(
-                source_record, value, path, tag=tag
-            )
+            bindable = True
+            with table_tree_leaf(
+                table=f"{self.tag}_attributes_table",
+            ):
+                self._create_attribute_widget_simple(source_record, value, path, tag)
+                dpg.add_text(attribute)
 
-            bindable = bool(widget)
+        # self._create_attribute_menu(tag, source_record, value, path, bindable)
 
-        if not widget:
-            return
-
+    def _create_attribute_menu(
+        self,
+        widget: str,
+        source_record: HkbRecord,
+        value: XmlValueHandler,
+        path: str,
+        bindable: bool = False,
+    ):
         # Create a context menu for the widget
         with dpg.popup(widget):
             dpg.add_text(path.split("/")[-1])
@@ -279,7 +307,7 @@ class BehaviorEditor(GraphEditor):
 
         return group
 
-    def _create_attribute_widget_array(
+    def _create_attribute_widget_array_buttons(
         self,
         source_record: HkbRecord,
         array: HkbArray,
@@ -288,9 +316,9 @@ class BehaviorEditor(GraphEditor):
     ) -> str:
         attribute = path.split("/")[-1]
 
-        def delete_array_elem(sender, app_data, index: int) -> None:
-            # TODO this may screw up variable binding sets!
-            del array[index]
+        def delete_last_item(sender, app_data, user_data) -> None:
+            # TODO this may invalidate variable bindings!
+            del array[len(array) - 1]
 
             # Records potentially contain pointers which will affect the graph
             Handler = get_value_handler(array.element_type_id)
@@ -301,10 +329,17 @@ class BehaviorEditor(GraphEditor):
             self._clear_attributes()
             self._update_attributes(self.selected_node)
 
-        def add_array_elem() -> None:
+        def append_item() -> None:
             subtype = array.element_type_id
             Handler = get_value_handler(subtype)
             new_item = Handler.new(subtype)
+
+            self.logger.info(
+                "Added new element of type %s to array %s->%s",
+                subtype,
+                source_record.id,
+                path,
+            )
 
             idx = len(array)
             array.append(new_item)
@@ -323,55 +358,21 @@ class BehaviorEditor(GraphEditor):
             self._clear_attributes()
             self._update_attributes(self.selected_node)
 
-        # Organize members in a foldable section
-        with dpg.tree_node(
-            label=attribute, filter_key=attribute, span_full_width=True, tag=tag
-        ) as array_group:
-            for idx, subval in enumerate(array):
-                with dpg.group(horizontal=True):
-                    # Allow deleting elements
-                    dpg.add_button(
-                        label="(-)",
-                        small=True,
-                        callback=delete_array_elem,
-                        user_data=(array, idx),
-                    )
-                    # Descend into the array
-                    # Note that array elements can be bound, too, e.g.
-                    # "hands:0/controlData/targetPosition"
-                    self._create_attribute_widget(
-                        source_record,
-                        subval,
-                        f"{path}:{idx}",
-                    )
-
-                dpg.add_separator()
-
-            # Allow adding elements
+        with dpg.group(horizontal=True, tag=tag) as button_group:
+            # Deleting from the end doesn't require index updates,
+            # especially for potential bindings
+            dpg.add_button(
+                label="(-)",
+                small=True,
+                callback=delete_last_item,
+            )
             dpg.add_button(
                 label="(+)",
                 small=True,
-                callback=add_array_elem,
+                callback=append_item,
             )
 
-        return array_group
-
-    def _create_attribute_widget_record(
-        self,
-        source_record: HkbRecord,
-        record: HkbRecord,
-        path: str,
-        tag: str = 0,
-    ) -> str:
-        attribute = path.split("/")[-1]
-
-        with dpg.tree_node(label=attribute, filter_key=attribute, tag=tag):
-            for subkey, subval in record.get_value().items():
-                self._create_attribute_widget(
-                    source_record,
-                    subval,
-                    f"{path}/{subkey}",
-                )
+        return button_group
 
     def _create_attribute_widget_simple(
         self,

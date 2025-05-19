@@ -1,4 +1,5 @@
 from typing import Any
+import sys
 from os import path
 import shutil
 from time import time
@@ -61,11 +62,11 @@ def save_file_dialog(
 
 
 def get_default_layout_path():
-    return path.join(path.dirname(__file__), "default_layout.ini")
+    return path.join(path.dirname(sys.argv[0]), "default_layout.ini")
 
 
 def get_custom_layout_path():
-    return path.join(path.dirname(__file__), "user_layout.ini")
+    return path.join(path.dirname(sys.argv[0]), "user_layout.ini")
 
 
 @dataclass
@@ -504,6 +505,7 @@ class GraphEditor:
                 dpg.set_value(tag, False)
 
         self._clear_canvas()
+        self._clear_attributes()
         self.root = self._create_node(node_id, None, 0)
 
     def _clear_canvas(self):
@@ -746,11 +748,9 @@ class GraphEditor:
                 filter_key=key,
                 parent=f"{self.tag}_attributes_table",
             ):
-                self._add_attribute(key, val, node)
-                # Could show the value type, too
-                dpg.add_text(key)
+                self._add_attribute_row_contents(key, val, node)
 
-    def _add_attribute(self, key: str, val: Any, node: Node) -> None:
+    def _add_attribute_row_contents(self, key: str, val: Any, node: Node) -> None:
         tag = f"{node.id}_{key}"
 
         def update_node_attribute(sender: str, new_val: Any, attribute: str):
@@ -801,6 +801,8 @@ class GraphEditor:
                 tag=tag,
                 callback=lambda: print("TODO not supported yet"),
             )
+
+        dpg.add_text(key)
 
 
 def main():
