@@ -74,6 +74,7 @@ def select_pointer_dialog(
         modal=True,
         on_close=lambda: dpg.delete_item(dialog),
     ) as dialog:
+        # TODO use a clipper!
         # Way too many options, instead fill the table according to user input
         dpg.add_input_text(
             hint="Find Object...",

@@ -1,5 +1,7 @@
 from typing import Any
+from xml.etree import ElementTree as ET
 from dearpygui import dearpygui as dpg
+import pyperclip
 
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
@@ -205,71 +207,6 @@ class BehaviorEditor(GraphEditor):
         
         self._create_attribute_menu(widget, source_record, value, path)
 
-    def _create_attribute_menu(
-        self,
-        widget: str,
-        source_record: HkbRecord,
-        value: XmlValueHandler,
-        path: str,
-    ):
-        # Should never happen, but development is funny ~
-        if value is None:
-            self.logger.error(
-                "%s->%s is None, this should never happen", 
-                source_record.object_id, 
-                path
-            )
-            return
-
-        is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
-
-        # Create a context menu for the widget
-        with dpg.popup(widget):
-            dpg.add_text(path.split("/")[-1])
-            dpg.add_text(f"<{value.type_id}>")
-            dpg.add_separator()
-
-            # TODO
-            if is_simple:
-                dpg.add_selectable(label="Cut", callback=None)
-            dpg.add_selectable(label="Copy", callback=None)
-            dpg.add_selectable(label="Paste", callback=None)
-
-            if is_simple:
-                # TODO add to common menu with copy/cut/paste
-                bound_attributes = get_bound_attributes(self.beh, source_record)
-                bound_var_idx = bound_attributes.get(path, -1)
-                set_bindable_attribute_state(self.beh, widget, bound_var_idx)
-
-                def on_binding_established(sender, selected_idx: int, user_data: Any):
-                    # If a new binding set was created the graph will change
-
-                    # TODO if a binding set was created we need to add it to the graph!
-
-                    self._regenerate_canvas()
-                    self._clear_attributes()
-                    self._update_attributes(self.selected_node)
-
-                dpg.add_separator()
-                dpg.add_selectable(
-                    label="Bind Variable",
-                    callback=lambda s, a, u: select_variable_to_bind(*u),
-                    user_data=(
-                        self.beh,
-                        source_record,
-                        widget,
-                        path,
-                        bound_var_idx,
-                        on_binding_established,
-                    ),
-                )
-
-                dpg.add_selectable(
-                    label="Clear binding",
-                    callback=lambda s, a, u: unbind_attribute(*u),
-                    user_data=(self.beh, source_record, widget, path),
-                )
-
     def _create_attribute_widget_pointer(
         self,
         source_record: HkbRecord,
@@ -454,6 +391,106 @@ class BehaviorEditor(GraphEditor):
     def redo(self) -> None:
         # TODO
         pass
+
+    def _create_attribute_menu(
+        self,
+        widget: str,
+        source_record: HkbRecord,
+        value: XmlValueHandler,
+        path: str,
+    ):
+        # Should never happen, but development is funny ~
+        if value is None:
+            self.logger.error(
+                "%s->%s is None, this should never happen", 
+                source_record.object_id, 
+                path
+            )
+            return
+
+        is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
+
+        # Create a context menu for the widget
+        with dpg.popup(widget):
+            dpg.add_text(path.split("/")[-1])
+            dpg.add_text(f"<{value.type_id}>")
+            dpg.add_separator()
+
+            # TODO
+            if is_simple:
+                dpg.add_selectable(label="Cut", callback=None)
+                dpg.add_selectable(label="Copy", callback=None)
+            
+            dpg.add_selectable(label="Copy as XML", callback=None)
+
+            if is_simple:
+                dpg.add_selectable(label="Paste", callback=None)
+
+            if is_simple:
+                # TODO add to common menu with copy/cut/paste
+                bound_attributes = get_bound_attributes(self.beh, source_record)
+                bound_var_idx = bound_attributes.get(path, -1)
+                set_bindable_attribute_state(self.beh, widget, bound_var_idx)
+
+                def on_binding_established(sender, selected_idx: int, user_data: Any):
+                    # If a new binding set was created the graph will change
+
+                    # TODO if a binding set was created we need to add it to the graph!
+
+                    self._regenerate_canvas()
+                    self._clear_attributes()
+                    self._update_attributes(self.selected_node)
+
+                dpg.add_separator()
+                dpg.add_selectable(
+                    label="Bind Variable",
+                    callback=lambda s, a, u: select_variable_to_bind(*u),
+                    user_data=(
+                        self.beh,
+                        source_record,
+                        widget,
+                        path,
+                        bound_var_idx,
+                        on_binding_established,
+                    ),
+                )
+
+                dpg.add_selectable(
+                    label="Clear binding",
+                    callback=lambda s, a, u: unbind_attribute(*u),
+                    user_data=(self.beh, source_record, widget, path),
+                )
+
+    def _cut_value(self, sender, app_data, user_data: tuple[str, XmlValueHandler]) -> None:
+        widget, _ = user_data
+        val = dpg.get_value(widget)
+        pyperclip.copy(str(val))
+        dpg.set_value(type(val)())
+
+    def _copy_value(self, sender, app_data, user_data: tuple[str, XmlValueHandler]) -> None:
+        widget, _ = user_data
+        pyperclip.copy(str(dpg.get_value(widget)))
+
+    def _copy_value_xml(self, sender, app_data, user_data: tuple[str, XmlValueHandler]) -> None:
+        _, value = user_data
+        pyperclip.copy(value.xml())
+
+    def _paste_value(self, sender, app_data, user_data: tuple[str, XmlValueHandler]) -> None:
+        widget, value = user_data
+        data = pyperclip.paste()
+        
+        try:
+            xml = ET.fromstring(data)
+            new_value = type(value)(xml, value.type_id)
+        except:
+            new_value = data
+        
+        try:
+            value.set_value(new_value)
+            dpg.set_value(widget, value.get_value())
+        except Exception as e:
+            self.logger.error("Paste value to %s failed: %s", widget, e)
+            return
 
     # Fleshing out common use cases here
     def open_variable_editor(self):
