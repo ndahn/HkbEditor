@@ -6,6 +6,7 @@ from dearpygui import dearpygui as dpg
 from hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
 from hkb.behavior import HavokBehavior
 from gui.dialogs import select_simple_array_item_dialog
+from gui import style
 
 
 _logger = getLogger(__name__)
@@ -28,6 +29,7 @@ def bindable_attribute(
                 tag=f"{tag}_bound",
                 show=False,
             )
+            dpg.bind_item_theme(dpg.last_item(), style.bound_attribute_theme)
 
             with dpg.group(tag=f"{tag}_unbound") as g:
                 # We yield the tag this binder can be referred to by, but elements will still be

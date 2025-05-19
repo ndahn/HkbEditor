@@ -28,6 +28,7 @@ from hkb.hkb_types import (
     HkbBool,
     get_value_handler,
 )
+from . import style
 
 
 class BehaviorEditor(GraphEditor):
@@ -100,23 +101,18 @@ class BehaviorEditor(GraphEditor):
         # TODO return v instead of v.get_value()
         return {k: v for k, v in obj.get_value().items()}
 
-    def set_node_attribute(self, node: Node, key: str, val: Any) -> None:
-        obj: HkbRecord = self.beh.objects[node.id]
-        # TODO implement setitem
-        setattr(obj, key, val)
-
     def get_node_frontpage(self, node_id: str) -> list[str]:
         obj = self.beh.objects[node_id]
         try:
             return [
-                obj.name.get_value(),
-                node_id,
-                self.beh.type_registry.get_name(obj.type_id),
+                (obj.name.get_value(), style.yellow),
+                (node_id, style.blue),
+                (self.beh.type_registry.get_name(obj.type_id), style.white),
             ]
         except AttributeError:
             return [
-                node_id,
-                self.beh.type_registry.get_name(obj.type_id),
+                (node_id, style.blue),
+                (self.beh.type_registry.get_name(obj.type_id), style.white),
             ]
 
     def get_node_frontpage_short(self, node_id: str) -> str:
@@ -244,6 +240,7 @@ class BehaviorEditor(GraphEditor):
                 readonly=True,
                 width=-30,  # TODO is there no better solution?
             )
+            dpg.bind_item_theme(ptr_input, style.bound_attribute_theme)
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,
@@ -408,11 +405,23 @@ class BehaviorEditor(GraphEditor):
 
         is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
 
+        if is_simple:
+            # TODO add to common menu with copy/cut/paste
+            bound_attributes = get_bound_attributes(self.beh, source_record)
+            bound_var_idx = bound_attributes.get(path, -1)
+
         # Create a context menu for the widget
         with dpg.popup(widget):
             dpg.add_text(path.split("/")[-1])
             type_name = self.beh.type_registry.get_name(value.type_id)
             dpg.add_text(f"<{type_name}>")
+
+            if is_simple and bound_var_idx >= 0:
+                bound_var_name = self.beh.variables[bound_var_idx]
+                dpg.add_text(
+                    f"bound: {bound_var_name}",
+                    color=style.blue,
+                )
 
             # Copy & paste
             dpg.add_separator()
@@ -441,9 +450,6 @@ class BehaviorEditor(GraphEditor):
             )
 
             if is_simple:
-                # TODO add to common menu with copy/cut/paste
-                bound_attributes = get_bound_attributes(self.beh, source_record)
-                bound_var_idx = bound_attributes.get(path, -1)
                 set_bindable_attribute_state(self.beh, widget, bound_var_idx)
 
                 def _bind_variable(sender, app_data, user_data):

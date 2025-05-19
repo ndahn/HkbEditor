@@ -10,6 +10,8 @@ import networkx as nx
 import tkinter as tk
 from tkinter import filedialog
 
+from . import style
+
 
 def open_file_dialog(
     *,
@@ -164,7 +166,9 @@ class GraphEditor:
     def set_node_attribute(self, node: Node, key: str, val: Any) -> None:
         pass
 
-    def get_node_frontpage(self, node_id: str) -> list[str]:
+    def get_node_frontpage(
+        self, node_id: str
+    ) -> list[str] | list[tuple[str, tuple[int, int, int, int]]]:
         return [f"<{node_id}>"]
 
     def get_node_frontpage_short(self, node_id: str) -> str:
@@ -386,9 +390,13 @@ class GraphEditor:
                 )
                 dpg.add_separator()
 
-                # Child window is needed to fix table sizing            
+                # Child window is needed to fix table sizing
                 with dpg.child_window(border=False):
-                    dpg.add_text("", tag=f"{self.tag}_attributes_title")
+                    dpg.add_text(
+                        "", 
+                        tag=f"{self.tag}_attributes_title", 
+                        color=style.blue
+                    )
                     with dpg.table(
                         delay_search=True,
                         no_host_extendX=True,
@@ -566,7 +574,7 @@ class GraphEditor:
         self.selected_node = None
 
     def set_highlight(self, node: Node, highlighted: bool) -> None:
-        color = (255, 0, 0, 255) if highlighted else (255, 255, 255, 255)
+        color = style.blue if highlighted else style.white
         dpg.configure_item(f"{node.id}_box", color=color)
 
     def _open_node_menu(self, node: Node) -> None:
@@ -637,6 +645,12 @@ class GraphEditor:
 
         margin = self.layout.text_margin
         lines = self.get_node_frontpage(node_id)
+        
+        if isinstance(lines[0], tuple):
+            lines, colors = zip(*lines)
+        else:
+            colors = [style.white] * len(lines)
+        
         max_len = max(len(s) for s in lines)
         lines = [s.center(max_len) for s in lines]
 
@@ -656,8 +670,8 @@ class GraphEditor:
             dpg.draw_rectangle(
                 (px, py),
                 (px + w, py + h),
-                fill=(62, 62, 62, 255),
-                color=(255, 255, 255, 255),
+                fill=style.dark_grey,
+                color=style.white,
                 thickness=1,
                 tag=f"{node_id}_box",
             )
@@ -669,6 +683,7 @@ class GraphEditor:
                     (px + margin, py + margin + text_offset_y * i),
                     text,
                     size=12 * zoom_factor,
+                    color=colors[i],
                 )
 
         node = Node(node_id, parent_id, level, (px, py), (w, h))
