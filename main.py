@@ -25,13 +25,13 @@ def main():
     layout = get_custom_layout_path()
     if not os.path.isfile(layout):
         layout = get_default_layout_path()
-    
+
     if not os.path.isfile(layout):
         layout = None
         _logger.error("Layout not found")
     else:
         _logger.info("Loading layout %s", layout)
-        
+
     dpg.configure_app(docking=True, docking_space=True, init_file=layout)
     dpg.create_viewport(title="Behditor")
 
