@@ -142,6 +142,8 @@ class GraphEditor:
         self.root: Node = None
         self.selected_node: Node = None
         self.origin: tuple[float, float] = (0.0, 0.0)
+        self.mouse_down_pos: tuple[float, float] = (0.0, 0.0)
+        self.mouse_down = False
         self.dragging = False
         self.last_drag: tuple[float, float] = (0.0, 0.0)
         self.zoom = 0
@@ -177,7 +179,13 @@ class GraphEditor:
     def get_node_menu_items(self, node: Node) -> list[str]:
         return []
 
+    def get_canvas_menu_items(self) -> list[str]:
+        return []
+
     def on_node_menu_item_selected(node: Node, selected_item: str) -> None:
+        pass
+
+    def on_canvas_menu_item_selected(self, selected_item: str) -> None:
         pass
 
     def on_node_selected(self, node: Node) -> None:
@@ -217,7 +225,7 @@ class GraphEditor:
                 label="Save...",
                 callback=self.save_file,
                 enabled=False,
-                tag="menu_file_save",
+                tag=f"{self.tag}_menu_file_save",
             )
             dpg.add_separator()
 
@@ -410,7 +418,6 @@ class GraphEditor:
                         dpg.add_table_column(label="Key", width_fixed=True)
 
             with dpg.handler_registry():
-                dpg.add_mouse_click_handler(callback=self._on_mouse_click)
                 dpg.add_mouse_down_handler(
                     dpg.mvMouseButton_Left, callback=self._on_mouse_down
                 )
@@ -424,14 +431,51 @@ class GraphEditor:
             self._on_resize()
 
     # Callbacks
-    def _on_mouse_click(self, sender, button: int) -> None:
-        # TODO move into mouse_up
-        if self.dragging:
-            return
+    def _on_mouse_down(self) -> None:
+        if dpg.is_item_hovered(f"{self.tag}_canvas"):
+            self.mouse_down_pos = dpg.get_drawing_mouse_pos()
+            self.mouse_down = True
 
+    def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
+        if not self.mouse_down:
+            return
+        
+        _, delta_x, delta_y = mouse_delta
+
+        if not self.dragging:
+            dist = ((delta_x - self.mouse_down_pos[0])**2 + (delta_y - self.mouse_down_pos[1])**2)**0.5
+
+            if dist > 5:
+                self.dragging = True
+
+        if self.dragging:
+            self.last_drag = (delta_x, delta_y)
+            self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
+
+    def _on_mouse_release(self, sender, mouse_button) -> None:
+        if self.dragging:
+            self.set_origin(
+                self.origin[0] + self.last_drag[0], self.origin[1] + self.last_drag[1]
+            )
+        elif self.mouse_down:
+            self._on_mouse_click(sender, mouse_button)
+
+        self.last_drag = (0.0, 0.0)
+        self.dragging = False
+        self.mouse_down = False
+        self.mouse_down_pos = (0.0, 0.0)
+
+    def _on_mouse_wheel(self, sender, wheel_delta: int):
         if not dpg.is_item_hovered(f"{self.tag}_canvas"):
             return
 
+        zoom_point = dpg.get_drawing_mouse_pos()
+        self.origin = (self.origin[0] + zoom_point[0], self.origin[1] + zoom_point[1])
+        self.zoom = min(max(self.zoom - wheel_delta, self.zoom_min), self.zoom_max)
+
+        self._regenerate_canvas()
+    
+    def _on_mouse_click(self, sender, button: int) -> None:
         mx, my = dpg.get_drawing_mouse_pos()
         ox, oy = self.origin
 
@@ -452,36 +496,6 @@ class GraphEditor:
                 self._open_canvas_menu()
             elif button == dpg.mvMouseButton_Middle:
                 self.set_origin(0.0, 0.0)
-
-    def _on_mouse_down(self) -> None:
-        if dpg.is_item_hovered(f"{self.tag}_canvas"):
-            self.dragging = True
-
-    def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
-        if not self.dragging:
-            return
-
-        _, delta_x, delta_y = mouse_delta
-        self.last_drag = (delta_x, delta_y)
-        self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
-
-    def _on_mouse_release(self) -> None:
-        if self.dragging:
-            self.set_origin(
-                self.origin[0] + self.last_drag[0], self.origin[1] + self.last_drag[1]
-            )
-            self.last_drag = (0.0, 0.0)
-            self.dragging = False
-
-    def _on_mouse_wheel(self, sender, wheel_delta: int):
-        if not dpg.is_item_hovered(f"{self.tag}_canvas"):
-            return
-
-        zoom_point = dpg.get_drawing_mouse_pos()
-        self.origin = (self.origin[0] + zoom_point[0], self.origin[1] + zoom_point[1])
-        self.zoom = min(max(self.zoom - wheel_delta, self.zoom_min), self.zoom_max)
-
-        self._regenerate_canvas()
 
     def _on_resize(self):
         dpg.set_item_height(f"{self.tag}_canvas", dpg.get_viewport_height() - 50)
@@ -579,7 +593,8 @@ class GraphEditor:
 
     def _open_node_menu(self, node: Node) -> None:
         def on_item_select(sender, app_data, selected_item: str):
-            dpg.delete_item(f"{node.id}_menu")
+            dpg.set_value(sender, False)
+            dpg.delete_item(f"{self.tag}_{node.id}_menu")
             self.on_node_menu_item_selected(node, selected_item)
 
         with dpg.window(
@@ -592,6 +607,19 @@ class GraphEditor:
             dpg.add_separator()
 
             for item in self.get_node_menu_items(node):
+                dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
+
+    def _open_canvas_menu(self) -> None:
+        def on_item_select(sender, app_data, selected_item: str):
+            dpg.set_value(sender, False)
+            self.on_canvas_menu_item_selected(selected_item)
+
+        with dpg.window(
+            popup=True,
+            min_size=(100, 20),
+            tag=f"{self.tag}_canvas_menu",
+        ):
+            for item in self.get_canvas_menu_items():
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
 
     def _unfold_node(self, node: Node) -> None:

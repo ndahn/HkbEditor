@@ -83,6 +83,7 @@ class BehaviorEditor(GraphEditor):
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
         func(f"{self.tag}_menu_edit")
+        func(f"{self.tag}_menu_file_save")
 
     def get_supported_file_extensions(self):
         return [("Behavior XML", ".xml")]
@@ -138,6 +139,14 @@ class BehaviorEditor(GraphEditor):
     def on_node_menu_item_selected(node: Node, selected_item: str) -> None:
         # TODO implement useful node actions
         pass
+
+    def get_canvas_menu_items(self):
+        # TODO
+        return super().get_canvas_menu_items()
+
+    def on_canvas_menu_item_selected(self, selected_item):
+        # TODO
+        return super().on_canvas_menu_item_selected(selected_item)
 
     def on_node_selected(self, node: Node) -> None:
         pass
