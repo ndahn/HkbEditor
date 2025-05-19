@@ -84,6 +84,7 @@ class BehaviorEditor(GraphEditor):
         func = dpg.enable_item if enabled else dpg.disable_item
         func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_file_save")
+        func(f"{self.tag}_menu_file_save_as")
 
     def get_supported_file_extensions(self):
         return [("Behavior XML", ".xml")]

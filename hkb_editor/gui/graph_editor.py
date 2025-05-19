@@ -220,12 +220,20 @@ class GraphEditor:
 
     def _create_file_menu(self):
         with dpg.menu(label="File"):
-            dpg.add_menu_item(label="Open...", callback=self.open_file)
+            dpg.add_menu_item(label="Open...", callback=self.file_open)
+            dpg.add_separator()
+
             dpg.add_menu_item(
-                label="Save...",
-                callback=self.save_file,
+                label="Save",
+                callback=self.file_save,
                 enabled=False,
                 tag=f"{self.tag}_menu_file_save",
+            )
+            dpg.add_menu_item(
+                label="Save as...",
+                callback=self.file_save_as,
+                enabled=False,
+                tag=f"{self.tag}_menu_file_save_as",
             )
             dpg.add_separator()
 
@@ -271,7 +279,7 @@ class GraphEditor:
                 callback=lambda: dpg.show_tool(dpg.mvTool_Stack),
             )
 
-    def open_file(self):
+    def file_open(self):
         ret = open_file_dialog(
             default_dir=path.dirname(self.loaded_file or ""),
             filetypes=self.get_supported_file_extensions(),
@@ -319,7 +327,11 @@ class GraphEditor:
 
         self._on_root_selected("", "", "A")
 
-    def save_file(self):
+    def file_save(self):
+        self._do_write_to_file(self.loaded_file)
+        self.last_save = time()
+
+    def file_save_as(self):
         ret = save_file_dialog(
             default_dir=path.dirname(self.loaded_file or ""),
             default_file=path.basename(self.loaded_file or ""),
