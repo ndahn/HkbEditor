@@ -13,7 +13,7 @@ from hkb.hkb_types import (
 )
 
 
-_logger = getLogger("EditSimpleArray")
+_logger = getLogger(__name__)
 
 
 def edit_simple_array_dialog(

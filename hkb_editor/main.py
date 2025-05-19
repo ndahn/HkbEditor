@@ -1,17 +1,25 @@
 import os
-from logging import getLogger
+import logging
 from dearpygui import dearpygui as dpg
+import pyperclip
 
 from gui import BehaviorEditor
 from gui.graph_editor import get_default_layout_path, get_custom_layout_path
 from gui.style import setup_styles
 
 
-# TODO setup logging properly
-_logger = getLogger("Main")
+# Logging setup
+logging.basicConfig(level=logging.INFO)
+_logger = logging.getLogger(__name__)
 
 
 def main():
+    # Check for clipboard support, will print instructions if it fails
+    try:
+        pyperclip.paste()
+    except pyperclip.PyperclipException as e:
+        _logger.error("Pyperclip failed: %s", e)
+
     dpg.create_context()
 
     layout = get_custom_layout_path()

@@ -20,12 +20,12 @@ class XmlValueHandler:
     def set_value(self, value: Any) -> None:
         raise NotImplementedError()
 
-    def __str__(self) -> str:
-        return str(self.get_value())
-
     def xml(self) -> str:
         ET.indent(self.element)
         return ET.tostring(self.element, encoding="unicode")
+
+    def __str__(self) -> str:
+        return str(self.get_value())
 
 
 class HkbString(XmlValueHandler):

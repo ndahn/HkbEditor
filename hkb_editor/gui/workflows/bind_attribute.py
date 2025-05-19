@@ -8,7 +8,7 @@ from hkb.behavior import HavokBehavior
 from gui.dialogs import select_simple_array_item_dialog
 
 
-_logger = getLogger("BindAttribute")
+_logger = getLogger(__name__)
 
 
 @contextmanager

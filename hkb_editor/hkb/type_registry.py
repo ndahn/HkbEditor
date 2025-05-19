@@ -3,7 +3,7 @@ from logging import getLogger
 import xml.etree.ElementTree as ET
 
 
-_logger = getLogger("TypeRegistry")
+_logger = getLogger(__name__)
 
 
 class TypeRegistry:
