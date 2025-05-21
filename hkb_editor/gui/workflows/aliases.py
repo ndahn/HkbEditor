@@ -45,7 +45,7 @@ class AliasManager:
         self.aliases: dict[str, AliasMap] = {}
 
     def get_attribute_alias(self, record: HkbRecord, path: str) -> str:
-        for am in self.aliases.keys:
+        for am in self.aliases.keys():
             alias = am.match(record, path)
             if alias is not None:
                 return alias

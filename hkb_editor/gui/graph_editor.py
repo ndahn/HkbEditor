@@ -7,60 +7,9 @@ from logging import getLogger
 from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
 import networkx as nx
-import tkinter as tk
-from tkinter import filedialog
 
 from . import style
-
-
-def open_file_dialog(
-    *,
-    title: str = None,
-    default_dir: str = None,
-    default_file: str = None,
-    filetypes: list[tuple[str, str]] = None,
-) -> str:
-    if not title:
-        title = "Select file to load"
-
-    # dpg file dialog sucks, so we use the tk one instead
-    root = tk.Tk()
-    root.withdraw()
-
-    ret = filedialog.askopenfilename(
-        title=title,
-        filetypes=filetypes,
-        initialdir=default_dir,
-        initialfile=default_file,
-    )
-
-    root.destroy()
-    return ret
-
-
-def save_file_dialog(
-    *,
-    title: str = None,
-    default_dir: str = None,
-    default_file: str = None,
-    filetypes: list[tuple[str, str]] = None,
-) -> str:
-    if not title:
-        title = "Select file to load"
-
-    # dpg file dialog sucks, so we use the tk one instead
-    root = tk.Tk()
-    root.withdraw()
-
-    ret = filedialog.asksaveasfilename(
-        title=title,
-        filetypes=filetypes,
-        initialdir=default_dir,
-        initialfile=default_file,
-    )
-
-    root.destroy()
-    return ret
+from .workflows.file_dialog import open_file_dialog, save_file_dialog
 
 
 def get_default_layout_path():

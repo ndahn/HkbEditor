@@ -1,7 +1,5 @@
 from typing import Any
-import re
 from xml.etree import ElementTree as ET
-from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
 import pyperclip
 
@@ -31,6 +29,7 @@ from .workflows.bind_attribute import (
     set_bindable_attribute_state,
     unbind_attribute,
 )
+from .workflows.file_dialog import open_file_dialog
 from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager
 from . import style
@@ -633,8 +632,13 @@ class BehaviorEditor(GraphEditor):
         pass
 
     def load_bone_names(self) -> None:
-        # TODO open file dialog
-        self.alias_manager.load_alias_file(file_path)
+        file_path = open_file_dialog(
+            title="Select Skeleton",
+            filetypes=[("Skeleton files", ".xml")]
+        )
+
+        if file_path:
+            self.alias_manager.load_alias_file(file_path)
 
     def create_cmsg(self):
         # TODO a wizard that lets the user create a new generator and attach it to another node
