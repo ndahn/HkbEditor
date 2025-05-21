@@ -11,6 +11,7 @@ from hkb_editor.hkb.hkb_types import (
     HkbBool,
     get_value_handler
 )
+from hkb_editor.gui.workflows.undo import undo_manager
 
 
 _logger = getLogger(__name__)
@@ -26,14 +27,16 @@ def edit_simple_array_dialog(
     #on_insert: Callable[[HkbArray, int, Any], bool] = None,
     #on_move: Callable[[HkbArray, int, int], bool] = None,
 ) -> None:
-    def update_entry(sender, app_data, index: int):
+    def update_entry(sender, new_value: Any, index: int):
+        old_value = array[index].get_value()
         if on_change:
-            veto = on_change(array, index, app_data)
+            veto = on_change(array, index, new_value)
             if veto:
                 dpg.set_value(sender, array[index].get_value())
                 return
 
-        array[index].set_value(app_data)
+        undo_manager.on_update_value(array[index], old_value, new_value)
+        array[index].set_value(new_value)
 
     def get_new_entry_value(sender, app_data, callback: Callable):
         Handler = get_value_handler(array.element_type_id)
@@ -68,7 +71,10 @@ def edit_simple_array_dialog(
 
         Handler = get_value_handler(array.element_type_id)
         val = Handler.new(array.element_type_id, app_data)
+        
+        undo_manager.on_update_array_item(array, -1, None, val)
         array.append(val)
+        
         fill_table()
         dpg.split_frame()
         dpg.set_y_scroll(table, dpg.get_y_scroll_max(table))
@@ -79,6 +85,7 @@ def edit_simple_array_dialog(
             if veto:
                 return
 
+        undo_manager.on_update_array_item(array, -1, array[index], None)
         del array[index]
         fill_table()
 

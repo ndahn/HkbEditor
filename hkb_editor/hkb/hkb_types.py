@@ -5,6 +5,9 @@ import xml.etree.ElementTree as ET
 from .type_registry import type_registry
 
 
+_undefined = object()
+
+
 class XmlValueHandler:
     @classmethod
     def new(cls, type_id: str, value: Any = None) -> "XmlValueHandler":
@@ -195,6 +198,8 @@ class HkbArray(XmlValueHandler):
             yield self[i]
 
     def __getitem__(self, index: int) -> XmlValueHandler:
+        if index < 0:
+            index = len(self) - index
         item = next(e for i, e in enumerate(self.element) if i == index)
         return wrap_element(item, self.element_type_id)
 
@@ -265,7 +270,7 @@ class HkbRecord(XmlValueHandler):
 
                 if isinstance(field_val, HkbRecord):
                     create_fields(field_val.element, ftype)
-                
+
                 field_elem.append(field_val.element)
 
         create_fields(elem, type_id)
@@ -315,6 +320,29 @@ class HkbRecord(XmlValueHandler):
                 return ftype
 
         return None
+
+    def get_path_value(
+        self, path: str, default: Any = _undefined, resolve: bool = True
+    ) -> XmlValueHandler:
+        keys = path.split("/")
+        obj = self
+
+        try:
+            for k in keys:
+                if ":" in k:
+                    k, idx = k.split(":")
+                    obj = getattr(obj, k)[int(idx)]
+                else:
+                    obj = getattr(obj, k)
+        except (AttributeError, KeyError) as e:
+            if default != _undefined:
+                return default
+            raise e
+
+        if resolve:
+            return obj.get_value()
+
+        return obj
 
     def get(
         self, name: str, default: Any = None, resolve: bool = True

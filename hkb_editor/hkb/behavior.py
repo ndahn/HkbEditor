@@ -1,4 +1,4 @@
-from typing import Generator
+from typing import Generator, Any
 from collections import deque
 import xml.etree.ElementTree as ET
 import networkx as nx
@@ -15,6 +15,7 @@ class HavokBehavior:
         self.type_registry = type_registry
         type_registry.load_types(root)
 
+        # TODO hide behind a property, changing this dict should also affect the xml
         self.objects = {
             obj.attrib["id"]: HkbRecord.from_object(obj)
             for obj in root.findall(".//object")
@@ -68,26 +69,32 @@ class HavokBehavior:
 
         return g
 
-    def new_object_id(self) -> str:
+    def new_id(self, base: str = "object") -> str:
         last_key = max(
-            int(k[len("object") :]) 
-            for k in self.objects.keys() if k.startswith("object")
+            int(k[len(base) :])
+            for k in self.objects.keys()
+            if k.startswith(base)
         )
 
-        return f"object{last_key + 1}"
+        return f"base{last_key + 1}"
 
     def add_object(self, record: HkbRecord, id: str = None) -> str:
         if id is None:
             if record.object_id:
                 id = record.object_id
             else:
-                id = self.new_object_id()
+                id = self.new_id()
 
         record.object_id = id
         self.tree.getroot().append(record.as_object())
         self.objects[id] = record
 
         return id
+
+    def remove_object(self, id: str) -> HkbRecord:
+        obj = self.objects.pop(id)
+        self.tree.getroot().remove(obj.element)
+        return obj
 
     def create_event(self, event_name: str) -> int:
         self.events.append(HkbString.new(self.events.element_type_id, event_name))

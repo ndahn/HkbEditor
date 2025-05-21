@@ -1,4 +1,5 @@
 from typing import Any
+from collections import deque
 from xml.etree import ElementTree as ET
 from dearpygui import dearpygui as dpg
 import pyperclip
@@ -17,7 +18,7 @@ from hkb_editor.hkb.hkb_types import (
 )
 
 from .graph_editor import GraphEditor, Node
-from .dialogs import (
+from .widgets import (
     select_pointer_dialog,
     edit_simple_array_dialog,
 )
@@ -29,6 +30,7 @@ from .workflows.bind_attribute import (
     set_bindable_attribute_state,
     unbind_attribute,
 )
+from .workflows.undo import undo_manager
 from . import style
 
 
@@ -192,6 +194,7 @@ class BehaviorEditor(GraphEditor):
                     )
 
         elif isinstance(value, HkbArray):
+            # TODO special handlers for e.g. hkVector4, HkQuaternion, etc.
             with table_tree_node(
                 attribute, table=f"{self.tag}_attributes_table", folded=True, tag=tag
             ):
@@ -237,9 +240,10 @@ class BehaviorEditor(GraphEditor):
         attribute = path.split("/")[-1]
 
         def on_pointer_select(sender, new_value: str, ptr_widget: str):
-            # Update the graph
+            undo_manager.on_update_value(pointer, pointer.get_value(), new_value)
             pointer.set_value(new_value)
 
+            # Update the graph
             try:
                 self.graph.add_edge(source_record.object_id, new_value)
                 self.graph.remove_edge(source_record.object_id, pointer.get_value())
@@ -286,7 +290,8 @@ class BehaviorEditor(GraphEditor):
 
         def delete_last_item(sender, app_data, user_data) -> None:
             # TODO this may invalidate variable bindings!
-            del array[len(array) - 1]
+            undo_manager.on_update_array_item(array, -1, array[-1], None)
+            del array[-1]
 
             # Records potentially contain pointers which will affect the graph
             Handler = get_value_handler(array.element_type_id)
@@ -310,6 +315,7 @@ class BehaviorEditor(GraphEditor):
             )
 
             idx = len(array)
+            undo_manager.on_update_array_item(array, idx, None, new_item)
             array.append(new_item)
 
             self._create_attribute_widget(
@@ -399,18 +405,18 @@ class BehaviorEditor(GraphEditor):
     def on_attribute_update(
         self, sender, new_value: Any, handler: XmlValueHandler
     ) -> None:
-        # TODO create and manage undo history
         # The handler may throw if the new value is not appropriate
+        undo_manager.on_update_value(handler, handler.get_value(), new_value)
         handler.set_value(new_value)
         dpg.set_value(sender, new_value)
 
     def undo(self) -> None:
-        # TODO undo change, show notification
-        pass
+        # TODO show notification
+        undo_manager.undo()
 
     def redo(self) -> None:
-        # TODO
-        pass
+        # TODO show notification
+        undo_manager.redo()
 
     def _create_attribute_menu(
         self,
@@ -487,11 +493,9 @@ class BehaviorEditor(GraphEditor):
                     dpg.set_value(sender, False)
                     unbind_attribute(*user_data)
 
-                def _on_binding_established(sender, selected_idx: int, user_data: Any):
+                def _on_binding_established(sender, data: tuple[int, str], user_data: Any):
                     # If a new binding set was created the graph will change
-
-                    # TODO if a binding set was created we need to add it to the graph!
-
+                    #binding_var, binding_set_id = data
                     self._regenerate_canvas()
                     self._clear_attributes()
                     self._update_attributes(self.selected_node)

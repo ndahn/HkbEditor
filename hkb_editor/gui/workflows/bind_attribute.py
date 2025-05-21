@@ -5,8 +5,9 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
-from hkb_editor.gui.dialogs import select_simple_array_item_dialog
+from hkb_editor.gui.widgets import select_simple_array_item_dialog
 from hkb_editor.gui import style
+from hkb_editor.gui.workflows.undo import undo_manager
 
 
 _logger = getLogger(__name__)
@@ -58,20 +59,21 @@ def select_variable_to_bind(
     bindable_attribute: str,
     path: str,
     bound_var_idx: int = -1,
-    on_bind: Callable[[str, int], None] = None,
+    on_bind: Callable[[str, tuple[int, str], Any], None] = None,
     user_data: Any = None,
 ):
     def on_variable_selected(sender, selected_idx: int, user_data: Any):
-        bind_attribute(
-            behavior,
-            record,
-            bindable_attribute,
-            path,
-            selected_idx,
-        )
+        with undo_manager.combine():
+            binding_id = bind_attribute(
+                behavior,
+                record,
+                bindable_attribute,
+                path,
+                selected_idx,
+            )
 
-        if on_bind:
-            on_bind(sender, selected_idx, user_data)
+            if on_bind:
+                on_bind(sender, [selected_idx, binding_id], user_data)
 
     select_simple_array_item_dialog(
         behavior.variables, on_variable_selected, bound_var_idx, user_data=user_data
@@ -111,47 +113,62 @@ def get_bound_attributes(behavior: HavokBehavior, record: HkbRecord) -> dict[str
     return ret
 
 
+def create_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> str:
+    ptr_type_id = record.get_field_type("variableBindingSet")
+    bindings_type_id = behavior.type_registry.get_subtype(ptr_type_id)
+    binding_id = behavior.new_id()
+    binding_set = HkbRecord.new(bindings_type_id, None, binding_id)
+
+    # Add the new binding set
+    undo_manager.on_add_behavior_object(behavior, binding_set)
+    behavior.add_object(binding_set)
+    
+    # Assign pointer to source record
+    vbs = record.variableBindingSet
+    undo_manager.on_update_value(vbs, vbs.get_value(), binding_id)
+    vbs.set_value(binding_id)
+
+    return binding_id
+
+
 def bind_attribute(
     behavior: HavokBehavior,
     record: HkbRecord,
     bindable_attribute: str,
     path: str,
     variable_idx: int,
-) -> None:
+) -> str:
     binding_set = get_variable_binding_set(behavior, record)
 
     if binding_set is None:
-        ptr_type_id = record.get_field_type("variableBindingSet")
-        bindings_type_id = behavior.type_registry.get_subtype(ptr_type_id)
-        binding_id = behavior.new_object_id()
-        binding_set = HkbRecord.new(bindings_type_id, None, binding_id)
-
-        # Assign pointer to source record
-        behavior.add_object(binding_set)
-        record.variableBindingSet.set_value(binding_id)
+        binding_id = create_variable_binding_set(behavior, record)
+        binding_set = behavior.objects[binding_id]
 
     bindings: HkbArray = binding_set.bindings
     bnd: HkbRecord
 
     for bnd in bindings:
         if bnd.memberPath == path:
-            bnd.variableIndex = variable_idx
+            val = bnd.variableIndex
+            undo_manager.on_update_value(val, val.get_value(), variable_idx)
+            val.set_value(variable_idx)
             break
     else:
-        bindings.append(
-            HkbRecord.new(
-                bindings.element_type_id,
-                {
-                    "memberPath": path,
-                    "variableIndex": variable_idx,
-                    "bitIndex": -1,
-                    "bindingType": 0,
-                },
-            )
+        new_binding = HkbRecord.new(
+            bindings.element_type_id,
+            {
+                "memberPath": path,
+                "variableIndex": variable_idx,
+                "bitIndex": -1,
+                "bindingType": 0,
+            },
         )
+        undo_manager.on_update_array_item(bindings, -1, None, new_binding)
+        bindings.append(new_binding)
 
     set_bindable_attribute_state(behavior, bindable_attribute, variable_idx)
-
+    
+    return binding_id
 
 def unbind_attribute(
     behavior: HavokBehavior,
@@ -170,5 +187,6 @@ def unbind_attribute(
 
     for idx, bnd in enumerate(bindings):
         if bnd.memberPath == path:
+            undo_manager.on_update_array_item(bindings, idx, bindings[idx], None)
             del bindings[idx]
             break
