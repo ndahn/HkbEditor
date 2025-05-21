@@ -1,6 +1,7 @@
 from typing import Any
-from collections import deque
+import re
 from xml.etree import ElementTree as ET
+from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
 import pyperclip
 
@@ -31,6 +32,7 @@ from .workflows.bind_attribute import (
     unbind_attribute,
 )
 from .workflows.undo import undo_manager
+from .workflows.aliases import AliasManager
 from . import style
 
 
@@ -39,13 +41,14 @@ class BehaviorEditor(GraphEditor):
         super().__init__(tag)
 
         self.beh: HavokBehavior = None
+        self.alias_manager = AliasManager()
 
     def _do_load_from_file(self, file_path: str):
         self.beh = HavokBehavior(file_path)
         self._set_menus_enabled(True)
 
     def _do_write_to_file(self, file_path):
-        self.beh.tree.write(file_path)
+        self.beh.save_to_file(file_path)
 
     def exit_app(self):
         with dpg.window(
@@ -73,6 +76,10 @@ class BehaviorEditor(GraphEditor):
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
             dpg.add_menu_item(label="Undo (ctrl-z)", enabled=False, callback=self.undo)
             dpg.add_menu_item(label="Redo (ctrl-y)", enabled=False, callback=self.redo)
+            dpg.add_separator()
+            dpg.add_menu_item(
+                label="Load bone names...", callback=self.load_bone_names
+            )
             dpg.add_separator()
             dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
             dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
@@ -180,12 +187,19 @@ class BehaviorEditor(GraphEditor):
         path: str,
     ):
         tag = f"{self.tag}_attribute_{path}"
-        attribute = path.split("/")[-1]
         widget = tag
 
+        label = self.alias_manager.get_attribute_alias(source_record, path)
+        if label is None:
+            label = path.split("/")[-1]
+            label_color = style.white
+        else:
+            label_color = style.green
+
         if isinstance(value, HkbRecord):
+            # TODO label_color
             with table_tree_node(
-                attribute, table=f"{self.tag}_attributes_table", folded=True, tag=tag
+                label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
             ):
                 widget = get_row_node_item(tag)
                 for subkey, subval in value.get_value().items():
@@ -194,9 +208,10 @@ class BehaviorEditor(GraphEditor):
                     )
 
         elif isinstance(value, HkbArray):
+            # TODO label_color
             # TODO special handlers for e.g. hkVector4, HkQuaternion, etc.
             with table_tree_node(
-                attribute, table=f"{self.tag}_attributes_table", folded=True, tag=tag
+                label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
             ):
                 widget = get_row_node_item(tag)
                 for idx, subval in enumerate(value):
@@ -219,14 +234,14 @@ class BehaviorEditor(GraphEditor):
                 table=f"{self.tag}_attributes_table",
             ):
                 self._create_attribute_widget_pointer(source_record, value, path, tag)
-                dpg.add_text(attribute)
+                dpg.add_text(label, color=label_color)
 
         else:
             with table_tree_leaf(
                 table=f"{self.tag}_attributes_table",
             ):
                 self._create_attribute_widget_simple(source_record, value, path, tag)
-                dpg.add_text(attribute)
+                dpg.add_text(label, color=label_color)
 
         self._create_attribute_menu(widget, source_record, value, path)
 
@@ -493,9 +508,11 @@ class BehaviorEditor(GraphEditor):
                     dpg.set_value(sender, False)
                     unbind_attribute(*user_data)
 
-                def _on_binding_established(sender, data: tuple[int, str], user_data: Any):
+                def _on_binding_established(
+                    sender, data: tuple[int, str], user_data: Any
+                ):
                     # If a new binding set was created the graph will change
-                    #binding_var, binding_set_id = data
+                    # binding_var, binding_set_id = data
                     self._regenerate_canvas()
                     self._clear_attributes()
                     self._update_attributes(self.selected_node)
@@ -611,9 +628,13 @@ class BehaviorEditor(GraphEditor):
     def open_animation_editor(self):
         edit_simple_array_dialog(self.beh.animations, "Edit Animations")
 
-    def load_bone_names(self):
-        # TODO not sure how hkbBoneWeightArray works as they have very different weight counts
+    def open_array_aliases_editor(self):
+        # TODO open dialog, update alias manager
         pass
+
+    def load_bone_names(self) -> None:
+        # TODO open file dialog
+        self.alias_manager.load_alias_file(file_path)
 
     def create_cmsg(self):
         # TODO a wizard that lets the user create a new generator and attach it to another node

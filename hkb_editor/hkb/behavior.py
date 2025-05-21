@@ -9,11 +9,11 @@ from .hkb_types import HkbRecord, HkbArray, HkbString
 
 class HavokBehavior:
     def __init__(self, xml_file: str):
-        self.tree = ET.parse(xml_file)
-        root = self.tree.getroot()
+        self._tree = ET.parse(xml_file)
+        root = self._tree.getroot()
 
         self.type_registry = type_registry
-        type_registry.load_types(root)
+        self.type_registry.load_types(root)
 
         # TODO hide behind a property, changing this dict should also affect the xml
         self.objects = {
@@ -29,13 +29,16 @@ class HavokBehavior:
         #    self.objects["object0"] = HkbRecord.new({}, t_void, "object0")
 
         # There's a special object storing the string values referenced from HKS
-        strings_type_id = type_registry.find_type_by_name("hkbBehaviorGraphStringData")
+        strings_type_id = self.type_registry.find_type_by_name("hkbBehaviorGraphStringData")
         strings_id = root.find(f".//object[@typeid='{strings_type_id}']").attrib["id"]
         strings_obj = self.objects[strings_id]
 
         self.events: HkbArray = strings_obj.eventNames
         self.variables: HkbArray = strings_obj.variableNames
         self.animations: HkbArray = strings_obj.animationNames
+
+    def save_to_file(self, file_path: str) -> None:
+        self._tree.write(file_path)
 
     def find_objects_by_type(self, type_id: str) -> Generator[HkbRecord, None, None]:
         for obj in self.objects.values():
@@ -69,14 +72,14 @@ class HavokBehavior:
 
         return g
 
-    def new_id(self, base: str = "object") -> str:
+    def new_id(self, base: str = "object", offset: int = 1) -> str:
         last_key = max(
             int(k[len(base) :])
             for k in self.objects.keys()
             if k.startswith(base)
         )
 
-        return f"base{last_key + 1}"
+        return f"base{last_key + offset}"
 
     def add_object(self, record: HkbRecord, id: str = None) -> str:
         if id is None:
@@ -86,14 +89,14 @@ class HavokBehavior:
                 id = self.new_id()
 
         record.object_id = id
-        self.tree.getroot().append(record.as_object())
+        self._tree.getroot().append(record.as_object())
         self.objects[id] = record
 
         return id
 
     def remove_object(self, id: str) -> HkbRecord:
         obj = self.objects.pop(id)
-        self.tree.getroot().remove(obj.element)
+        self._tree.getroot().remove(obj.element)
         return obj
 
     def create_event(self, event_name: str) -> int:

@@ -395,6 +395,7 @@ class HkbRecord(XmlValueHandler):
 
 
 def get_value_handler(type_id: str) -> Type[XmlValueHandler]:
+    # TODO don't hardcode these, should be derived from the behavior somehow
     format_map = {
         0: None,  # TODO void
         1: object,  # TODO opaque
