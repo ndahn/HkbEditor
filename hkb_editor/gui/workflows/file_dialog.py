@@ -1,9 +1,6 @@
-import tkinter as tk
-from tkinter import filedialog
-
-
-# TODO try using windows-filedialogs if available
-# TODO tk is difficult to integrate if we want to use it more than once
+import sys
+import os
+import crossfiledialog
 
 
 _dialog_open = False
@@ -14,7 +11,7 @@ def open_file_dialog(
     title: str = None,
     default_dir: str = None,
     default_file: str = None,
-    filetypes: list[tuple[str, str]] = None,
+    filetypes: dict[str, str] = None,
 ) -> str:
     global _dialog_open
     if _dialog_open:
@@ -25,19 +22,16 @@ def open_file_dialog(
     if not title:
         title = "Select file to load"
 
-    # dpg file dialog sucks, so we use the tk one instead
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
+    if not default_dir:
+        default_dir = os.path.dirname(sys.argv[0])
 
-    ret = filedialog.askopenfilename(
+    # dpg file dialog sucks, so we use the native one instead
+    # TODO default_file not supported
+    ret = crossfiledialog.open_file(
         title=title,
-        filetypes=filetypes,
-        initialdir=default_dir,
-        initialfile=default_file,
+        start_dir=default_dir,
+        filter=filetypes,
     )
-
-    root.destroy()
     _dialog_open = False
 
     return ret
@@ -48,7 +42,7 @@ def save_file_dialog(
     title: str = None,
     default_dir: str = None,
     default_file: str = None,
-    filetypes: list[tuple[str, str]] = None,
+    filetypes: dict[str, str] = None,
 ) -> str:
     global _dialog_open
     if _dialog_open:
@@ -59,19 +53,16 @@ def save_file_dialog(
     if not title:
         title = "Select file to load"
 
-    # dpg file dialog sucks, so we use the tk one instead
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
+    if not default_dir:
+        default_dir = os.path.dirname(sys.argv[0])
 
-    ret = filedialog.asksaveasfilename(
+    # dpg file dialog sucks, so we use the native one instead
+    # TODO default_file and filetypes not supported
+    ret = crossfiledialog.save_file(
         title=title,
-        filetypes=filetypes,
-        initialdir=default_dir,
-        initialfile=default_file,
+        start_dir=default_dir,
     )
 
-    root.destroy()
     _dialog_open = False
     
     return ret

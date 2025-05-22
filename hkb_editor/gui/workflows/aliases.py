@@ -34,6 +34,7 @@ class AliasMap:
         uri = self.attribute_uri(path, record.type_id, record.object_id)
 
         for pattern, alias in self.aliases:
+            print(pattern, uri)
             if re.fullmatch(pattern, uri):
                 return alias
 

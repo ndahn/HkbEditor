@@ -102,8 +102,8 @@ class GraphEditor:
         self._setup_content()
 
     # These should be implemented by subclasses
-    def get_supported_file_extensions(self) -> list[tuple[str, str]]:
-        return []
+    def get_supported_file_extensions(self) -> dict[str, str]:
+        return {"All files": "*.*"}
 
     def get_roots(self) -> list[Node]:
         return []

@@ -45,7 +45,7 @@ class HkbString(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get_value(self) -> str:
-        return self.element.attrib["value"]
+        return self.element.attrib.get("value", "")
 
     def set_value(self, value: str) -> None:
         self.element.attrib["value"] = value
@@ -65,7 +65,7 @@ class HkbInteger(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get_value(self) -> int:
-        return int(self.element.attrib["value"])
+        return int(self.element.attrib.get("value", 0))
 
     def set_value(self, value: int) -> None:
         self.element.attrib["value"] = value
@@ -93,7 +93,7 @@ class HkbFloat(XmlValueHandler):
 
     def get_value(self) -> float:
         # Behaviors use commas as decimal separators
-        return float(self.element.attrib["dec"].replace(",", "."))
+        return float(self.element.attrib.get("dec", "0").replace(",", "."))
 
     def set_value(self, value: float) -> None:
         # Behaviors use commas as decimal separators
@@ -116,7 +116,7 @@ class HkbBool(XmlValueHandler):
         super().__init__(element, type_id)
 
     def get_value(self) -> bool:
-        return self.element.attrib["value"].lower() == "true"
+        return self.element.attrib.get("value", "false").lower() == "true"
 
     def set_value(self, value: bool) -> None:
         self.element.attrib["value"] = "true" if value else "false"
@@ -137,8 +137,8 @@ class HkbPointer(XmlValueHandler):
         self.subtype = type_registry.get_subtype(type_id)
 
     def get_value(self) -> str:
-        val = self.element.attrib["id"]
-        if val == "object0":
+        val = self.element.attrib.get("id", None)
+        if val in ("object0", None, ""):
             return ""
 
         return val

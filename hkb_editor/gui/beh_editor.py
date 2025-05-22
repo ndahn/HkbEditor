@@ -90,8 +90,9 @@ class BehaviorEditor(GraphEditor):
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
             dpg.add_menu_item(
-                label="Load skeleton...", enabled=False, callback=self.load_bone_names
+                label="Load skeleton...", callback=self.load_bone_names
             )
+            # TODO enable
             dpg.add_menu_item(
                 label="Create CMSG...", enabled=False, callback=self.create_cmsg
             )
@@ -101,12 +102,13 @@ class BehaviorEditor(GraphEditor):
 
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
-        func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_file_save")
         func(f"{self.tag}_menu_file_save_as")
+        func(f"{self.tag}_menu_edit")
+        func(f"{self.tag}_menu_workflows")
 
     def get_supported_file_extensions(self):
-        return [("Behavior XML", ".xml")]
+        return {"Behavior XML": "*.xml"}
 
     def get_roots(self) -> list[str]:
         sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
@@ -638,7 +640,11 @@ class BehaviorEditor(GraphEditor):
         )
 
         if file_path:
-            self.alias_manager.load_alias_file(file_path)
+            try:
+                self.logger.info("Loading bone names from %s", file_path)
+                self.alias_manager.load_bone_names(file_path)
+            except ValueError as e:
+                self.logger.error("Loading bone names failed: %s", e, exc_info=True)
 
     def create_cmsg(self):
         # TODO a wizard that lets the user create a new generator and attach it to another node
