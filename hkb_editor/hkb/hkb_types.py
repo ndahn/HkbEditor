@@ -52,7 +52,7 @@ class HkbString(XmlValueHandler):
         return self.element.attrib.get("value", "")
 
     def set_value(self, value: str) -> None:
-        self.element.attrib["value"] = value
+        self.element.attrib["value"] = str(value)
 
 
 class HkbInteger(XmlValueHandler):
@@ -72,7 +72,7 @@ class HkbInteger(XmlValueHandler):
         return int(self.element.attrib.get("value", 0))
 
     def set_value(self, value: int) -> None:
-        self.element.attrib["value"] = value
+        self.element.attrib["value"] = str(value)
 
 
 class HkbFloat(XmlValueHandler):
@@ -129,11 +129,11 @@ class HkbBool(XmlValueHandler):
 class HkbPointer(XmlValueHandler):
     @classmethod
     def new(
-        cls, tagfile: Tagfile, type_id: str, subtype_id: str, value: str = None
+        cls, tagfile: Tagfile, type_id: str, value: str = None
     ) -> "HkbPointer":
         val = str(value) if value else "object0"
         elem = ET.Element("pointer", id=val)
-        return HkbPointer(tagfile, elem, subtype_id, type_id)
+        return HkbPointer(tagfile, elem, type_id)
 
     def __init__(
         self, tagfile: Tagfile, element: ET.Element, type_id: str
@@ -155,7 +155,7 @@ class HkbPointer(XmlValueHandler):
         if value in ("", None):
             value = "object0"
 
-        self.element.attrib["id"] = value
+        self.element.attrib["id"] = str(value)
 
 
 class HkbArray(XmlValueHandler):

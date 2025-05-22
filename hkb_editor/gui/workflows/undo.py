@@ -1,5 +1,6 @@
 from typing import Any
 from collections import deque
+import itertools
 from contextlib import contextmanager
 
 from hkb_editor.hkb.hkb_types import XmlValueHandler, HkbArray, HkbRecord
@@ -121,8 +122,11 @@ class UndoManager:
         if self._combining:
             self._combining.add(action)
         else:
-            # Remove subsequent actions that could have been redone until now
-            self.history = self.history[: self.index + 1]
+            # Remove subsequent actions that could have been redone until now. Deque doesn't
+            # support slice notation it seems
+            self.history = deque(
+                itertools.islice(self.history, 0, self.index + 1), self.history.maxlen
+            )
             self.history.append(action)
             self.index += 1
 

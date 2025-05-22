@@ -602,6 +602,12 @@ class GraphEditor:
         if node_id in self.visible_nodes:
             return self.visible_nodes[node_id]
 
+        # TODO this layout algorithm works, but has various issues:
+        #  - only the last instance of a node will be used
+        #  - will remove the user's path if a shorter path exists
+        # 
+        # It would be better to do one layout using graphviz, then hide and show 
+        # nodes as required
         zoom_factor = self.layout.zoom_factor**self.zoom
 
         if level == 0:

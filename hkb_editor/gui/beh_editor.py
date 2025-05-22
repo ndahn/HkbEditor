@@ -89,6 +89,7 @@ class BehaviorEditor(GraphEditor):
         ):
             dpg.add_menu_item(label="Load skeleton...", callback=self.load_bone_names)
             # TODO enable
+            dpg.add_menu_item(label="Attribute aliases...", enabled=False)
             dpg.add_menu_item(
                 label="Create CMSG...", enabled=False, callback=self.create_cmsg
             )
@@ -252,10 +253,7 @@ class BehaviorEditor(GraphEditor):
         attribute = path.split("/")[-1]
 
         def on_pointer_select(sender, new_value: str, ptr_widget: str):
-            undo_manager.on_update_value(pointer, pointer.get_value(), new_value)
-            pointer.set_value(new_value)
-
-            # Update the graph
+            # Update the graph first
             try:
                 self.graph.add_edge(source_record.object_id, new_value)
                 self.graph.remove_edge(source_record.object_id, pointer.get_value())
@@ -492,6 +490,15 @@ class BehaviorEditor(GraphEditor):
                 user_data=(widget, value),
             )
 
+            # TODO disabled until implemented
+            # if isinstance(value, HkbPointer):
+            #     dpg.add_separator()
+            #     dpg.add_selectable(
+            #         label="Create object...",
+            #         callback=lambda s, a, u: self.open_create_object_dialog(*u),
+            #         user_data=(value.subtype, self.on_attribute_update, value)
+            #     )
+
             if is_simple:
                 set_bindable_attribute_state(self.beh, widget, bound_var_idx)
 
@@ -637,15 +644,19 @@ class BehaviorEditor(GraphEditor):
 
     def load_bone_names(self) -> None:
         file_path = open_file_dialog(
-            title="Select Skeleton", filetypes=[("Skeleton files", ".xml")]
+            title="Select Skeleton", filetypes=[("Skeleton files", "*.xml")]
         )
 
         if file_path:
             try:
                 self.logger.info("Loading bone names from %s", file_path)
-                self.alias_manager.load_bone_names(file_path)
+                self.alias_manager.load_bone_names(self.beh, file_path)
             except ValueError as e:
                 self.logger.error("Loading bone names failed: %s", e, exc_info=True)
+
+    def open_create_object_dialog(self, type_id: str, callback, user_data: Any) -> None:
+        # TODO
+        pass
 
     def create_cmsg(self):
         # TODO a wizard that lets the user create a new generator and attach it to another node

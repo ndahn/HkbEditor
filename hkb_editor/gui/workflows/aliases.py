@@ -34,7 +34,6 @@ class AliasMap:
         uri = self.attribute_uri(path, record.type_id, record.object_id)
 
         for pattern, alias in self.aliases:
-            print(pattern, uri)
             if re.fullmatch(pattern, uri):
                 return alias
 
@@ -43,10 +42,10 @@ class AliasMap:
 
 class AliasManager:
     def __init__(self):
-        self.aliases: dict[str, AliasMap] = {}
+        self.aliases: list[tuple[str, AliasMap]] = []
 
     def get_attribute_alias(self, record: HkbRecord, path: str) -> str:
-        for am in self.aliases.keys():
+        for am in self.aliases:
             alias = am.match(record, path)
             if alias is not None:
                 return alias
@@ -57,10 +56,10 @@ class AliasManager:
         # TODO
         pass
 
-    def load_bone_names(self, file_path: str):
+    def load_bone_names(self, tagfile: Tagfile, file_path: str):
         skeleton_beh = Tagfile(file_path)
         skeleton_type_id = skeleton_beh.type_registry.find_type_by_name("hkaSkeleton")
-        skeletons = skeleton_beh.find_objects_by_type(skeleton_type_id)
+        skeletons = list(skeleton_beh.find_objects_by_type(skeleton_type_id))
 
         if not skeletons:
             raise ValueError(f"Could not find any objects of type {skeleton_type_id} (hkaSkeleton) in {file_path}")
@@ -68,16 +67,16 @@ class AliasManager:
         if len(skeletons) > 1:
             raise ValueError(f"{file_path} contained multiple objects of type {skeleton_type_id} (hkaSkeleton)")
 
-        bone_array: HkbArray = skeletons[0].bones
+        bone_array: HkbArray = skeletons[0]["bones"]
 
-        boneweights_type_id = self.beh.type_registry.find_type_by_name(
+        boneweights_type_id = tagfile.type_registry.find_type_by_name(
             "hkbBoneWeightArray"
         )
         basepath = "boneWeights"
         aliases = AliasMap()
 
         for idx, bone in enumerate(bone_array):
-            aliases.add(bone.name, f"{basepath}:{idx}", boneweights_type_id, None)
+            aliases.add(bone["name"], f"{basepath}:{idx}", boneweights_type_id, None)
 
         # Insert left so that these aliases take priority
         self.aliases.insert(0, aliases)
