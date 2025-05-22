@@ -1,8 +1,9 @@
-from typing import Any, Type, Generator
+from typing import Any, Type, Generator, Iterator
 import struct
 import xml.etree.ElementTree as ET
 
-from .type_registry import type_registry
+from .tagfile import Tagfile
+from .type_registry import TypeRegistry
 
 
 _undefined = object()
@@ -10,10 +11,13 @@ _undefined = object()
 
 class XmlValueHandler:
     @classmethod
-    def new(cls, type_id: str, value: Any = None) -> "XmlValueHandler":
+    def new(
+        cls, tagfile: Tagfile, type_id: str, value: Any = None
+    ) -> "XmlValueHandler":
         raise NotImplementedError()
 
-    def __init__(self, element: ET.Element, type_id: str):
+    def __init__(self, tagfile: Tagfile, element: ET.Element, type_id: str):
+        self.tagfile = tagfile
         self.element = element
         self.type_id = type_id
 
@@ -33,16 +37,16 @@ class XmlValueHandler:
 
 class HkbString(XmlValueHandler):
     @classmethod
-    def new(cls, type_id: str, value: str = None) -> "HkbString":
+    def new(cls, tagfile: Tagfile, type_id: str, value: str = None) -> "HkbString":
         val = str(value) if value is not None else ""
         elem = ET.Element("string", value=val)
-        return HkbString(elem, type_id)
+        return HkbString(tagfile, elem, type_id)
 
-    def __init__(self, element: ET.Element, type_id: str):
+    def __init__(self, tagfile: Tagfile, element: ET.Element, type_id: str):
         if element.tag != "string":
             raise ValueError(f"Invalid element {element}")
 
-        super().__init__(element, type_id)
+        super().__init__(tagfile, element, type_id)
 
     def get_value(self) -> str:
         return self.element.attrib.get("value", "")
@@ -53,16 +57,16 @@ class HkbString(XmlValueHandler):
 
 class HkbInteger(XmlValueHandler):
     @classmethod
-    def new(cls, type_id: str, value: int = None) -> "HkbInteger":
+    def new(cls, tagfile: Tagfile, type_id: str, value: int = None) -> "HkbInteger":
         val = int(value) if value is not None else 0
         elem = ET.Element("integer", value=str(val))
-        return HkbInteger(elem, type_id)
+        return HkbInteger(tagfile, elem, type_id)
 
-    def __init__(self, element: ET.Element, type_id: str):
+    def __init__(self, tagfile: Tagfile, element: ET.Element, type_id: str):
         if element.tag != "integer":
             raise ValueError(f"Invalid element {element}")
 
-        super().__init__(element, type_id)
+        super().__init__(tagfile, element, type_id)
 
     def get_value(self) -> int:
         return int(self.element.attrib.get("value", 0))
@@ -73,11 +77,11 @@ class HkbInteger(XmlValueHandler):
 
 class HkbFloat(XmlValueHandler):
     @classmethod
-    def new(cls, type_id: str, value: float = None) -> "HkbFloat":
+    def new(cls, tagfile: Tagfile, type_id: str, value: float = None) -> "HkbFloat":
         val = float(value) if value is not None else 0.0
         ieee = cls.float_to_ieee754(val)
         elem = ET.Element("real", dec=str(val), hex=ieee)
-        return HkbFloat(elem, type_id)
+        return HkbFloat(tagfile, elem, type_id)
 
     @classmethod
     def float_to_ieee754(cls, value: float) -> str:
@@ -85,11 +89,11 @@ class HkbFloat(XmlValueHandler):
         h = struct.unpack(">Q", struct.pack(">d", value))[0]
         return f"#{h}:016x"
 
-    def __init__(self, element: ET.Element, type_id: str):
+    def __init__(self, tagfile: Tagfile, element: ET.Element, type_id: str):
         if element.tag != "real":
             raise ValueError(f"Invalid element {element}")
 
-        super().__init__(element, type_id)
+        super().__init__(tagfile, element, type_id)
 
     def get_value(self) -> float:
         # Behaviors use commas as decimal separators
@@ -103,17 +107,17 @@ class HkbFloat(XmlValueHandler):
 
 class HkbBool(XmlValueHandler):
     @classmethod
-    def new(cls, type_id: str, value: bool = None) -> "HkbBool":
-        val = bool(value) if value is not None else False
-        rep = "true" if value else "false"
+    def new(cls, tagfile: Tagfile, type_id: str, value: bool = None) -> "HkbBool":
+        bval = bool(value) if value is not None else False
+        rep = "true" if bval else "false"
         elem = ET.Element("bool", value=rep)
-        return HkbBool(elem, type_id)
+        return HkbBool(tagfile, elem, type_id)
 
-    def __init__(self, element: ET.Element, type_id: str):
+    def __init__(self, tagfile: Tagfile, element: ET.Element, type_id: str):
         if element.tag != "bool":
             raise ValueError(f"Invalid element {element}")
 
-        super().__init__(element, type_id)
+        super().__init__(tagfile, element, type_id)
 
     def get_value(self) -> bool:
         return self.element.attrib.get("value", "false").lower() == "true"
@@ -124,17 +128,21 @@ class HkbBool(XmlValueHandler):
 
 class HkbPointer(XmlValueHandler):
     @classmethod
-    def new(cls, type_id: str, value: str = None) -> "HkbInteger":
-        val = str(value) if value is not None else "object0"
+    def new(
+        cls, tagfile: Tagfile, type_id: str, subtype_id: str, value: str = None
+    ) -> "HkbPointer":
+        val = str(value) if value else "object0"
         elem = ET.Element("pointer", id=val)
-        return HkbPointer(elem, type_id)
+        return HkbPointer(tagfile, elem, subtype_id, type_id)
 
-    def __init__(self, element: ET.Element, type_id: str):
+    def __init__(
+        self, tagfile: Tagfile, element: ET.Element, type_id: str
+    ):
         if element.tag != "pointer":
             raise ValueError(f"Invalid element {element}")
 
-        super().__init__(element, type_id)
-        self.subtype = type_registry.get_subtype(type_id)
+        super().__init__(tagfile, element, type_id)
+        self.subtype = tagfile.type_registry.get_subtype(type_id)
 
     def get_value(self) -> str:
         val = self.element.attrib.get("id", None)
@@ -152,22 +160,35 @@ class HkbPointer(XmlValueHandler):
 
 class HkbArray(XmlValueHandler):
     @classmethod
-    def new(cls, type_id: str, values: list[XmlValueHandler] = None) -> "HkbArray":
+    def new(
+        cls,
+        tagfile: Tagfile,
+        type_id: str,
+        elem_type_id: str,
+        values: list[XmlValueHandler] = None,
+    ) -> "HkbArray":
         if values is None:
             values = []
 
-        elem_type_id = type_registry.get_subtype(type_id)
         elem = ET.Element("array", count=len(values), elementtypeid=elem_type_id)
         elem.extend(item.element for item in values)
 
-        return HkbArray(elem, type_id)
+        return HkbArray(tagfile, elem, type_id, elem_type_id)
 
-    def __init__(self, element: ET.Element, type_id: str):
+    def __init__(
+        self,
+        tagfile: Tagfile,
+        element: ET.Element,
+        type_id: str,
+        elem_type_id: str = None,
+    ):
         if element.tag != "array":
             raise ValueError(f"Invalid element {element}")
 
-        super().__init__(element, type_id)
-        self.element_type_id = element.attrib["elementtypeid"]
+        super().__init__(tagfile, element, type_id)
+        self.element_type_id = (
+            elem_type_id if elem_type_id else element.attrib["elementtypeid"]
+        )
 
     @property
     def _count(self) -> int:
@@ -178,7 +199,10 @@ class HkbArray(XmlValueHandler):
         self.element.attrib["count"] = new_count
 
     def get_value(self) -> list[XmlValueHandler]:
-        return [wrap_element(e, self.element_type_id) for e in self.element]
+        return [
+            wrap_element(self.tagfile, elem, self.element_type_id)
+            for elem in self.element
+        ]
 
     def set_value(self, values: list[XmlValueHandler]) -> None:
         for idx, item in enumerate(values):
@@ -201,7 +225,7 @@ class HkbArray(XmlValueHandler):
         if index < 0:
             index = len(self) - index
         item = next(e for i, e in enumerate(self.element) if i == index)
-        return wrap_element(item, self.element_type_id)
+        return wrap_element(self.tagfile, item, self.element_type_id)
 
     def __setitem__(self, index: int, value: Any) -> None:
         if isinstance(value, XmlValueHandler):
@@ -257,65 +281,82 @@ class HkbArray(XmlValueHandler):
 class HkbRecord(XmlValueHandler):
     @classmethod
     def new(
-        cls, type_id: str, values: dict[str, Any] = None, object_id: str = None
+        cls,
+        tagfile: Tagfile,
+        type_id: str,
+        values: dict[str, Any] = None,
+        object_id: str = None,
     ) -> "HkbRecord":
         elem = ET.Element("record")
-        record = HkbRecord(elem, type_id, object_id)
+        record = HkbRecord(tagfile, elem, type_id, object_id)
 
         # Make sure the xml subtree contains all required fields
         def create_fields(parent_elem: ET.Element, record_type_id: str):
-            for fname, ftype in type_registry.get_fields(record_type_id):
+            for fname, ftype in tagfile.type_registry.get_fields(
+                record_type_id
+            ).items():
                 field_elem = ET.SubElement(parent_elem, "field", name=fname)
-                field_val = get_value_handler(ftype).new(ftype)
+                field_val = get_value_handler(tagfile.type_registry, ftype).new(ftype)
 
                 if isinstance(field_val, HkbRecord):
                     create_fields(field_val.element, ftype)
 
                 field_elem.append(field_val.element)
 
-        create_fields(elem, type_id)
+        create_fields(tagfile, elem, type_id)
 
         if values:
             for key, val in values.items():
-                # TODO implement setitem
-                setattr(record, key, val)
+                record[key] = val
 
         return record
 
     @classmethod
-    def from_object(self, element: ET.Element) -> "HkbRecord":
+    def from_object(self, tagfile: Tagfile, element: ET.Element) -> "HkbRecord":
         record = element.find("record")
         type_id = element.attrib["typeid"]
         object_id = element.attrib["id"]
-        return HkbRecord(record, type_id, object_id)
+        return HkbRecord(tagfile, record, type_id, object_id)
 
-    def __init__(self, element: ET.Element, type_id: str, object_id: str = None):
+    def __init__(
+        self,
+        tagfile: Tagfile,
+        element: ET.Element,
+        type_id: str,
+        object_id: str = None,
+    ):
         assert element.tag == "record"
         assert type_id
 
-        super().__init__(element, type_id)
+        super().__init__(tagfile, element, type_id)
         self.object_id = object_id
+        self._fields = tagfile.type_registry.get_fields(type_id)
 
     def get_value(self) -> dict[str, XmlValueHandler]:
         ret = {}
-        for fname, _ in self.fields():
-            ret[fname] = getattr(self, fname)
+        for fname in self._fields.keys():
+            ret[fname] = self[fname]
 
         return ret
 
     def set_value(self, values: dict[str, XmlValueHandler]) -> None:
         for key, val in values.items():
-            setattr(self, key, val)
+            self[key] = val
 
-    def fields(self) -> Generator[tuple[str, ET.Element], None, None]:
-        for f in self.element.findall("field"):
-            yield f.attrib["name"], f
+    @property
+    def fields(self) -> Iterator[str]:
+        yield from self._fields.keys()
 
     def get_field_element(self, name: str) -> ET.Element:
-        return next((f for fname, f in self.fields() if fname == name), None)
+        # Avoid infinite recursions from __getattr__
+        for elem in self.element.findall("field"):
+            if elem.attrib["name"] == name:
+                return elem
+
+        return None
 
     def get_field_type(self, name: str) -> str:
-        for fname, ftype in type_registry.get_fields(self.type_id):
+        for fname, ftype in self._fields.items():
             if fname == name:
                 return ftype
 
@@ -331,9 +372,9 @@ class HkbRecord(XmlValueHandler):
             for k in keys:
                 if ":" in k:
                     k, idx = k.split(":")
-                    obj = getattr(obj, k)[int(idx)]
+                    obj = obj[k][int(idx)]
                 else:
-                    obj = getattr(obj, k)
+                    obj = obj[k]
         except (AttributeError, KeyError) as e:
             if default != _undefined:
                 return default
@@ -344,32 +385,29 @@ class HkbRecord(XmlValueHandler):
 
         return obj
 
-    def get(
-        self, name: str, default: Any = None, resolve: bool = True
-    ) -> XmlValueHandler:
-        ret = getattr(self, name, default)
-        if resolve and isinstance(ret, XmlValueHandler):
-            return ret.get_value()
-        return ret
-
-    def __getattr__(self, name: str) -> XmlValueHandler:
-        field_el = self.get_field_element(name)
-        if field_el is None:
+    def get_field(
+        self, name: str, default: Any = _undefined, resolve: bool = False
+    ) -> XmlValueHandler | Any:
+        ftype = self.get_field_type(name)
+        if ftype is None:
+            if default is not _undefined:
+                return default
             raise AttributeError(f"No field '{name}'")
 
-        type_id = self.get_field_type(name)
-        return wrap_element(field_el, type_id)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name in {"element", "type_id", "object_id"}:
-            super().__setattr__(name, value)
-            return
-
         field_el = self.get_field_element(name)
-        if field_el is None:
+        wrap = wrap_element(self.tagfile, field_el, ftype)
+
+        if resolve:
+            return wrap.get_value()
+
+        return wrap
+
+    def set_field(self, name: str, value: XmlValueHandler | Any) -> None:
+        ftype = self.get_field_type(name)
+        if ftype is None:
             raise AttributeError(f"No field named '{name}'")
 
-        ftype = self.get_field_type(name)
+        field_el = self.get_field_element(name)
         if isinstance(value, XmlValueHandler):
             if value.type_id != ftype:
                 raise ValueError(
@@ -378,8 +416,14 @@ class HkbRecord(XmlValueHandler):
 
             value = value.get_value()
 
-        wrapped = wrap_element(field_el, ftype)
+        wrapped = wrap_element(self.tagfile, field_el, ftype)
         wrapped.set_value(value)
+
+    def __getitem__(self, key: str) -> XmlValueHandler:
+        return self.get_field(key)
+
+    def __setitem__(self, key: str, value: XmlValueHandler | Any) -> None:
+        self.set_field(key, value)
 
     def as_object(self, id: str = None) -> ET.Element:
         if not id and not self.object_id:
@@ -394,26 +438,46 @@ class HkbRecord(XmlValueHandler):
         return obj
 
 
-def get_value_handler(type_id: str) -> Type[XmlValueHandler]:
+def get_value_handler(type_registry: TypeRegistry, type_id: str) -> Type[XmlValueHandler]:
     # TODO don't hardcode these, should be derived from the behavior somehow
+    # From a different file:
+    # 0          void
+    # 1          incomplete
+    # 3          string (ptr)
+    # 6          pointer
+    # 7          record
+    # 8          array
+    # 552        array(2)
+    # 1064       array(4)
+    # 3112       array(12)
+    # 4136       array(16)
+    # 8194       bool8 (unsigned, LE)
+    # 8196       uint8 (LE)
+    # 8708       int8 (LE)
+    # 16388      uint16 (LE)
+    # 16900      int16 (LE)
+    # 32772      uint32 (LE)
+    # 33284      int32 (LE)
+    # 65540      uint64 (LE)
+    # 1525253    float
     format_map = {
         0: None,  # TODO void
         1: object,  # TODO opaque
         3: HkbString,
-        131: HkbString,
         6: HkbPointer,
         7: HkbRecord,
         8: HkbArray,
+        131: HkbString,
         1064: HkbArray,
         4136: HkbArray,
-        8232: HkbArray,
         8194: HkbBool,
         8196: HkbInteger,
+        8232: HkbArray,
         8708: HkbInteger,
-        16900: HkbInteger,
         16388: HkbInteger,
-        33284: HkbInteger,
+        16900: HkbInteger,
         32772: HkbInteger,
+        33284: HkbInteger,
         65540: HkbInteger,
         1525253: HkbFloat,
     }
@@ -422,12 +486,14 @@ def get_value_handler(type_id: str) -> Type[XmlValueHandler]:
     return format_map[type_format]
 
 
-def wrap_element(element: ET.Element, type_id: str = None) -> XmlValueHandler:
+def wrap_element(
+    tagfile: Tagfile, element: ET.Element, type_id: str = None
+) -> XmlValueHandler:
     if element.tag == "object":
-        return HkbRecord.from_object(element)
+        return HkbRecord.from_object(tagfile, element)
 
     if element.tag == "field":
         element = next(iter(element))
 
-    Handler = get_value_handler(type_id)
-    return Handler(element, type_id)
+    Handler = get_value_handler(tagfile.type_registry, type_id)
+    return Handler(tagfile, element, type_id)

@@ -24,7 +24,7 @@ def select_pointer_dialog(
             for obj in beh.objects.values()
             if ptr.subtype in (None, obj.type_id)
             and (
-                filt in obj.object_id or filt in obj.type_id or filt in obj.get("name", "")
+                filt in obj.object_id or filt in obj.type_id or filt in obj.get_field("name", "")
             )
         ]
 
@@ -32,7 +32,7 @@ def select_pointer_dialog(
             return
 
         for obj in sorted(matches, key=lambda o: o.object_id):
-            name = obj.get("name")
+            name = obj["name"]
             type_name = beh.type_registry.get_name(obj.type_id)
             with dpg.table_row(parent=table, user_data=obj.object_id):
                 dpg.add_selectable(

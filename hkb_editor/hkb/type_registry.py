@@ -74,12 +74,12 @@ class TypeRegistry:
     def get_format(self, type_id: str) -> int:
         return self.types[type_id]["format"]
 
-    def get_fields(self, type_id: str) -> list[tuple[str, str]]:
+    def get_fields(self, type_id: str) -> dict[str, str]:
         t = self.types[type_id]
-        fields: list[tuple[str, str]] = []
+        fields = {}
 
         while t:
-            fields.extend(t["fields"])
+            fields.update({f:ft for f,ft in t["fields"]})
             parent = t.get("parent", None)
             t = self.types.get(parent, None)
         
@@ -90,7 +90,3 @@ class TypeRegistry:
 
     def get_parent(self, type_id: str) -> str:
         return self.types[type_id].get("parent", None)
-
-
-# Global registry
-type_registry = TypeRegistry()

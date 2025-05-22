@@ -1,7 +1,7 @@
 import re
 
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray
-from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.tagfile import Tagfile
 
 
 class AliasMap:
@@ -58,8 +58,7 @@ class AliasManager:
         pass
 
     def load_bone_names(self, file_path: str):
-        # TODO might have to abolish the global type registry for this
-        skeleton_beh = HavokBehavior(file_path)
+        skeleton_beh = Tagfile(file_path)
         skeleton_type_id = skeleton_beh.type_registry.find_type_by_name("hkaSkeleton")
         skeletons = skeleton_beh.find_objects_by_type(skeleton_type_id)
 

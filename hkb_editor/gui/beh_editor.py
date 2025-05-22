@@ -76,9 +76,7 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(label="Undo (ctrl-z)", enabled=False, callback=self.undo)
             dpg.add_menu_item(label="Redo (ctrl-y)", enabled=False, callback=self.redo)
             dpg.add_separator()
-            dpg.add_menu_item(
-                label="Load bone names...", callback=self.load_bone_names
-            )
+            dpg.add_menu_item(label="Load bone names...", callback=self.load_bone_names)
             dpg.add_separator()
             dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
             dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
@@ -89,9 +87,7 @@ class BehaviorEditor(GraphEditor):
         with dpg.menu(
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
-            dpg.add_menu_item(
-                label="Load skeleton...", callback=self.load_bone_names
-            )
+            dpg.add_menu_item(label="Load skeleton...", callback=self.load_bone_names)
             # TODO enable
             dpg.add_menu_item(
                 label="Create CMSG...", enabled=False, callback=self.create_cmsg
@@ -113,7 +109,7 @@ class BehaviorEditor(GraphEditor):
     def get_roots(self) -> list[str]:
         sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
         roots = [
-            (obj.name.get_value(), obj.object_id)
+            (obj["name"].get_value(), obj.object_id)
             for obj in self.beh.find_objects_by_type(sm_type)
         ]
         return [r[1] for r in sorted(roots)]
@@ -132,7 +128,7 @@ class BehaviorEditor(GraphEditor):
         obj = self.beh.objects[node_id]
         try:
             return [
-                (obj.name.get_value(), style.yellow),
+                (obj["name"].get_value(), style.yellow),
                 (node_id, style.blue),
                 (self.beh.type_registry.get_name(obj.type_id), style.white),
             ]
@@ -143,7 +139,7 @@ class BehaviorEditor(GraphEditor):
             ]
 
     def get_node_frontpage_short(self, node_id: str) -> str:
-        return self.beh.objects[node_id].name.get_value()
+        return self.beh.objects[node_id]["name"].get_value()
 
     def get_node_menu_items(self, node: Node) -> list[str]:
         obj = self.beh.objects.get(node.id)
@@ -310,7 +306,7 @@ class BehaviorEditor(GraphEditor):
             del array[-1]
 
             # Records potentially contain pointers which will affect the graph
-            Handler = get_value_handler(array.element_type_id)
+            Handler = get_value_handler(self.beh.type_registry, array.element_type_id)
             if Handler in (HkbRecord, HkbPointer):
                 self._regenerate_canvas()
 
@@ -320,8 +316,8 @@ class BehaviorEditor(GraphEditor):
 
         def append_item() -> None:
             subtype = array.element_type_id
-            Handler = get_value_handler(subtype)
-            new_item = Handler.new(subtype)
+            Handler = get_value_handler(self.beh.type_registry, subtype)
+            new_item = Handler.new(self.beh, subtype)
 
             self.logger.info(
                 "Added new element of type %s to array %s->%s",
@@ -616,18 +612,24 @@ class BehaviorEditor(GraphEditor):
     # Fleshing out common use cases here
     def open_variable_editor(self):
         edit_simple_array_dialog(
+            self.beh,
             self.beh.variables,
             "Edit Variables",
         )
 
     def open_event_editor(self):
         edit_simple_array_dialog(
+            self.beh,
             self.beh.events,
             "Edit Events",
         )
 
     def open_animation_editor(self):
-        edit_simple_array_dialog(self.beh.animations, "Edit Animations")
+        edit_simple_array_dialog(
+            self.beh, 
+            self.beh.animations, 
+            "Edit Animations"
+        )
 
     def open_array_aliases_editor(self):
         # TODO open dialog, update alias manager
@@ -635,8 +637,7 @@ class BehaviorEditor(GraphEditor):
 
     def load_bone_names(self) -> None:
         file_path = open_file_dialog(
-            title="Select Skeleton",
-            filetypes=[("Skeleton files", ".xml")]
+            title="Select Skeleton", filetypes=[("Skeleton files", ".xml")]
         )
 
         if file_path:

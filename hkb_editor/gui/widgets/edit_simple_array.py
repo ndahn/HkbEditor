@@ -2,6 +2,7 @@ from typing import Any, Callable
 from logging import getLogger
 from dearpygui import dearpygui as dpg
 
+from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
     HkbArray,
@@ -18,6 +19,7 @@ _logger = getLogger(__name__)
 
 
 def edit_simple_array_dialog(
+    behavior: HavokBehavior,
     array: HkbArray,
     title: str = "Edit Array",
     *,
@@ -39,8 +41,8 @@ def edit_simple_array_dialog(
         array[index].set_value(new_value)
 
     def get_new_entry_value(sender, app_data, callback: Callable):
-        Handler = get_value_handler(array.element_type_id)
-        val = Handler.new(array.element_type_id)
+        Handler = get_value_handler(behavior.type_registry, array.element_type_id)
+        val = Handler.new(behavior, array.element_type_id)
 
         def on_value_update(sender, app_data, user_data):
             val.set_value(app_data)
@@ -69,8 +71,8 @@ def edit_simple_array_dialog(
             if veto:
                 return
 
-        Handler = get_value_handler(array.element_type_id)
-        val = Handler.new(array.element_type_id, app_data)
+        Handler = get_value_handler(behavior.type_registry, array.element_type_id)
+        val = Handler.new(behavior, array.element_type_id, app_data)
         
         undo_manager.on_update_array_item(array, -1, None, val)
         array.append(val)

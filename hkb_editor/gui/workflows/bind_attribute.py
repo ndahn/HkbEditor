@@ -86,7 +86,7 @@ def get_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> HkbR
 
     try:
         # TODO we could create a specialized VariableBindingSet subclass
-        binding_ptr: HkbPointer = record.variableBindingSet
+        binding_ptr: HkbPointer = record["variableBindingSet"]
         return behavior.objects[binding_ptr.get_value()]
     except (AttributeError, KeyError) as e:
         return None
@@ -99,10 +99,10 @@ def get_bound_attributes(behavior: HavokBehavior, record: HkbRecord) -> dict[str
 
     ret = {}
     bnd: HkbRecord
-    for bnd in binding_set.bindings:
-        var_path = bnd.memberPath.get_value()
-        var_idx = bnd.variableIndex.get_value()
-        binding_type = bnd.bindingType.get_value()
+    for bnd in binding_set["bindings"]:
+        var_path = bnd["memberPath"].get_value()
+        var_idx = bnd["variableIndex"].get_value()
+        binding_type = bnd["bindingType"].get_value()
         if binding_type != 0:
             _logger.warning(
                 "Unknown binding type %i (%s:%i)", binding_type, var_path, var_idx
@@ -117,14 +117,14 @@ def create_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> s
     ptr_type_id = record.get_field_type("variableBindingSet")
     bindings_type_id = behavior.type_registry.get_subtype(ptr_type_id)
     binding_id = behavior.new_id()
-    binding_set = HkbRecord.new(bindings_type_id, None, binding_id)
+    binding_set = HkbRecord.new(behavior, bindings_type_id, None, binding_id)
 
     # Add the new binding set
     undo_manager.on_add_behavior_object(behavior, binding_set)
     behavior.add_object(binding_set)
     
     # Assign pointer to source record
-    vbs = record.variableBindingSet
+    vbs = record["variableBindingSet"]
     undo_manager.on_update_value(vbs, vbs.get_value(), binding_id)
     vbs.set_value(binding_id)
 
@@ -144,17 +144,18 @@ def bind_attribute(
         binding_id = create_variable_binding_set(behavior, record)
         binding_set = behavior.objects[binding_id]
 
-    bindings: HkbArray = binding_set.bindings
+    bindings: HkbArray = binding_set["bindings"]
     bnd: HkbRecord
 
     for bnd in bindings:
-        if bnd.memberPath == path:
-            val = bnd.variableIndex
+        if bnd["memberPath"] == path:
+            val = bnd["variableIndex"]
             undo_manager.on_update_value(val, val.get_value(), variable_idx)
             val.set_value(variable_idx)
             break
     else:
         new_binding = HkbRecord.new(
+            behavior.type_registry,
             bindings.element_type_id,
             {
                 "memberPath": path,
@@ -182,11 +183,11 @@ def unbind_attribute(
     if binding_set is None:
         return
 
-    bindings: HkbArray = binding_set.bindings
+    bindings: HkbArray = binding_set["bindings"]
     bnd: HkbRecord
 
     for idx, bnd in enumerate(bindings):
-        if bnd.memberPath == path:
+        if bnd["memberPath"] == path:
             undo_manager.on_update_array_item(bindings, idx, bindings[idx], None)
             del bindings[idx]
             break
