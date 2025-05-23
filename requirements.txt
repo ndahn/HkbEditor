@@ -1,2 +1,4 @@
 dearpygui>=2.0.0
+networkx
 pyperclip
+crossfiledialog

@@ -1,4 +1,8 @@
 from typing import Any, Callable
+import logging
+from threading import Thread
+import textwrap
+import time
 from xml.etree import ElementTree as ET
 from dearpygui import dearpygui as dpg
 import pyperclip
@@ -36,13 +40,69 @@ from . import style
 
 
 class BehaviorEditor(GraphEditor):
+
     def __init__(self, tag: str | int = 0):
         super().__init__(tag)
 
         self.beh: HavokBehavior = None
         self.alias_manager = AliasManager()
 
+        class LogHandler(logging.Handler):
+            editor = self
+
+            def emit(self, record):
+                LogHandler.editor.notification(record.getMessage(), record.levelno)
+
+        self.logger.addHandler(LogHandler())
+        self.min_notification_severity = logging.INFO
+
+    def notification(self, message: str, severity: int = logging.INFO) -> None:
+        if severity < self.min_notification_severity:
+            return
+
+        lines = textwrap.wrap(message)
+
+        with dpg.mutex():
+            with dpg.window(
+                min_size=(20, 20),
+                no_title_bar=True,
+                no_focus_on_appearing=True,
+                no_close=True,
+                no_collapse=True,
+                no_move=True,
+                autosize=True,
+            ) as note:
+                for line in lines:
+                    dpg.add_text(line, color=(0, 0, 0, 255))
+
+            if severity >= logging.ERROR:
+                theme = style.notification_error_theme
+            elif severity >= logging.WARNING:
+                theme = style.notification_warning_theme
+            else:
+                theme = style.notification_info_theme
+
+            dpg.bind_item_theme(note, theme)
+
+        dpg.split_frame(delay=64)
+
+        w = dpg.get_item_width(note)
+        h = dpg.get_item_height(note)
+        pos = (
+            dpg.get_viewport_width() - w - 50,
+            dpg.get_viewport_height() - h - 50,
+        )
+        dpg.configure_item(note, pos=pos)
+
+        def remove_notification():
+            time.sleep(2.0)
+            dpg.delete_item(note)
+
+        Thread(target=remove_notification, daemon=True).start()
+
     def _do_load_from_file(self, file_path: str):
+        undo_manager.clear()
+        self.alias_manager.clear()
         self.beh = HavokBehavior(file_path)
         self._set_menus_enabled(True)
 
@@ -96,6 +156,16 @@ class BehaviorEditor(GraphEditor):
 
         dpg.add_separator()
         self._create_dpg_menu()
+
+        with dpg.handler_registry():
+            dpg.add_key_press_handler(dpg.mvKey_None, callback=self._on_key_press)
+
+    def _on_key_press(self, sender, key: int) -> None:
+        if dpg.is_key_down(dpg.mvKey_ModCtrl):
+            if key == dpg.mvKey_Z:
+                self.undo()
+            elif key == dpg.mvKey_Y:
+                self.redo
 
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
@@ -174,7 +244,14 @@ class BehaviorEditor(GraphEditor):
     def on_node_selected(self, node: Node) -> None:
         pass
 
-    def on_update_pointer(self, widget: str, record: HkbRecord, pointer: HkbPointer, old_value: str, new_value: str) -> None:
+    def on_update_pointer(
+        self,
+        widget: str,
+        record: HkbRecord,
+        pointer: HkbPointer,
+        old_value: str,
+        new_value: str,
+    ) -> None:
         # Update the graph first
         try:
             self.graph.add_edge(record.object_id, new_value)
@@ -221,9 +298,17 @@ class BehaviorEditor(GraphEditor):
         elif isinstance(value, HkbArray):
             # TODO label_color
             type_name = self.beh.type_registry.get_name(value.type_id)
-            if type_name in ("hkVector4", "hkVector4f", "hkQuaternion", "hkQuaternionf"):
+            if type_name in (
+                "hkVector4",
+                "hkVector4f",
+                "hkQuaternion",
+                "hkQuaternionf",
+            ):
                 self._create_attribute_widget_vector4(
-                    source_record, value, path, tag,
+                    source_record,
+                    value,
+                    path,
+                    tag,
                 )
 
             else:
@@ -273,11 +358,7 @@ class BehaviorEditor(GraphEditor):
 
         def on_pointer_select(sender, new_value: str, ptr_widget: str):
             self.on_update_pointer(
-                ptr_widget, 
-                source_record, 
-                pointer, 
-                pointer.get_value(), 
-                new_value
+                ptr_widget, source_record, pointer, pointer.get_value(), new_value
             )
 
             # If the binding set pointer changed we should regenerate all attribute widgets
@@ -525,14 +606,15 @@ class BehaviorEditor(GraphEditor):
             )
 
             if isinstance(value, HkbPointer):
+
                 def on_new_object(sender, object: HkbRecord, user_data):
                     with undo_manager.combine():
                         self.beh.add_object(object)
                         self.on_update_pointer(
-                            widget, 
-                            source_record, 
-                            value, 
-                            value.get_value(), 
+                            widget,
+                            source_record,
+                            value,
+                            value.get_value(),
                             object.object_id,
                         )
 
@@ -676,11 +758,7 @@ class BehaviorEditor(GraphEditor):
         )
 
     def open_animation_editor(self):
-        edit_simple_array_dialog(
-            self.beh, 
-            self.beh.animations, 
-            "Edit Animations"
-        )
+        edit_simple_array_dialog(self.beh, self.beh.animations, "Edit Animations")
 
     def open_array_aliases_editor(self):
         # TODO open dialog, update alias manager
@@ -698,10 +776,15 @@ class BehaviorEditor(GraphEditor):
             except ValueError as e:
                 self.logger.error("Loading bone names failed: %s", e, exc_info=True)
 
-    def open_create_object_dialog(self, type_id: str, callback: Callable[[str, int, Any], None], user_data: Any = None) -> None:
+    def open_create_object_dialog(
+        self,
+        type_id: str,
+        callback: Callable[[str, int, Any], None],
+        user_data: Any = None,
+    ) -> None:
         # TODO create a proper dialog here
         obj = HkbRecord.new(self.beh, type_id, object_id=self.beh.new_id())
-        
+
         if "name" in obj.fields:
             obj["name"] = "<new object>"
 

@@ -99,6 +99,10 @@ class UndoManager:
         self.index = 0
         self._combining: ComboAction = None
 
+    def clear(self) -> None:
+        self.history = deque(maxlen=self.history.maxlen)
+        self.index = 0
+
     def undo(self) -> None:
         if not self.history:
             raise ValueError("Undo history is empty")

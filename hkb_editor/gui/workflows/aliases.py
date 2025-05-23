@@ -44,6 +44,9 @@ class AliasManager:
     def __init__(self):
         self.aliases: list[tuple[str, AliasMap]] = []
 
+    def clear(self) -> None:
+        self.aliases = []
+
     def get_attribute_alias(self, record: HkbRecord, path: str) -> str:
         for am in self.aliases:
             alias = am.match(record, path)
