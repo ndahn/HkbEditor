@@ -30,6 +30,9 @@ class ComboAction(UndoAction):
         for a in self.actions:
             a.redo()
 
+    def __str__(self):
+        return str([str(a) for a in self.actions])
+
 
 class UpdateValueAction(UndoAction):
     def __init__(self, handler: XmlValueHandler, old_value: Any, new_value: Any):
@@ -43,6 +46,9 @@ class UpdateValueAction(UndoAction):
 
     def redo(self):
         self.handler.set_value(self.new_value)
+
+    def __str__(self):
+        return f"{self.old_value} -> {self.new_value}"
 
 
 class UpdateArrayItem(UndoAction):
@@ -79,6 +85,9 @@ class UpdateArrayItem(UndoAction):
         else:
             self.array[self.index].set_value(self.new_value)
 
+    def __str__(self):
+        return f"[{self.index}]: {self.old_value} -> {self.new_value}"
+
 
 class AddBehaviorObjectAction(UndoAction):
     def __init__(self, behavior: HavokBehavior, object: HkbRecord):
@@ -92,33 +101,50 @@ class AddBehaviorObjectAction(UndoAction):
     def redo(self):
         self.behavior.add_object(self.object)
 
+    def __str__(self):
+        return f"new object {self.object.object_id}"
+
 
 class UndoManager:
     def __init__(self, maxlen: int = 100):
         self.history: deque[UndoAction] = deque(maxlen=maxlen)
-        self.index = 0
+        self.index = -1
         self._combining: ComboAction = None
 
     def clear(self) -> None:
         self.history = deque(maxlen=self.history.maxlen)
-        self.index = 0
+        self.index = -1
+
+    def top(self) -> None:
+        if not self.history:
+            return None
+
+        return self.history[self.index]
+
+    def can_undo(self) -> None:
+        return self.history and self.index >= 0
+
+    def can_redo(self) -> None:
+        return self.history and self.index + 1 < len(self.history)
 
     def undo(self) -> None:
-        if not self.history:
-            raise ValueError("Undo history is empty")
+        if not self.can_undo():
+            raise ValueError("Nothing to undo")
 
+        # Index points at the current action to be undone
         action = self.history[self.index]
         action.undo()
         self.index -= 1
 
     def redo(self) -> None:
-        if not self.history:
-            raise ValueError("Undo history is empty")
+        if not self.can_redo():
+            raise ValueError("Nothing to redo")
 
         if self.index >= len(self.history):
             return
 
-        action = self.history[self.index]
+        # Index points at the positoin before the action to be redone
+        action = self.history[self.index + 1]
         action.redo()
         self.index += 1
 

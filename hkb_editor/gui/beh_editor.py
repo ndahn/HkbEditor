@@ -133,8 +133,8 @@ class BehaviorEditor(GraphEditor):
         dpg.add_separator()
 
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
-            dpg.add_menu_item(label="Undo (ctrl-z)", enabled=False, callback=self.undo)
-            dpg.add_menu_item(label="Redo (ctrl-y)", enabled=False, callback=self.redo)
+            dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
+            dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
             dpg.add_separator()
             dpg.add_menu_item(label="Load bone names...", callback=self.load_bone_names)
             dpg.add_separator()
@@ -157,15 +157,12 @@ class BehaviorEditor(GraphEditor):
         dpg.add_separator()
         self._create_dpg_menu()
 
-        with dpg.handler_registry():
-            dpg.add_key_press_handler(dpg.mvKey_None, callback=self._on_key_press)
-
     def _on_key_press(self, sender, key: int) -> None:
         if dpg.is_key_down(dpg.mvKey_ModCtrl):
             if key == dpg.mvKey_Z:
                 self.undo()
             elif key == dpg.mvKey_Y:
-                self.redo
+                self.redo()
 
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
@@ -173,6 +170,10 @@ class BehaviorEditor(GraphEditor):
         func(f"{self.tag}_menu_file_save_as")
         func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_workflows")
+
+        with dpg.handler_registry():
+            dpg.add_key_press_handler(dpg.mvKey_None, callback=self._on_key_press)
+
 
     def get_supported_file_extensions(self):
         return {"Behavior XML": "*.xml"}
@@ -192,7 +193,6 @@ class BehaviorEditor(GraphEditor):
 
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
         obj: HkbRecord = self.beh.objects[node.id]
-        # TODO return v instead of v.get_value()
         return {k: v for k, v in obj.get_value().items()}
 
     def get_node_frontpage(self, node_id: str) -> list[str]:
@@ -285,7 +285,6 @@ class BehaviorEditor(GraphEditor):
             label_color = style.green
 
         if isinstance(value, HkbRecord):
-            # TODO label_color
             with table_tree_node(
                 label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
             ):
@@ -296,7 +295,6 @@ class BehaviorEditor(GraphEditor):
                     )
 
         elif isinstance(value, HkbArray):
-            # TODO label_color
             type_name = self.beh.type_registry.get_name(value.type_id)
             if type_name in (
                 "hkVector4",
@@ -536,12 +534,28 @@ class BehaviorEditor(GraphEditor):
         dpg.set_value(sender, new_value)
 
     def undo(self) -> None:
-        # TODO show notification
+        if not undo_manager.can_undo():
+            return
+
+        self.notification(f"Undo: {undo_manager.top()}")
         undo_manager.undo()
 
+        # TODO so expensive....
+        self._regenerate_canvas()
+        self._clear_attributes()
+        self._update_attributes(self.selected_node)
+
     def redo(self) -> None:
-        # TODO show notification
+        if not undo_manager.can_redo():
+            return
+
+        self.notification(f"Redo: {undo_manager.top()}")
         undo_manager.redo()
+
+        # TODO so expensive....
+        self._regenerate_canvas()
+        self._clear_attributes()
+        self._update_attributes(self.selected_node)
 
     def _create_attribute_menu(
         self,
@@ -562,7 +576,6 @@ class BehaviorEditor(GraphEditor):
         is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
 
         if is_simple:
-            # TODO add to common menu with copy/cut/paste
             bound_attributes = get_bound_attributes(self.beh, source_record)
             bound_var_idx = bound_attributes.get(path, -1)
 

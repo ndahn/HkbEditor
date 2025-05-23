@@ -745,6 +745,9 @@ class GraphEditor:
         dpg.delete_item(f"{self.tag}_attributes_table", children_only=True, slot=1)
 
     def _update_attributes(self, node: Node) -> None:
+        if node is None:
+            return
+            
         dpg.set_value(f"{self.tag}_attributes_title", node.id)
 
         # Columns will be hidden if header_row=False and no rows exist initially
