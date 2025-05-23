@@ -35,7 +35,7 @@ class Tagfile:
             int(k[len(base) :]) for k in self.objects.keys() if k.startswith(base)
         )
 
-        return f"base{last_key + offset}"
+        return f"{base}{last_key + offset}"
 
     def add_object(self, record: "HkbRecord", id: str = None) -> str:
         if id is None:

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 from xml.etree import ElementTree as ET
 from dearpygui import dearpygui as dpg
 import pyperclip
@@ -174,6 +174,19 @@ class BehaviorEditor(GraphEditor):
     def on_node_selected(self, node: Node) -> None:
         pass
 
+    def on_update_pointer(self, widget: str, record: HkbRecord, pointer: HkbPointer, old_value: str, new_value: str) -> None:
+        # Update the graph first
+        try:
+            self.graph.add_edge(record.object_id, new_value)
+            self.graph.remove_edge(record.object_id, old_value)
+        except:
+            pass
+
+        self.on_attribute_update(widget, new_value, pointer)
+
+        # Changing a pointer will change the rendered graph
+        self._regenerate_canvas()
+
     def _add_attribute_row_contents(self, attribute: str, val: Any, node: Node) -> None:
         obj = self.beh.objects.get(node.id)
         self._create_attribute_widget(obj, val, attribute)
@@ -253,17 +266,13 @@ class BehaviorEditor(GraphEditor):
         attribute = path.split("/")[-1]
 
         def on_pointer_select(sender, new_value: str, ptr_widget: str):
-            # Update the graph first
-            try:
-                self.graph.add_edge(source_record.object_id, new_value)
-                self.graph.remove_edge(source_record.object_id, pointer.get_value())
-            except:
-                pass
-
-            self.on_attribute_update(ptr_widget, new_value, pointer)
-
-            # Changing a pointer will change the rendered graph
-            self._regenerate_canvas()
+            self.on_update_pointer(
+                ptr_widget, 
+                source_record, 
+                pointer, 
+                pointer.get_value(), 
+                new_value
+            )
 
             # If the binding set pointer changed we should regenerate all attribute widgets
             vbs_type_id = self.beh.type_registry.find_type_by_name(
@@ -296,8 +305,6 @@ class BehaviorEditor(GraphEditor):
         path: str,
         tag: str = 0,
     ) -> str:
-        attribute = path.split("/")[-1]
-
         def delete_last_item(sender, app_data, user_data) -> None:
             # TODO this may invalidate variable bindings!
             undo_manager.on_update_array_item(array, -1, array[-1], None)
@@ -490,14 +497,24 @@ class BehaviorEditor(GraphEditor):
                 user_data=(widget, value),
             )
 
-            # TODO disabled until implemented
-            # if isinstance(value, HkbPointer):
-            #     dpg.add_separator()
-            #     dpg.add_selectable(
-            #         label="Create object...",
-            #         callback=lambda s, a, u: self.open_create_object_dialog(*u),
-            #         user_data=(value.subtype, self.on_attribute_update, value)
-            #     )
+            if isinstance(value, HkbPointer):
+                def on_new_object(sender, object: HkbRecord, user_data):
+                    with undo_manager.combine():
+                        self.beh.add_object(object)
+                        self.on_update_pointer(
+                            widget, 
+                            source_record, 
+                            value, 
+                            value.get_value(), 
+                            object.object_id,
+                        )
+
+                dpg.add_separator()
+                dpg.add_selectable(
+                    label="New object",
+                    callback=lambda s, a, u: self.open_create_object_dialog(*u),
+                    user_data=(value.subtype, on_new_object, None),
+                )
 
             if is_simple:
                 set_bindable_attribute_state(self.beh, widget, bound_var_idx)
@@ -654,9 +671,15 @@ class BehaviorEditor(GraphEditor):
             except ValueError as e:
                 self.logger.error("Loading bone names failed: %s", e, exc_info=True)
 
-    def open_create_object_dialog(self, type_id: str, callback, user_data: Any) -> None:
-        # TODO
-        pass
+    def open_create_object_dialog(self, type_id: str, callback: Callable[[str, int, Any], None], user_data: Any = None) -> None:
+        # TODO create a proper dialog here
+        obj = HkbRecord.new(self.beh, type_id, object_id=self.beh.new_id())
+        
+        if "name" in obj.fields:
+            obj["name"] = "<new object>"
+
+        if callback:
+            callback(None, obj, user_data)
 
     def create_cmsg(self):
         # TODO a wizard that lets the user create a new generator and attach it to another node

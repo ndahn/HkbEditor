@@ -164,31 +164,28 @@ class HkbArray(XmlValueHandler):
         cls,
         tagfile: Tagfile,
         type_id: str,
-        elem_type_id: str,
         values: list[XmlValueHandler] = None,
     ) -> "HkbArray":
         if values is None:
             values = []
 
+        elem_type_id = tagfile.type_registry.get_subtype(type_id)
         elem = ET.Element("array", count=len(values), elementtypeid=elem_type_id)
         elem.extend(item.element for item in values)
 
-        return HkbArray(tagfile, elem, type_id, elem_type_id)
+        return HkbArray(tagfile, elem, type_id)
 
     def __init__(
         self,
         tagfile: Tagfile,
         element: ET.Element,
         type_id: str,
-        elem_type_id: str = None,
     ):
         if element.tag != "array":
             raise ValueError(f"Invalid element {element}")
 
         super().__init__(tagfile, element, type_id)
-        self.element_type_id = (
-            elem_type_id if elem_type_id else element.attrib["elementtypeid"]
-        )
+        self.element_type_id = element.attrib["elementtypeid"]
 
     @property
     def _count(self) -> int:
@@ -296,14 +293,15 @@ class HkbRecord(XmlValueHandler):
                 record_type_id
             ).items():
                 field_elem = ET.SubElement(parent_elem, "field", name=fname)
-                field_val = get_value_handler(tagfile.type_registry, ftype).new(ftype)
+                Handler = get_value_handler(tagfile.type_registry, ftype)
+                field_val = Handler.new(tagfile, ftype)
 
                 if isinstance(field_val, HkbRecord):
                     create_fields(field_val.element, ftype)
 
                 field_elem.append(field_val.element)
 
-        create_fields(tagfile, elem, type_id)
+        create_fields(elem, type_id)
 
         if values:
             for key, val in values.items():
