@@ -108,7 +108,7 @@ class GraphEditor:
     def get_roots(self) -> list[Node]:
         return []
 
-    def make_node(self, node_id) -> None:
+    def make_node(self, node_id: str) -> None:
         pass
 
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
@@ -598,16 +598,7 @@ class GraphEditor:
 
         node.folded = True
 
-    def _create_node(self, node_id: str, parent_id: str, level: int) -> Node:
-        if node_id in self.visible_nodes:
-            return self.visible_nodes[node_id]
-
-        # TODO this layout algorithm works, but has various issues:
-        #  - only the last instance of a node will be used
-        #  - will remove the user's path if a shorter path exists
-        # 
-        # It would be better to do one layout using graphviz, then hide and show 
-        # nodes as required
+    def _get_pos_for_node(self, node_id: str, parent_id: str, level: int) -> tuple[float, float]:
         zoom_factor = self.layout.zoom_factor**self.zoom
 
         if level == 0:
@@ -637,6 +628,21 @@ class GraphEditor:
             else:
                 py = self.layout.node0_margin[1]
 
+        return px, py
+
+    def _create_node(self, node_id: str, parent_id: str, level: int) -> Node:
+        if node_id in self.visible_nodes:
+            return self.visible_nodes[node_id]
+
+        # TODO this layout algorithm works, but has various issues:
+        #  - only the last instance of a node will be used
+        #  - will remove the user's path if a shorter path exists
+        # 
+        # It would be better to do one layout using graphviz, then hide and show 
+        # nodes as required
+        zoom_factor = self.layout.zoom_factor**self.zoom
+
+        px, py = self._get_pos_for_node(node_id, parent_id, level)
         margin = self.layout.text_margin
         lines = self.get_node_frontpage(node_id)
         
@@ -747,7 +753,7 @@ class GraphEditor:
     def _update_attributes(self, node: Node) -> None:
         if node is None:
             return
-            
+
         dpg.set_value(f"{self.tag}_attributes_title", node.id)
 
         # Columns will be hidden if header_row=False and no rows exist initially

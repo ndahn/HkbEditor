@@ -1,3 +1,4 @@
 *.xml
+user_layout.ini
 dpg_demo.py
 __pycache__

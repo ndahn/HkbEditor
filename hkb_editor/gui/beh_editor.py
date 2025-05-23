@@ -663,7 +663,7 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_separator()
                 dpg.add_selectable(
                     label="Bind Variable",
-                    callback=lambda s, a, u: _bind_variable,
+                    callback=lambda s, a, u: _bind_variable(s, a, u),
                     user_data=(
                         self.beh,
                         source_record,
@@ -676,7 +676,7 @@ class BehaviorEditor(GraphEditor):
 
                 dpg.add_selectable(
                     label="Clear binding",
-                    callback=lambda s, a, u: _unbind_variable,
+                    callback=lambda s, a, u: _unbind_variable(s, a, u),
                     user_data=(self.beh, source_record, widget, path),
                 )
 
