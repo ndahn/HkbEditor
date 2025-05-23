@@ -220,25 +220,31 @@ class BehaviorEditor(GraphEditor):
 
         elif isinstance(value, HkbArray):
             # TODO label_color
-            # TODO special handlers for e.g. hkVector4, HkQuaternion, etc.
-            with table_tree_node(
-                label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
-            ):
-                widget = get_row_node_item(tag)
-                for idx, subval in enumerate(value):
-                    self._create_attribute_widget(
-                        source_record, subval, f"{path}:{idx}"
-                    )
-                    # self._create_attribute_widget_array_item(
-                    #    source_record, subval, f"{path}:{idx}"
-                    # )
-                with table_tree_leaf(
-                    table=f"{self.tag}_attributes_table",
-                    tag=f"{self.tag}_attribute_{path}_arraybuttons",
+            type_name = self.beh.type_registry.get_name(value.type_id)
+            if type_name in ("hkVector4", "hkVector4f", "hkQuaternion", "hkQuaternionf"):
+                self._create_attribute_widget_vector4(
+                    source_record, value, path, tag,
+                )
+
+            else:
+                with table_tree_node(
+                    label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
                 ):
-                    self._create_attribute_widget_array_buttons(
-                        source_record, value, path
-                    )
+                    widget = get_row_node_item(tag)
+                    for idx, subval in enumerate(value):
+                        self._create_attribute_widget(
+                            source_record, subval, f"{path}:{idx}"
+                        )
+                        # self._create_attribute_widget_array_item(
+                        #    source_record, subval, f"{path}:{idx}"
+                        # )
+                    with table_tree_leaf(
+                        table=f"{self.tag}_attributes_table",
+                        tag=f"{self.tag}_attribute_{path}_arraybuttons",
+                    ):
+                        self._create_attribute_widget_array_buttons(
+                            source_record, value, path
+                        )
 
         elif isinstance(value, HkbPointer):
             with table_tree_leaf(
@@ -295,6 +301,27 @@ class BehaviorEditor(GraphEditor):
                 callback=lambda s, a, u: select_pointer_dialog(*u),
                 user_data=(self.beh, on_pointer_select, pointer, ptr_input),
             )
+
+        return group
+
+    def _create_attribute_widget_vector4(
+        self,
+        source_record: HkbRecord,
+        array: HkbArray,
+        path: str,
+        tag: str = 0,
+    ) -> str:
+        attribute = path.split("/")[-1]
+
+        with dpg.group(filter_key=attribute, tag=tag) as group:
+            for i, comp in zip(range(4), "xyzw"):
+                value = array[i].get_value()
+                dpg.add_input_double(
+                    label=comp,
+                    default_value=value,
+                    callback=self.on_attribute_update,
+                    user_data=array[i],
+                )
 
         return group
 
