@@ -395,7 +395,7 @@ class GraphEditor:
                 dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
 
             dpg.set_viewport_resize_callback(self._on_resize)
-            self._on_resize()
+            #self._on_resize()
 
     # Callbacks
     def get_node_at_pos(self, x: float, y: float, *, absolute: bool = True) -> Node:
@@ -470,12 +470,9 @@ class GraphEditor:
         self.set_zoom(self.zoom_level - wheel_delta, zoom_point)
 
     def _on_resize(self):
-        dpg.set_item_height(f"{self.tag}_canvas", dpg.get_viewport_height() - 50)
-
-        # w = dpg.get_viewport_width() - 270
-        # dpg.set_item_width(f"{self.tag}_roots_window", 200)
-        # dpg.set_item_width(f"{self.tag}_canvas", int(w * 0.8))
-        # dpg.set_item_width(f"{self.tag}_attributes_table", int(w * 0.2))
+        cw, ch = dpg.get_item_rect_size(f"{self.tag}_canvas_window")
+        dpg.set_item_width(f"{self.tag}_canvas", cw)
+        dpg.set_item_height(f"{self.tag}_canvas", ch)
 
     def set_origin(self, new_x: float, new_y: float) -> None:
         self.origin = (new_x, new_y)
@@ -528,6 +525,10 @@ class GraphEditor:
         )
 
     def zoom_show_all(self, *, limits: bool = True) -> None:
+        if not self.visible_nodes:
+            self.set_zoom(0, (0.0, 0.0))
+            return
+
         bbox = self.get_canvas_content_bbox()
         center_x = bbox[0] + bbox[2] / 2
         center_y = bbox[1] + bbox[3] / 2
