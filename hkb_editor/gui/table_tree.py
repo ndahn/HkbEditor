@@ -1,4 +1,4 @@
-from typing import Generator
+from typing import Generator, Callable, Any
 from contextlib import contextmanager
 import dearpygui.dearpygui as dpg
 
@@ -20,7 +20,7 @@ def is_row_index_visible(table, row_level: int, row_idx: int = -1) -> bool:
     for parent in reversed(rows):
         if not is_foldable_row(parent):
             return True
-        
+
         _, parent_level, parent_node = dpg.get_item_user_data(parent)
         if parent_node is not None and parent_level < row_level:
             return dpg.get_value(parent_node)
@@ -49,7 +49,7 @@ def on_row_clicked(sender, value, user_data):
         # We don't want to highlight the selectable as "selected"
         dpg.set_value(sender, False)
 
-        table, row = user_data
+        table, row, callback = user_data
         _, root_level, node = dpg.get_item_user_data(row)
         is_leaf = node is not None
 
@@ -57,6 +57,9 @@ def on_row_clicked(sender, value, user_data):
         if is_leaf:
             is_expanded = not dpg.get_value(node)
             dpg.set_value(node, is_expanded)
+
+        if callback:
+            callback(row, is_expanded, None)
 
         # All children *beyond* this level (but not on this level) will be hidden
         hide_level = 10000 if is_expanded else root_level
@@ -84,7 +87,12 @@ def on_row_clicked(sender, value, user_data):
 
 @contextmanager
 def table_tree_node(
-    label: str, *, table: str = None, folded: bool = True, tag: str = 0
+    label: str,
+    *,
+    table: str = None,
+    folded: bool = True,
+    tag: str = 0,
+    callback: Callable[[str, bool, Any], None] = None,
 ) -> Generator[str, None, None]:
     if not table:
         table = dpg.top_container_stack()
@@ -94,17 +102,21 @@ def table_tree_node(
 
     cur_level = dpg.get_item_user_data(table) or 0
     tree_node = f"{tag}_foldable_row_node"
+    selectable = f"{tag}_foldable_row_selectable"
     show = is_row_index_visible(table, cur_level)
 
     with dpg.table_row(
-        parent=table, 
+        parent=table,
         tag=tag,
-        user_data=(_foldable_row_sentinel, cur_level, tree_node), 
+        user_data=(_foldable_row_sentinel, cur_level, tree_node),
         show=show,
     ) as row:
         with dpg.group(horizontal=True, horizontal_spacing=0):
             dpg.add_selectable(
-                span_columns=True, callback=on_row_clicked, user_data=(table, row)
+                span_columns=True,
+                callback=on_row_clicked,
+                user_data=(table, row, callback),
+                tag=selectable,
             )
             dpg.add_tree_node(
                 tag=tree_node,
@@ -135,7 +147,7 @@ def table_tree_leaf(table: str = None, tag: str = 0) -> Generator[str, None, Non
 
     try:
         with dpg.table_row(
-            parent=table, 
+            parent=table,
             tag=tag,
             user_data=(_foldable_row_sentinel, cur_level, None),
             show=show,

@@ -154,6 +154,12 @@ class BehaviorEditor(GraphEditor):
                 label="Create CMSG...", enabled=False, callback=self.create_cmsg
             )
 
+        # TODO persist settings
+        with dpg.menu(label="Settings", tag=f"{self.tag}_menu_settings"):
+            dpg.add_menu_item(
+                label="Invert Zoom", check=True, tag=f"{self.tag}_settings_invert_zoom"
+            )
+
         dpg.add_separator()
         self._create_dpg_menu()
 
@@ -164,6 +170,12 @@ class BehaviorEditor(GraphEditor):
             elif key == dpg.mvKey_Y:
                 self.redo()
 
+    def _on_mouse_wheel(self, sender, wheel_delta):
+        if dpg.get_value(f"{self.tag}_settings_invert_zoom"):
+            wheel_delta = -wheel_delta
+        
+        super()._on_mouse_wheel(sender, wheel_delta)
+
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
         func(f"{self.tag}_menu_file_save")
@@ -173,7 +185,6 @@ class BehaviorEditor(GraphEditor):
 
         with dpg.handler_registry():
             dpg.add_key_press_handler(dpg.mvKey_None, callback=self._on_key_press)
-
 
     def get_supported_file_extensions(self):
         return {"Behavior XML": "*.xml"}
@@ -217,21 +228,28 @@ class BehaviorEditor(GraphEditor):
         if not obj:
             return []
 
-        type_name = self.beh.type_registry.get_name(obj.type_id)
+        # TODO more actions
+        #type_name = self.beh.type_registry.get_name(obj.type_id)
+        actions = [
+            "Copy ID",
+            #"Copy Node",
+            #"-",
+            #"Hide",
+        ]
 
-        # TODO show useful node actions
-        # "hkbStateMachine"
-        # "hkbVariableBindingSet"
-        # "hkbLayerGenerator"
-        # "CustomManualSelectorGenerator":
-        # "hkbClipGenerator"
-        # "hkbScriptGenerator"
+        if obj.get_field("name", None) is not None:
+            actions.append("Copy Name")
 
-        return []
+        return actions
 
-    def on_node_menu_item_selected(node: Node, selected_item: str) -> None:
-        # TODO implement useful node actions
-        pass
+    def on_node_menu_item_selected(self, node: Node, selected_item: str) -> None:
+        if selected_item == "Copy ID":
+            self._copy_to_clipboard(node.id)
+        elif selected_item == "Copy Name":
+            obj = self.beh.objects[node.id]
+            self._copy_to_clipboard(obj["name"])
+        else:
+            self.logger.warning("Not implemented yet")
 
     def get_canvas_menu_items(self):
         # TODO
@@ -310,6 +328,7 @@ class BehaviorEditor(GraphEditor):
                 )
 
             else:
+                # TODO add callback and create items on demand
                 with table_tree_node(
                     label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
                 ):
@@ -709,14 +728,7 @@ class BehaviorEditor(GraphEditor):
 
         widget, _ = user_data
         val = dpg.get_value(widget)
-
-        try:
-            pyperclip.copy(str(val))
-        except:
-            pass
-
-        # Pyperclip (or rather copy/paste) can be a bit finnicky, so
-        self.logger.info("Copied value:\n%s", val)
+        self._copy_to_clipboard(val)
 
     def _copy_value_xml(
         self, sender, app_data, user_data: tuple[str, XmlValueHandler]
@@ -726,13 +738,7 @@ class BehaviorEditor(GraphEditor):
 
         _, value = user_data
         val = value.xml().strip().strip("\n")
-
-        try:
-            pyperclip.copy(val)
-        except:
-            pass
-
-        self.logger.info("Copied value:\n%s", val)
+        self._copy_to_clipboard(str(val))
 
     def _paste_value(
         self, sender, app_data, user_data: tuple[str, XmlValueHandler]
@@ -754,6 +760,14 @@ class BehaviorEditor(GraphEditor):
         except Exception as e:
             self.logger.error("Paste value to %s failed: %s", widget, e)
             return
+
+    def _copy_to_clipboard(self, data: str):
+        try:
+            pyperclip.copy(data)
+        except:
+            pass
+
+        self.logger.info("Copied value:\n%s", data)
 
     # Fleshing out common use cases here
     def open_variable_editor(self):

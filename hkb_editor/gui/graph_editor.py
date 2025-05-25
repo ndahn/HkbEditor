@@ -376,11 +376,17 @@ class GraphEditor:
                         dpg.add_table_column(label="Key", width_fixed=True)
 
             with dpg.handler_registry():
-                dpg.add_mouse_down_handler(
-                    dpg.mvMouseButton_Left, callback=self._on_mouse_down
+                dpg.add_mouse_release_handler(
+                    dpg.mvMouseButton_Left, callback=self._on_left_click
                 )
                 dpg.add_mouse_release_handler(
-                    dpg.mvMouseButton_Left, callback=self._on_mouse_release
+                    dpg.mvMouseButton_Right, callback=self._on_right_click
+                )
+                dpg.add_mouse_down_handler(
+                    dpg.mvMouseButton_Middle, callback=self._on_drag_start
+                )
+                dpg.add_mouse_release_handler(
+                    dpg.mvMouseButton_Middle, callback=self._on_drag_release
                 )
                 dpg.add_mouse_drag_handler(callback=self._on_mouse_drag)
                 dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
@@ -389,40 +395,65 @@ class GraphEditor:
             self._on_resize()
 
     # Callbacks
-    def _on_mouse_down(self) -> None:
+    def get_node_at_pos(self, x: float, y: float, *, absolute: bool = True) -> Node:
+        if absolute:
+            ox, oy = self.origin
+            x = x - ox
+            y = y - oy
+
+        for node in self.visible_nodes.values():
+            if node.contains(x, y):
+                return node
+
+        return None
+
+    def _on_left_click(self, sender, button: int) -> None:
+        if not dpg.is_item_hovered(f"{self.tag}_canvas"):
+            return
+
+        mx, my = dpg.get_drawing_mouse_pos()
+        node = self.get_node_at_pos(mx, my)
+
+        if not node:
+            self._deselect_active_node()
+        elif self.selected_node != node:
+            self._select_node(node)
+
+    def _on_right_click(self, sender, button: int) -> None:
+        if not dpg.is_item_hovered(f"{self.tag}_canvas"):
+            return
+
+        mx, my = dpg.get_drawing_mouse_pos()
+        node = self.get_node_at_pos(mx, my)
+
+        if node:
+            if node != self.selected_node:
+                self._select_node(node)
+
+            self._open_node_menu(node)
+        else:
+            self._open_canvas_menu()
+
+    def _on_drag_start(self) -> None:
         if dpg.is_item_hovered(f"{self.tag}_canvas"):
-            self.mouse_down_pos = dpg.get_drawing_mouse_pos()
-            self.mouse_down = True
+            self.dragging = True
 
     def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
-        if not self.mouse_down:
+        if not self.dragging:
             return
         
         _, delta_x, delta_y = mouse_delta
+        self.last_drag = (delta_x, delta_y)
+        self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
 
-        if not self.dragging:
-            dist = ((delta_x - self.mouse_down_pos[0])**2 + (delta_y - self.mouse_down_pos[1])**2)**0.5
-
-            if dist > 5:
-                self.dragging = True
-
-        if self.dragging:
-            self.last_drag = (delta_x, delta_y)
-            self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
-
-    def _on_mouse_release(self, sender, mouse_button) -> None:
-        if self.dragging:
-            self.set_origin(
-                self.origin[0] + self.last_drag[0], self.origin[1] + self.last_drag[1]
-            )
-        elif self.mouse_down:
-            self._on_mouse_click(sender, mouse_button)
+    def _on_drag_release(self, sender, mouse_button) -> None:
+        self.set_origin(
+            self.origin[0] + self.last_drag[0], self.origin[1] + self.last_drag[1]
+        )
 
         self.last_drag = (0.0, 0.0)
         self.dragging = False
-        self.mouse_down = False
-        self.mouse_down_pos = (0.0, 0.0)
-
+        
     def _on_mouse_wheel(self, sender, wheel_delta: int):
         if not dpg.is_item_hovered(f"{self.tag}_canvas"):
             return
@@ -433,28 +464,6 @@ class GraphEditor:
 
         self._regenerate_canvas()
     
-    def _on_mouse_click(self, sender, button: int) -> None:
-        mx, my = dpg.get_drawing_mouse_pos()
-        ox, oy = self.origin
-
-        for node in self.visible_nodes.values():
-            if node.contains(mx - ox, my - oy):
-                if button == dpg.mvMouseButton_Left:
-                    if self.selected_node != node:
-                        self._select_node(node)
-
-                elif button == dpg.mvMouseButton_Right:
-                    self._open_node_menu(node)
-
-                break
-        else:
-            if button == dpg.mvMouseButton_Left:
-                self._deselect_active_node()
-            elif button == dpg.mvMouseButton_Right:
-                self._open_canvas_menu()
-            elif button == dpg.mvMouseButton_Middle:
-                self.set_origin(0.0, 0.0)
-
     def _on_resize(self):
         dpg.set_item_height(f"{self.tag}_canvas", dpg.get_viewport_height() - 50)
 
@@ -550,7 +559,7 @@ class GraphEditor:
         dpg.configure_item(f"{node.id}_box", color=color)
 
     def _open_node_menu(self, node: Node) -> None:
-        def on_item_select(sender, app_data, selected_item: str):
+        def on_item_selected(sender, app_data, selected_item: str):
             dpg.set_value(sender, False)
             dpg.delete_item(f"{self.tag}_{node.id}_menu")
             self.on_node_menu_item_selected(node, selected_item)
@@ -558,14 +567,16 @@ class GraphEditor:
         with dpg.window(
             popup=True,
             min_size=(100, 20),
-            tag=f"{node.id}_menu",
             on_close=lambda: dpg.delete_item(f"{node.id}_menu"),
         ):
-            dpg.add_text(node.id)
+            dpg.add_text(node.id, color=style.blue)
             dpg.add_separator()
 
             for item in self.get_node_menu_items(node):
-                dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
+                if item == "-":
+                    dpg.add_separator()
+                else:
+                    dpg.add_selectable(label=item, callback=on_item_selected, user_data=item)
 
     def _open_canvas_menu(self) -> None:
         def on_item_select(sender, app_data, selected_item: str):
