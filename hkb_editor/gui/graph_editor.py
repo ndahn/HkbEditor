@@ -3,6 +3,7 @@ import sys
 from os import path
 import shutil
 from time import time
+import math
 from logging import getLogger
 from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
@@ -95,11 +96,15 @@ class GraphEditor:
         self.mouse_down = False
         self.dragging = False
         self.last_drag: tuple[float, float] = (0.0, 0.0)
-        self.zoom = 0
+        self.zoom_level = 0
         self.zoom_min = -3
         self.zoom_max = 3
 
         self._setup_content()
+
+    @property
+    def zoom(self) -> float:
+        return self.layout.zoom_factor**self.zoom_level
 
     # These should be implemented by subclasses
     def get_supported_file_extensions(self) -> dict[str, str]:
@@ -359,9 +364,7 @@ class GraphEditor:
                 # Child window is needed to fix table sizing
                 with dpg.child_window(border=False):
                     dpg.add_text(
-                        "", 
-                        tag=f"{self.tag}_attributes_title", 
-                        color=style.blue
+                        "", tag=f"{self.tag}_attributes_title", color=style.blue
                     )
                     with dpg.table(
                         delay_search=True,
@@ -396,12 +399,16 @@ class GraphEditor:
 
     # Callbacks
     def get_node_at_pos(self, x: float, y: float, *, absolute: bool = True) -> Node:
+        # TODO sometimes doesn't work, probably when zooming to fast
+        # Separate node drawing from creation, nodes should store x/y at zoom 0   
         if absolute:
             ox, oy = self.origin
             x = x - ox
             y = y - oy
 
         for node in self.visible_nodes.values():
+            # TODO Something like a b-tree might have better performance, 
+            # but so far this is not a bottleneck
             if node.contains(x, y):
                 return node
 
@@ -441,7 +448,7 @@ class GraphEditor:
     def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
         if not self.dragging:
             return
-        
+
         _, delta_x, delta_y = mouse_delta
         self.last_drag = (delta_x, delta_y)
         self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
@@ -453,17 +460,15 @@ class GraphEditor:
 
         self.last_drag = (0.0, 0.0)
         self.dragging = False
-        
+
     def _on_mouse_wheel(self, sender, wheel_delta: int):
         if not dpg.is_item_hovered(f"{self.tag}_canvas"):
             return
 
-        zoom_point = dpg.get_drawing_mouse_pos()
-        self.origin = (self.origin[0] + zoom_point[0], self.origin[1] + zoom_point[1])
-        self.zoom = min(max(self.zoom - wheel_delta, self.zoom_min), self.zoom_max)
+        mouse_pos = dpg.get_drawing_mouse_pos()
+        zoom_point = (self.origin[0] + mouse_pos[0], self.origin[1] + mouse_pos[1])
+        self.set_zoom(self.zoom_level - wheel_delta, zoom_point)
 
-        self._regenerate_canvas()
-    
     def _on_resize(self):
         dpg.set_item_height(f"{self.tag}_canvas", dpg.get_viewport_height() - 50)
 
@@ -481,6 +486,57 @@ class GraphEditor:
             f"{self.tag}_canvas_root",
             dpg.create_translation_matrix((px, py)),
         )
+
+    def set_zoom(
+        self,
+        zoom_level: int,
+        zoom_point: tuple[float, float] = None,
+        *,
+        limits: bool = True,
+    ) -> None:
+        if zoom_level == self.zoom_level:
+            return
+
+        if limits:
+            zoom_level = min(max(zoom_level, self.zoom_min), self.zoom_max)
+
+        if zoom_point is not None:
+            self.origin = zoom_point
+
+        self.zoom_level = zoom_level
+        self._regenerate_canvas()
+
+    def get_canvas_content_bbox(
+        self, margin: float = 50.0
+    ) -> tuple[float, float, float, float]:
+        x_min = 100000.0
+        x_max = 0.0
+        y_min = 100000.0
+        y_max = 0.0
+
+        for node in self.visible_nodes.values():
+            x_min = min(x_min, node.x)
+            x_max = max(x_max, node.x + node.width)
+            y_min = min(y_min, node.y)
+            y_max = max(y_max, node.y + node.height)
+
+        return (
+            x_min - margin,
+            y_min - margin,
+            x_max - x_min + margin * 2,
+            y_max - y_min + margin * 2,
+        )
+
+    def zoom_show_all(self, *, limits: bool = True) -> None:
+        bbox = self.get_canvas_content_bbox()
+        center_x = bbox[0] + bbox[2] / 2
+        center_y = bbox[1] + bbox[3] / 2
+        canvas_w, canvas_h = dpg.get_item_rect_size(f"{self.tag}_canvas")
+        zw = math.log(canvas_w / bbox[2], self.layout.zoom_factor)
+        zh = math.log(canvas_h / bbox[3], self.layout.zoom_factor)
+        zoom_level = min(zw, zh)
+
+        self.set_zoom(zoom_level, (center_x, center_y), limits=limits)
 
     def _on_root_selected(self, sender: str, app_data: str, node_id: str):
         if self.root and node_id == self.root.id:
@@ -567,8 +623,8 @@ class GraphEditor:
         with dpg.window(
             popup=True,
             min_size=(100, 20),
-            on_close=lambda: dpg.delete_item(f"{node.id}_menu"),
-        ):
+            on_close=lambda: dpg.delete_item(wnd),
+        ) as wnd:
             dpg.add_text(node.id, color=style.blue)
             dpg.add_separator()
 
@@ -576,7 +632,9 @@ class GraphEditor:
                 if item == "-":
                     dpg.add_separator()
                 else:
-                    dpg.add_selectable(label=item, callback=on_item_selected, user_data=item)
+                    dpg.add_selectable(
+                        label=item, callback=on_item_selected, user_data=item
+                    )
 
     def _open_canvas_menu(self) -> None:
         def on_item_select(sender, app_data, selected_item: str):
@@ -584,10 +642,8 @@ class GraphEditor:
             self.on_canvas_menu_item_selected(selected_item)
 
         with dpg.window(
-            popup=True,
-            min_size=(100, 20),
-            tag=f"{self.tag}_canvas_menu",
-        ):
+            popup=True, min_size=(100, 20), on_close=lambda: dpg.delete_item(wnd)
+        ) as wnd:
             for item in self.get_canvas_menu_items():
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
 
@@ -609,8 +665,10 @@ class GraphEditor:
 
         node.folded = True
 
-    def _get_pos_for_node(self, node_id: str, parent_id: str, level: int) -> tuple[float, float]:
-        zoom_factor = self.layout.zoom_factor**self.zoom
+    def _get_pos_for_node(
+        self, node_id: str, parent_id: str, level: int
+    ) -> tuple[float, float]:
+        zoom_factor = self.zoom
 
         if level == 0:
             px = self.layout.node0_margin[0]
@@ -648,20 +706,20 @@ class GraphEditor:
         # TODO this layout algorithm works, but has various issues:
         #  - only the last instance of a node will be used
         #  - will remove the user's path if a shorter path exists
-        # 
-        # It would be better to do one layout using graphviz, then hide and show 
+        #
+        # It would be better to do one layout using graphviz, then hide and show
         # nodes as required
-        zoom_factor = self.layout.zoom_factor**self.zoom
+        zoom_factor = self.layout.zoom_factor**self.zoom_level
 
         px, py = self._get_pos_for_node(node_id, parent_id, level)
         margin = self.layout.text_margin
         lines = self.get_node_frontpage(node_id)
-        
+
         if isinstance(lines[0], tuple):
             lines, colors = zip(*lines)
         else:
             colors = [style.white] * len(lines)
-        
+
         max_len = max(len(s) for s in lines)
         lines = [s.center(max_len) for s in lines]
 

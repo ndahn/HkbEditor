@@ -251,13 +251,26 @@ class BehaviorEditor(GraphEditor):
         else:
             self.logger.warning("Not implemented yet")
 
-    def get_canvas_menu_items(self):
-        # TODO
-        return super().get_canvas_menu_items()
+    def get_canvas_menu_items(self) -> list[str]:
+        return [
+            "Reset View",
+            "Show All",
+            "Zoom In",
+            "Zoom Out",
+        ]
 
-    def on_canvas_menu_item_selected(self, selected_item):
-        # TODO
-        return super().on_canvas_menu_item_selected(selected_item)
+    def on_canvas_menu_item_selected(self, selected_item: str) -> None:
+        if selected_item == "Reset View":
+            self.set_zoom(0, (0.0, 0.0))
+
+        elif selected_item == "Show All":
+            self.zoom_show_all(limits=False)
+
+        elif selected_item == "Zoom In":
+            self.set_zoom(self.zoom_level + 1)
+
+        elif selected_item == "Zoom Out":
+            self.set_zoom(self.zoom_level - 1)
 
     def on_node_selected(self, node: Node) -> None:
         pass
