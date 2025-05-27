@@ -592,7 +592,7 @@ class GraphEditor:
             self._clear_attributes()
             root_node = self.nodes[root_id]
             self._draw_node(root_node)
-            
+
         else:
             self.selected_roots.remove(root_id)
             for n in root_graph.nodes:
@@ -621,7 +621,7 @@ class GraphEditor:
         for node in self.nodes.values():
             if node.visible:
                 self._draw_node(node)
-        
+
         for node in self.nodes.values():
             if node.visible:
                 for child_id in self.graph.successors(node.id):
@@ -652,24 +652,29 @@ class GraphEditor:
 
     def _select_node(self, node: Node):
         # Remove all nodes that don't need to be visible anymore. This is more complicated as it
-        # seems, as we need to remove anything visible on a different branch from the root
+        # seems, as we need to keep the branch unfolded by the user as it is
         if self.selected_node and node != self.selected_node:
             self.set_highlight(self.selected_node, False)
-            ancestors = set(nx.ancestors(self.graph, node.id))
+            
+            root = next(r for r in self.selected_roots if nx.has_path(self.graph, r, node.id))
+            branch = [node.id]
 
-            # Nodes connected to the root should always stay visible
-            root_buds = set()
-            for root_id in self.selected_roots:
-                root_buds.update(self.graph.successors(root_id))
+            while True:
+                if branch[-1] == root:
+                    break
 
+                # Find the visible parents and their children 
+                preds = self.graph.predecessors(branch[-1])
+                for parent_id in preds:
+                    if self.nodes[parent_id].visible:
+                        branch.extend(self.graph.successors(parent_id))
+                        branch.append(parent_id)
+
+            branch_nodes = set(branch)
             for n in self.nodes.values():
-                if n.visible and n.unfolded:
-                    if n.id not in ancestors:
-                        if n.id in root_buds:
-                            self._fold_node(n)
-                        else:
-                            self._remove_from_canvas(n)
-
+                if n.visible and n.id not in branch_nodes:
+                    self._remove_from_canvas(n)
+            
         # Update the attributes panel
         self._clear_attributes()
         self._update_attributes(node)
@@ -761,68 +766,74 @@ class GraphEditor:
             px = py = 0.0
 
             for n in self.nodes.values():
-                if n.id == node.id:
-                    break
-
                 if n.visible:
                     nl = n.layout_data["level"]
-                    
+
                     if nl == level:
                         # Move down
                         py = max(py, n.y + n.height)
-                    
+
                     elif nl == (level - 1):
                         # Move to the right
                         px = max(px, n.x + n.width)
 
             px += self.layout.gap_x * self.zoom
-            py += self.layout.step_y * self.zoom
+
+            if py > 0.0:
+                py += self.layout.step_y * self.zoom
+            else:
+                parent_id = next(
+                    n for n in self.graph.predecessors(node.id) if self.nodes[n].visible
+                )
+                py = self.nodes[parent_id].y
 
         return px, py
 
     def _draw_node(self, node: Node) -> None:
         tag = f"{self.tag}_node_{node.id}"
 
-        if not dpg.does_item_exist(tag):
-            zoom_factor = self.layout.zoom_factor**self.zoom_level
-            margin = self.layout.text_margin
-            lines = self.get_node_frontpage(node.id)
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            return
 
-            if isinstance(lines[0], tuple):
-                lines, colors = zip(*lines)
-            else:
-                colors = [style.white] * len(lines)
+        zoom_factor = self.layout.zoom_factor**self.zoom_level
+        margin = self.layout.text_margin
+        lines = self.get_node_frontpage(node.id)
 
-            max_len = max(len(s) for s in lines)
-            lines = [s.center(max_len) for s in lines]
+        if isinstance(lines[0], tuple):
+            lines, colors = zip(*lines)
+        else:
+            colors = [style.white] * len(lines)
 
-            text_h = 12
-            w = (max_len * 6.5 + margin * 2) * zoom_factor
-            h = (text_h * len(lines) + margin * 2) * zoom_factor
-            text_offset_y = text_h * zoom_factor
+        max_len = max(len(s) for s in lines)
+        lines = [s.center(max_len) for s in lines]
 
-            with dpg.draw_node(tag=tag, parent=f"{self.tag}_canvas_root"):
-                # Background
-                dpg.draw_rectangle(
-                    (0.0, 0.0),
-                    (w, h),
-                    fill=style.dark_grey,
-                    color=style.white,
-                    thickness=1,
-                    tag=f"{tag}_box",  # for highlighting
+        text_h = 12
+        w = (max_len * 6.5 + margin * 2) * zoom_factor
+        h = (text_h * len(lines) + margin * 2) * zoom_factor
+        text_offset_y = text_h * zoom_factor
+
+        with dpg.draw_node(tag=tag, parent=f"{self.tag}_canvas_root"):
+            # Background
+            dpg.draw_rectangle(
+                (0.0, 0.0),
+                (w, h),
+                fill=style.dark_grey,
+                color=style.white,
+                thickness=1,
+                tag=f"{tag}_box",  # for highlighting
+            )
+
+            # Text
+            for i, text in enumerate(lines):
+                dpg.draw_text(
+                    (margin, margin + text_offset_y * i),
+                    text,
+                    size=12 * zoom_factor,
+                    color=colors[i],
                 )
 
-                # Text
-                for i, text in enumerate(lines):
-                    dpg.draw_text(
-                        (margin, margin + text_offset_y * i),
-                        text,
-                        size=12 * zoom_factor,
-                        color=colors[i],
-                    )
-            
-            node.size = (w, h)
-
+        node.size = (w, h)
         node.pos = self._get_pos_for_node(node)
         node.visible = True
         dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
@@ -862,6 +873,8 @@ class GraphEditor:
             self._remove_from_canvas(child_node)
 
         dpg.delete_item(f"{self.tag}_node_{node.id}")
+        node.visible = False
+        node.unfolded = False
 
         # Delete relations
         for parent_id in self.graph.predecessors(node.id):
