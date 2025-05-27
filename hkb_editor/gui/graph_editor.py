@@ -374,7 +374,6 @@ class GraphEditor:
                         no_host_extendX=True,
                         resizable=True,
                         borders_innerV=True,
-                        borders_innerH=True, # TODO remove
                         policy=dpg.mvTable_SizingFixedFit,
                         header_row=False,
                         tag=f"{self.tag}_attributes_table",
@@ -408,7 +407,7 @@ class GraphEditor:
 
     # Callbacks
     def get_node_at_pos(self, x: float, y: float, *, absolute: bool = True) -> Node:
-        # TODO sometimes doesn't work, probably when zooming to fast
+        # TODO sometimes doesn't work, probably when zooming too fast
         # Separate node drawing from creation, nodes should store x/y at zoom 0   
         if absolute:
             ox, oy = self.origin
@@ -591,6 +590,9 @@ class GraphEditor:
         elif last_node:
             self._fold_node(last_node)
 
+    # TODO better management of visible and invisible nodes
+    # TODO try out different layout algorithms
+    # TODO objects can be referenced from multiple locations
     def _isolate(self, node: Node):
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
         self.visible_nodes.clear()
@@ -717,12 +719,6 @@ class GraphEditor:
         if node_id in self.visible_nodes:
             return self.visible_nodes[node_id]
 
-        # TODO this layout algorithm works, but has various issues:
-        #  - only the last instance of a node will be used
-        #  - will remove the user's path if a shorter path exists
-        #
-        # It would be better to do one layout using graphviz, then hide and show
-        # nodes as required
         zoom_factor = self.layout.zoom_factor**self.zoom_level
 
         px, py = self._get_pos_for_node(node_id, parent_id, level)
@@ -759,7 +755,6 @@ class GraphEditor:
             )
 
             # Text
-            # TODO font and styling
             for i, text in enumerate(lines):
                 dpg.draw_text(
                     (px + margin, py + margin + text_offset_y * i),
@@ -894,12 +889,11 @@ class GraphEditor:
                 default_value=val,
             )
         else:
-            # TODO
             dpg.add_button(
                 label=key,
                 filter_key=key,
                 tag=tag,
-                callback=lambda: print("TODO not supported yet"),
+                callback=lambda: self.logger.error("TODO not supported yet"),
             )
 
         dpg.add_text(key)

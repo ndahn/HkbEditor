@@ -472,19 +472,21 @@ class BehaviorEditor(GraphEditor):
         path: str,
         tag: str = 0,
     ) -> str:
+        if tag in (0, None, ""):
+            tag = dpg.generate_uuid()
+
         def delete_last_item(sender, app_data, user_data) -> None:
-            # TODO this may invalidate variable bindings!
-            undo_manager.on_update_array_item(array, -1, array[-1], None)
-            del array[-1]
+            # TODO deleting an item may invalidate variable bindings!
+            idx = len(array) - 1
+            undo_manager.on_update_array_item(array, idx, array[idx], None)
+            del array[idx]
 
             # Records potentially contain pointers which will affect the graph
             Handler = get_value_handler(self.beh.type_registry, array.element_type_id)
             if Handler in (HkbRecord, HkbPointer):
                 self._regenerate_canvas()
 
-            # TODO this is a bit expensive, but managing index updates is just so tedious
-            self._clear_attributes()
-            self._update_attributes(self.selected_node)
+            dpg.delete_item(f"{self.tag}_attribute_{path}:{idx}")
 
         def append_item() -> None:
             subtype = array.element_type_id
@@ -502,17 +504,15 @@ class BehaviorEditor(GraphEditor):
             undo_manager.on_update_array_item(array, idx, None, new_item)
             array.append(new_item)
 
-            self._create_attribute_widget(
-                source_record,
-                new_item,
-                f"{path}:{idx}",
-            )
+            # TODO doesn't work for some reason
+            # self._create_attribute_widget(
+            #     source_record,
+            #     new_item,
+            #     f"{path}:{idx}",
+            #     before=tag,  # insert before the buttons
+            # )
 
-            # Records potentially contain pointers which will affect the graph
-            if isinstance(new_item, (HkbRecord, HkbPointer)):
-                self._regenerate_canvas()
-
-            # TODO appending to the end is easy, inserting in between requires index updates
+            # TODO this will close the unfolded rows, we should have a "reveal_attribute" function
             self._clear_attributes()
             self._update_attributes(self.selected_node)
 

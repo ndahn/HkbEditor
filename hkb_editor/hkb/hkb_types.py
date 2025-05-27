@@ -220,7 +220,8 @@ class HkbArray(XmlValueHandler):
 
     def __getitem__(self, index: int) -> XmlValueHandler:
         if index < 0:
-            index = len(self) - index
+            index = len(self) + index
+
         item = next(e for i, e in enumerate(self.element) if i == index)
         return wrap_element(self.tagfile, item, self.element_type_id)
 
