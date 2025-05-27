@@ -5,6 +5,7 @@ import textwrap
 import time
 from xml.etree import ElementTree as ET
 from dearpygui import dearpygui as dpg
+import networkx as nx
 import pyperclip
 
 from hkb_editor.hkb.behavior import HavokBehavior
@@ -201,10 +202,9 @@ class BehaviorEditor(GraphEditor):
         ]
         return [r[1] for r in sorted(roots)]
 
-    def _on_root_selected(self, sender: str, app_data: str, node_id: str) -> None:
-        self.logger.info("Building graph for node %s", node_id)
-        self.graph = self.beh.build_graph(node_id)
-        super()._on_root_selected(sender, app_data, node_id)
+    def get_graph(self, root_id: str) -> nx.DiGraph:
+        self.logger.info("Building graph for node %s", root_id)
+        return self.beh.build_graph(root_id)
 
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
         obj: HkbRecord = self.beh.objects[node.id]
@@ -699,7 +699,7 @@ class BehaviorEditor(GraphEditor):
 
                     node = self.visible_nodes.get(oid, None)
                     if not node:
-                        node = self._create_node(
+                        node = self._draw_node(
                             oid, 
                             source_record.object_id, 
                             self.selected_node.level

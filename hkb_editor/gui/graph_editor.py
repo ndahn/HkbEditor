@@ -33,11 +33,10 @@ class Layout:
 @dataclass
 class Node:
     id: str
-    parent: str
-    level: int
-    pos: tuple[float, float]
-    size: tuple[float, float]
-    folded: bool = True
+    pos: tuple[float, float] = None
+    size: tuple[float, float] = None
+    visible: bool = False
+    unfolded: bool = False
 
     @property
     def x(self) -> float:
@@ -89,12 +88,12 @@ class GraphEditor:
         self.attributes_table: str = None
         self.loaded_file: str = None
         self.last_save: float = 0.0
-        self.graph: nx.DiGraph = None
+        self.graph: nx.DiGraph = nx.DiGraph()
         self.layout = Layout()
-        self.visible_nodes: dict[str, Node] = {}
-        self.root: Node = None
+        self.nodes: dict[str, Node] = {}
+        self.selected_roots: list[str] = set()
         self.selected_node: Node = None
-        self.origin: tuple[float, float] = (0.0, 0.0)
+        self.canvas_transform: tuple[float, float] = (0.0, 0.0)
         self.mouse_down_pos: tuple[float, float] = (0.0, 0.0)
         self.mouse_down = False
         self.dragging = False
@@ -113,7 +112,7 @@ class GraphEditor:
     def get_supported_file_extensions(self) -> dict[str, str]:
         return {"All files": "*.*"}
 
-    def get_roots(self) -> list[Node]:
+    def get_roots(self) -> list[str]:
         return []
 
     def make_node(self, node_id: str) -> None:
@@ -282,7 +281,7 @@ class GraphEditor:
         g.add_edge("AB2C1", "AB2C1D1")
         g.add_edge("AB2C1", "AB2C1D2")
 
-        self._on_root_selected("", "", "A")
+        self._on_root_selected("", True, "A")
 
     def file_save(self):
         self._do_write_to_file(self.loaded_file)
@@ -388,7 +387,7 @@ class GraphEditor:
                 dpg.add_mouse_release_handler(
                     dpg.mvMouseButton_Right, callback=self._on_right_click
                 )
-                
+
                 dpg.add_mouse_down_handler(
                     dpg.mvMouseButton_Middle, callback=self._on_drag_start
                 )
@@ -402,22 +401,22 @@ class GraphEditor:
                 dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
 
             dpg.set_viewport_resize_callback(self._on_resize)
-        
+
         dpg.set_frame_callback(2, self._on_resize)
 
     # Callbacks
     def get_node_at_pos(self, x: float, y: float, *, absolute: bool = True) -> Node:
         # TODO sometimes doesn't work, probably when zooming too fast
-        # Separate node drawing from creation, nodes should store x/y at zoom 0   
+        # Separate node drawing from creation, nodes should store x/y at zoom 0
         if absolute:
-            ox, oy = self.origin
+            ox, oy = self.canvas_transform
             x = x - ox
             y = y - oy
 
-        for node in self.visible_nodes.values():
-            # TODO Something like a b-tree might have better performance, 
+        for node in self.nodes.values():
+            # TODO Something like a b-tree might have better performance,
             # but so far this is not a bottleneck
-            if node.contains(x, y):
+            if node.visible and node.contains(x, y):
                 return node
 
         return None
@@ -459,15 +458,17 @@ class GraphEditor:
 
         _, delta_x, delta_y = mouse_delta
         self.last_drag = (delta_x, delta_y)
-        self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
+        self.look_at(
+            self.canvas_transform[0] + delta_x, self.canvas_transform[1] + delta_y
+        )
 
     def _on_drag_release(self, sender, mouse_button) -> None:
         if not self.dragging:
             return
 
         self.set_origin(
-            self.origin[0] + self.last_drag[0], 
-            self.origin[1] + self.last_drag[1]
+            self.canvas_transform[0] + self.last_drag[0],
+            self.canvas_transform[1] + self.last_drag[1],
         )
 
         self.last_drag = (0.0, 0.0)
@@ -477,9 +478,14 @@ class GraphEditor:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        mouse_pos = dpg.get_drawing_mouse_pos()
-        zoom_point = (self.origin[0] + mouse_pos[0], self.origin[1] + mouse_pos[1])
-        self.set_zoom(self.zoom_level - wheel_delta, zoom_point)
+        # TODO Scrolling too fast can cause problems, is this a solution?
+        with dpg.mutex():
+            mouse_pos = dpg.get_drawing_mouse_pos()
+            zoom_point = (
+                self.canvas_transform[0] + mouse_pos[0],
+                self.canvas_transform[1] + mouse_pos[1],
+            )
+            self.set_zoom(self.zoom_level - wheel_delta, zoom_point)
 
     def _on_resize(self):
         cw, ch = dpg.get_item_rect_size(f"{self.tag}_canvas_window")
@@ -487,8 +493,8 @@ class GraphEditor:
         dpg.set_item_height(self.canvas, ch)
 
     def set_origin(self, new_x: float, new_y: float) -> None:
-        self.origin = (new_x, new_y)
-        self.look_at(*self.origin)
+        self.canvas_transform = (new_x, new_y)
+        self.look_at(*self.canvas_transform)
 
     def look_at(self, px: float, py: float) -> None:
         dpg.apply_transform(
@@ -510,7 +516,7 @@ class GraphEditor:
             zoom_level = min(max(zoom_level, self.zoom_min), self.zoom_max)
 
         if zoom_point is not None:
-            self.origin = zoom_point
+            self.canvas_transform = zoom_point
 
         self.zoom_level = zoom_level
         self._regenerate_canvas()
@@ -523,11 +529,12 @@ class GraphEditor:
         y_min = 100000.0
         y_max = 0.0
 
-        for node in self.visible_nodes.values():
-            x_min = min(x_min, node.x)
-            x_max = max(x_max, node.x + node.width)
-            y_min = min(y_min, node.y)
-            y_max = max(y_max, node.y + node.height)
+        for node in self.nodes.values():
+            if node.visible:
+                x_min = min(x_min, node.x)
+                x_max = max(x_max, node.x + node.width)
+                y_min = min(y_min, node.y)
+                y_max = max(y_max, node.y + node.height)
 
         return (
             x_min - margin,
@@ -537,7 +544,7 @@ class GraphEditor:
         )
 
     def zoom_show_all(self, *, limits: bool = True) -> None:
-        if not self.visible_nodes:
+        if not any(n.visible for n in self.nodes.values()):
             self.set_zoom(0, (0.0, 0.0))
             return
 
@@ -551,69 +558,143 @@ class GraphEditor:
 
         self.set_zoom(zoom_level, (center_x, center_y), limits=limits)
 
-    def _on_root_selected(self, sender: str, app_data: str, node_id: str):
-        if self.root and node_id == self.root.id:
+    def get_graph(self, root_id: str) -> nx.DiGraph:
+        return nx.DiGraph()
+
+    def get_graph_layout(
+        self, graph: nx.DiGraph, root_id: str
+    ) -> dict[str, tuple[float, float]]:
+        pos = nx.nx_agraph.pygraphviz_layout(graph, "neato")
+        root_pos = pos[root_id]
+
+        for key, val in pos.items():
+            pos[key] = tuple((val[i] - root_pos[i]) * 3 for i in range(len(val)))
+
+        return pos
+
+    def _on_root_selected(self, sender: str, selected: bool, root_id: str):
+        # For now we only allow one root to be selected
+        if not selected:
             # Prevent deselecting a root
-            dpg.set_value(f"{self.tag}_{node_id}_selectable", True)
+            dpg.set_value(f"{self.tag}_root_{root_id}_selectable", True)
             return
 
-        for root_id in self.get_roots():
-            tag = f"{self.tag}_{root_id}_selectable"
-            if root_id != node_id and dpg.does_item_exist(tag):
+        self.graph.clear()
+        for other in self.get_roots():
+            tag = f"{self.tag}_root_{other}_selectable"
+            if other != root_id and dpg.does_item_exist(tag):
                 dpg.set_value(tag, False)
 
-        self._clear_canvas()
-        self._clear_attributes()
-        self.root = self._create_node(node_id, None, 0)
+        # Build the new graph and combine it with the existing one
+        root_graph: nx.DiGraph = self.get_graph(root_id)
+
+        if selected:
+            self.selected_roots.add(root_id)
+            self.graph = nx.compose(self.graph, root_graph)
+            pos = self.get_graph_layout(self.graph, root_id)
+
+            for n in root_graph.nodes:
+                node: Node = self.nodes.get(n)
+
+                if not node:
+                    node = Node(
+                        n,
+                        pos=pos[n],
+                    )
+                    self.nodes[n] = node
+                else:
+                    # Update position
+                    node.pos = pos[n]
+
+            self._clear_canvas()
+            self._clear_attributes()
+            root_node = self.nodes[root_id]
+            self._draw_node(root_node)
+            self.look_at(root_node.x, root_node.y)
+
+        else:
+            self.selected_roots.remove(root_id)
+            for n in root_graph.nodes:
+                del self.nodes[n]
+
+            self.graph.remove_nodes_from(root_graph.nodes)
+            pos = self.get_graph_layout(self.graph, root_id)
+
+            for node in self.nodes.values():
+                node.pos = pos[node.id]
+
+            if self.selected_node and self.selected_node not in self.nodes:
+                self.selected_node = None
+
+            self._regenerate_canvas()
 
     def _clear_canvas(self):
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
-        self.visible_nodes.clear()
+
+        for node in self.nodes.values():
+            node.visible = False
+
         self.selected_node = None
-        self.root = None
         self.set_origin(0.0, 0.0)
 
     def _regenerate_canvas(self):
-        visible = list(self.visible_nodes.values())
-        selected = self.selected_node
-
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
-        self.visible_nodes.clear()
 
-        last_node = None
-        for node in visible:
-            last_node = self._create_node(node.id, node.parent, node.level)
-            self._unfold_node(last_node)
+        for node in self.nodes.values():
+            if node.visible:
+                self._draw_node(node)
 
-        if selected:
-            self._select_node(selected)
-        elif last_node:
-            self._fold_node(last_node)
+        if self.selected_node:
+            self._select_node(self.selected_node)
 
-    # TODO better management of visible and invisible nodes
-    # TODO try out different layout algorithms
-    # TODO objects can be referenced from multiple locations
-    def _isolate(self, node: Node):
-        dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
-        self.visible_nodes.clear()
+    # TODO not used at the moment, add to node menu
+    def _isolate(self, target_node: Node):
+        # Find the root of the node
+        root_id = target_node
+        while True:
+            preds = list(self.graph.predecessors(root_id))
+            if not preds:
+                break
+            root_id = preds[0]
 
-        required_visible = nx.shortest_path(self.graph, self.root.id, node.id)
-        parent_id = None
-        for level, node_id in enumerate(required_visible):
-            n = self._create_node(node_id, parent_id, level)
-            self._unfold_node(n)
-            parent_id = n.id
+        required_visible = nx.shortest_path(self.graph, root_id, target_node.id)
+        self._clear_canvas()
+
+        for node_id in enumerate(required_visible):
+            node = self.nodes[node_id]
+            self._draw_node(node)
+            self._unfold_node(node)
 
     def _select_node(self, node: Node):
-        self._deselect_active_node()
-        self._isolate(node)
+        # Remove all nodes that don't need to be visible anymore. This is more complicated as it
+        # seems, as we need to remove anything visible on a different branch from the root
+        if self.selected_node and node != self.selected_node:
+            self.set_highlight(self.selected_node, False)
+            ancestors = set(nx.ancestors(self.graph, node.id))
+
+            # Nodes connected to the root should always stay visible
+            root_buds = set()
+            for root_id in self.selected_roots:
+                root_buds.update(self.graph.successors(root_id))
+
+            for n in self.nodes.values():
+                if n.visible and n.unfolded:
+                    if n.id not in ancestors:
+                        if n.id in root_buds:
+                            self._fold_node(n)
+                        else:
+                            self._remove_from_canvas(n)
+
+            print("###", root_id in self.graph)
 
         # Update the attributes panel
         self._clear_attributes()
         self._update_attributes(node)
 
-        self.set_highlight(node, True)
         self.selected_node = node
+        self._draw_node(node)  # TODO neccessary?
+        self._unfold_node(node)
+        self.set_highlight(node, True)
         self.on_node_selected(node)
 
     def _deselect_active_node(self):
@@ -621,14 +702,13 @@ class GraphEditor:
             return
 
         self.set_highlight(self.selected_node, False)
-        # self._fold_node(self.selected_node)
         self._clear_attributes()
-
+        self._fold_node(self.selected_node)
         self.selected_node = None
 
     def set_highlight(self, node: Node, highlighted: bool) -> None:
         color = style.blue if highlighted else style.white
-        dpg.configure_item(f"{node.id}_box", color=color)
+        dpg.configure_item(f"{self.tag}_node_{node.id}_box", color=color)
 
     def _open_node_menu(self, node: Node) -> None:
         def on_item_selected(sender, app_data, selected_item: str):
@@ -664,66 +744,43 @@ class GraphEditor:
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
 
     def _unfold_node(self, node: Node) -> None:
-        if not dpg.does_item_exist(node.id):
-            raise KeyError(f"Tried to unfold non-existing node {node.id}")
-
         for child_id in self.graph.successors(node.id):
-            child_node = self._create_node(child_id, node.id, node.level + 1)
-            self._create_relation(node, child_node)
+            child_node = self.nodes[child_id]
+            self._draw_node(child_node)
+            self._draw_edge(node, child_node)
 
-        node.folded = False
+        node.unfolded = True
 
     def _fold_node(self, node: Node) -> None:
-        for child_id in self.graph.successors(node.id):
-            child_node = self.visible_nodes.get(child_id, None)
-            # TODO can there be multiple parents? If so, check if there's another parent visible
-            self._delete_node(child_node)
+        # Set visible status first, otherwise we make mistakes if nodes have multiple parents
+        for child_id in self.graph.successors(self.selected_node.id):
+            child_node = self.nodes[child_id]
+            child_node.visible = False
 
-        node.folded = True
-
-    def _get_pos_for_node(
-        self, node_id: str, parent_id: str, level: int
-    ) -> tuple[float, float]:
-        zoom_factor = self.zoom
-
-        if level == 0:
-            px = self.layout.node0_margin[0]
-        else:
-            px = (
-                max(
-                    n.x + n.width
-                    for n in self.visible_nodes.values()
-                    if n.level == level - 1
-                )
-                + self.layout.gap_x * zoom_factor
-            )
-
-        try:
-            py = (
-                max(
-                    n.y + n.height
-                    for n in self.visible_nodes.values()
-                    if n.level == level
-                )
-                + self.layout.step_y * zoom_factor
-            )
-        except ValueError:
-            if parent_id:
-                py = self.visible_nodes[parent_id].y
+        # Remove all children without still visible parents
+        for child_id in nx.descendants(self.graph, self.selected_node.id):
+            for parent_id in self.graph.predecessors(child_id):
+                if parent_id != node.id and self.nodes[parent_id].visible:
+                    break
             else:
-                py = self.layout.node0_margin[1]
+                # Did not find any parents that should still be visible, delete the node
+                self._remove_from_canvas(self.nodes[child_id])
 
-        return px, py
+        node.unfolded = False
 
-    def _create_node(self, node_id: str, parent_id: str, level: int) -> Node:
-        if node_id in self.visible_nodes:
-            return self.visible_nodes[node_id]
+    def _draw_node(self, node: Node) -> None:
+        tag = f"{self.tag}_node_{node.id}"
+
+        if dpg.does_item_exist(tag):
+            # Visuals already exist, just update the node transform
+            dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
+            dpg.show_item(tag)
+            node.visible = True
+            return
 
         zoom_factor = self.layout.zoom_factor**self.zoom_level
-
-        px, py = self._get_pos_for_node(node_id, parent_id, level)
         margin = self.layout.text_margin
-        lines = self.get_node_frontpage(node_id)
+        lines = self.get_node_frontpage(node.id)
 
         if isinstance(lines[0], tuple):
             lines, colors = zip(*lines)
@@ -736,6 +793,7 @@ class GraphEditor:
         text_h = 12
         w = max_len * 6.5 + margin * 2
         h = text_h * len(lines) + margin * 2
+        node.size = (w, h)
 
         # px *= zoom_factor
         # py *= zoom_factor
@@ -743,32 +801,31 @@ class GraphEditor:
         h *= zoom_factor
         text_offset_y = text_h * zoom_factor
 
-        with dpg.draw_node(tag=node_id, parent=f"{self.tag}_canvas_root"):
+        with dpg.draw_node(tag=tag, parent=f"{self.tag}_canvas_root"):
             # Background
             dpg.draw_rectangle(
-                (px, py),
-                (px + w, py + h),
+                (0.0, 0.0),
+                (w, h),
                 fill=style.dark_grey,
                 color=style.white,
                 thickness=1,
-                tag=f"{node_id}_box",
+                tag=f"{tag}_box",  # for highlighting
             )
 
             # Text
             for i, text in enumerate(lines):
                 dpg.draw_text(
-                    (px + margin, py + margin + text_offset_y * i),
+                    (margin, margin + text_offset_y * i),
                     text,
                     size=12 * zoom_factor,
                     color=colors[i],
                 )
 
-        node = Node(node_id, parent_id, level, (px, py), (w, h))
-        self.visible_nodes[node_id] = node
-        return node
+        node.visible = True
+        dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
 
-    def _create_relation(self, node_a: Node, node_b: Node) -> None:
-        tag = f"{node_a.id}_TO_{node_b.id}"
+    def _draw_edge(self, node_a: Node, node_b: Node) -> None:
+        tag = f"{self.tag}_edge_{node_a.id}_TO_{node_b.id}"
         if dpg.does_item_exist(tag):
             return
 
@@ -787,24 +844,23 @@ class GraphEditor:
                 (bx, by),
             ],
             tag=tag,
-            parent=node_a.id,
+            parent=f"{self.tag}_canvas_root",
         )
 
-    def _delete_node(self, node: Node) -> None:
+    def _remove_from_canvas(self, node: Node) -> None:
         if not node:
             return
 
         for child_id in self.graph.successors(node.id):
-            child_node = self.visible_nodes.get(child_id, None)
-            self._delete_node(child_node)
+            child_node = self.nodes.get(child_id, None)
+            self._remove_from_canvas(child_node)
 
-        dpg.delete_item(node.id)
-        del self.visible_nodes[node.id]
+        dpg.delete_item(f"{self.tag}_node_{node.id}")
 
         # Delete relations
         for parent_id in self.graph.predecessors(node.id):
-            if dpg.does_item_exist(f"{parent_id}_TO_{node.id}"):
-                dpg.delete_item(f"{parent_id}_TO_{node.id}")
+            if dpg.does_item_exist(f"{self.tag}_edge_{parent_id}_TO_{node.id}"):
+                dpg.delete_item(f"{self.tag}_edge_{parent_id}_TO_{node.id}")
 
     def _update_roots(self) -> None:
         dpg.delete_item(self.roots_table, children_only=True, slot=1)
@@ -821,7 +877,7 @@ class GraphEditor:
                     label=label,
                     user_data=root_id,
                     callback=self._on_root_selected,
-                    tag=f"{self.tag}_{root_id}_selectable",
+                    tag=f"{self.tag}_root_{root_id}_selectable",
                 )
 
     def _clear_attributes(self) -> None:
@@ -846,7 +902,7 @@ class GraphEditor:
                 self._add_attribute_row_contents(key, val, node)
 
     def _add_attribute_row_contents(self, key: str, val: Any, node: Node) -> None:
-        tag = f"{node.id}_{key}"
+        tag = f"{self.tag}_node_{node.id}_{key}"
 
         def update_node_attribute(sender: str, new_val: Any, attribute: str):
             self.set_node_attribute(node, attribute, new_val)
