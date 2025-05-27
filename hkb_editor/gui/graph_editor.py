@@ -37,6 +37,7 @@ class Node:
     size: tuple[float, float] = None
     visible: bool = False
     unfolded: bool = False
+    layout_data: dict[str, Any] = None
 
     @property
     def x(self) -> float:
@@ -481,7 +482,7 @@ class GraphEditor:
         # Scrolling too fast can cause problems
         with dpg.mutex():
             zoom_point = self.get_canvas_mouse_pos()
-            self.set_zoom(self.zoom_level - wheel_delta, zoom_point)
+            self.set_zoom(self.zoom_level + wheel_delta, zoom_point)
 
     def _on_resize(self):
         cw, ch = dpg.get_item_rect_size(f"{self.tag}_canvas_window")
@@ -557,16 +558,12 @@ class GraphEditor:
     def get_graph(self, root_id: str) -> nx.DiGraph:
         return nx.DiGraph()
 
-    def get_graph_layout(
-        self, graph: nx.DiGraph, root_id: str
-    ) -> dict[str, tuple[float, float]]:
-        pos = nx.nx_agraph.pygraphviz_layout(graph, "neato")
-        root_pos = pos[root_id]
+    def prepate_nodes(self, root_id: str) -> None:
+        paths = nx.shortest_path(self.graph, root_id)
 
-        for key, val in pos.items():
-            pos[key] = tuple((val[i] - root_pos[i]) * 3 * self.zoom for i in range(len(val)))
-
-        return pos
+        for n in self.nodes.values():
+            if n.id in paths:
+                n.layout_data = {"level": len(paths[n.id]) - 1}
 
     def _on_root_selected(self, sender: str, selected: bool, root_id: str):
         self.graph.clear()
@@ -584,27 +581,18 @@ class GraphEditor:
         if selected:
             self.selected_roots.add(root_id)
             self.graph = nx.compose(self.graph, root_graph)
-            pos = self.get_graph_layout(self.graph, root_id)
 
             for n in root_graph.nodes:
-                node: Node = self.nodes.get(n)
+                if n not in self.nodes:
+                    self.nodes[n] = Node(n)
 
-                if not node:
-                    node = Node(
-                        n,
-                        pos=pos[n],
-                    )
-                    self.nodes[n] = node
-                else:
-                    # Update position
-                    node.pos = pos[n]
+            self.prepate_nodes(root_id)
 
             self._clear_canvas()
             self._clear_attributes()
             root_node = self.nodes[root_id]
             self._draw_node(root_node)
-            self.look_at(root_node.x, root_node.y)
-
+            
         else:
             self.selected_roots.remove(root_id)
             for n in root_graph.nodes:
@@ -622,6 +610,7 @@ class GraphEditor:
 
         for node in self.nodes.values():
             node.visible = False
+            node.unfolded = False
 
         self.selected_node = None
         self.set_origin(0.0, 0.0)
@@ -764,91 +753,78 @@ class GraphEditor:
         node.unfolded = False
 
     def _get_pos_for_node(self, node: Node) -> tuple[float, float]:
-        zoom_factor = self.zoom
+        level = node.layout_data["level"]
 
         if level == 0:
-            px = self.layout.node0_margin[0]
+            px, py = self.layout.node0_margin
         else:
-            px = (
-                max(
-                    n.x + n.width
-                    for n in self.visible_nodes.values()
-                    if n.level == level - 1
-                )
-                + self.layout.gap_x * zoom_factor
-            )
+            px = py = 0.0
 
-        try:
-            py = (
-                max(
-                    n.y + n.height
-                    for n in self.visible_nodes.values()
-                    if n.level == level
-                )
-                + self.layout.step_y * zoom_factor
-            )
-        except ValueError:
-            if parent_id:
-                py = self.visible_nodes[parent_id].y
-            else:
-                py = self.layout.node0_margin[1]
+            for n in self.nodes.values():
+                if n.id == node.id:
+                    break
+
+                if n.visible:
+                    nl = n.layout_data["level"]
+                    
+                    if nl == level:
+                        # Move down
+                        py = max(py, n.y + n.height)
+                    
+                    elif nl == (level - 1):
+                        # Move to the right
+                        px = max(px, n.x + n.width)
+
+            px += self.layout.gap_x * self.zoom
+            py += self.layout.step_y * self.zoom
 
         return px, py
 
     def _draw_node(self, node: Node) -> None:
         tag = f"{self.tag}_node_{node.id}"
 
-        if dpg.does_item_exist(tag):
-            # Visuals already exist, just update the node transform
-            dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
-            dpg.show_item(tag)
-            node.visible = True
-            return
+        if not dpg.does_item_exist(tag):
+            zoom_factor = self.layout.zoom_factor**self.zoom_level
+            margin = self.layout.text_margin
+            lines = self.get_node_frontpage(node.id)
 
-        zoom_factor = self.layout.zoom_factor**self.zoom_level
-        margin = self.layout.text_margin
-        lines = self.get_node_frontpage(node.id)
+            if isinstance(lines[0], tuple):
+                lines, colors = zip(*lines)
+            else:
+                colors = [style.white] * len(lines)
 
-        if isinstance(lines[0], tuple):
-            lines, colors = zip(*lines)
-        else:
-            colors = [style.white] * len(lines)
+            max_len = max(len(s) for s in lines)
+            lines = [s.center(max_len) for s in lines]
 
-        max_len = max(len(s) for s in lines)
-        lines = [s.center(max_len) for s in lines]
+            text_h = 12
+            w = (max_len * 6.5 + margin * 2) * zoom_factor
+            h = (text_h * len(lines) + margin * 2) * zoom_factor
+            text_offset_y = text_h * zoom_factor
 
-        text_h = 12
-        w = max_len * 6.5 + margin * 2
-        h = text_h * len(lines) + margin * 2
-
-        # px *= zoom_factor
-        # py *= zoom_factor
-        w *= zoom_factor
-        h *= zoom_factor
-        text_offset_y = text_h * zoom_factor
-
-        with dpg.draw_node(tag=tag, parent=f"{self.tag}_canvas_root"):
-            # Background
-            dpg.draw_rectangle(
-                (0.0, 0.0),
-                (w, h),
-                fill=style.dark_grey,
-                color=style.white,
-                thickness=1,
-                tag=f"{tag}_box",  # for highlighting
-            )
-
-            # Text
-            for i, text in enumerate(lines):
-                dpg.draw_text(
-                    (margin, margin + text_offset_y * i),
-                    text,
-                    size=12 * zoom_factor,
-                    color=colors[i],
+            with dpg.draw_node(tag=tag, parent=f"{self.tag}_canvas_root"):
+                # Background
+                dpg.draw_rectangle(
+                    (0.0, 0.0),
+                    (w, h),
+                    fill=style.dark_grey,
+                    color=style.white,
+                    thickness=1,
+                    tag=f"{tag}_box",  # for highlighting
                 )
 
+                # Text
+                for i, text in enumerate(lines):
+                    dpg.draw_text(
+                        (margin, margin + text_offset_y * i),
+                        text,
+                        size=12 * zoom_factor,
+                        color=colors[i],
+                    )
+            
+            node.size = (w, h)
+
+        node.pos = self._get_pos_for_node(node)
         node.visible = True
-        node.size = (w, h)
         dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
 
     def _draw_edge(self, node_a: Node, node_b: Node) -> None:
@@ -862,7 +838,10 @@ class GraphEditor:
         by = node_b.y + node_b.height / 2
 
         # Manhatten line
-        mid_x = ax + (bx - ax) / 2
+        # The right side of node_a depends on its width, whereas the left side of all nodes
+        # on the same level should be aligned, so this will give a more consistent look.
+        mid_x = bx - self.layout.gap_x / 2
+
         dpg.draw_polygon(
             [
                 (ax, ay),
