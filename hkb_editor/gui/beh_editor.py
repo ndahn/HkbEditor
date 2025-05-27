@@ -25,7 +25,11 @@ from .widgets import (
     select_pointer_dialog,
     edit_simple_array_dialog,
 )
-from .table_tree import table_tree_node, table_tree_leaf, get_row_node_item
+from .table_tree import (
+    table_tree_leaf,
+    add_lazy_table_tree_node,
+    get_row_node_item,
+)
 from .workflows.bind_attribute import (
     bindable_attribute,
     select_variable_to_bind,
@@ -173,7 +177,7 @@ class BehaviorEditor(GraphEditor):
     def _on_mouse_wheel(self, sender, wheel_delta):
         if dpg.get_value(f"{self.tag}_settings_invert_zoom"):
             wheel_delta = -wheel_delta
-        
+
         super()._on_mouse_wheel(sender, wheel_delta)
 
     def _set_menus_enabled(self, enabled: bool) -> None:
@@ -229,12 +233,12 @@ class BehaviorEditor(GraphEditor):
             return []
 
         # TODO more actions
-        #type_name = self.beh.type_registry.get_name(obj.type_id)
+        # type_name = self.beh.type_registry.get_name(obj.type_id)
         actions = [
             "Copy ID",
-            #"Copy Node",
-            #"-",
-            #"Hide",
+            # "Copy Node",
+            # "-",
+            # "Hide",
         ]
 
         if obj.get_field("name", None) is not None:
@@ -304,7 +308,11 @@ class BehaviorEditor(GraphEditor):
         source_record: HkbRecord,
         value: XmlValueHandler,
         path: str,
+        *,
+        before: str = 0,
     ):
+        self.logger.debug("Creating new attribute widget: %s", path)
+
         tag = f"{self.tag}_attribute_{path}"
         widget = tag
 
@@ -316,14 +324,24 @@ class BehaviorEditor(GraphEditor):
             label_color = style.green
 
         if isinstance(value, HkbRecord):
-            with table_tree_node(
-                label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
-            ):
-                widget = get_row_node_item(tag)
+            # create items on demand, dpg performance tanks with too many widgets
+            def lazy_create_record_attributes(anchor: str):
                 for subkey, subval in value.get_value().items():
                     self._create_attribute_widget(
-                        source_record, subval, f"{path}/{subkey}"
+                        source_record, 
+                        subval, 
+                        f"{path}/{subkey}", 
+                        before=anchor
                     )
+
+            add_lazy_table_tree_node(
+                label,
+                lazy_create_record_attributes,
+                table=self.attributes_table,
+                tag=tag,
+                before=before,
+            )
+            widget = get_row_node_item(tag)
 
         elif isinstance(value, HkbArray):
             type_name = self.beh.type_registry.get_name(value.type_id)
@@ -341,36 +359,46 @@ class BehaviorEditor(GraphEditor):
                 )
 
             else:
-                # TODO add callback and create items on demand
-                with table_tree_node(
-                    label, table=f"{self.tag}_attributes_table", folded=True, tag=tag
-                ):
-                    widget = get_row_node_item(tag)
+                # create items on demand, dpg performance tanks with too many widgets
+                def lazy_create_array_items(anchor: str):
                     for idx, subval in enumerate(value):
                         self._create_attribute_widget(
-                            source_record, subval, f"{path}:{idx}"
+                            source_record, 
+                            subval, 
+                            f"{path}:{idx}", 
+                            before=anchor
                         )
-                        # self._create_attribute_widget_array_item(
-                        #    source_record, subval, f"{path}:{idx}"
-                        # )
+
                     with table_tree_leaf(
-                        table=f"{self.tag}_attributes_table",
-                        tag=f"{self.tag}_attribute_{path}_arraybuttons",
+                        table=self.attributes_table,
+                        tag=f"{tag}_arraybuttons",
+                        before=anchor,
                     ):
                         self._create_attribute_widget_array_buttons(
-                            source_record, value, path
+                            source_record, value, path,
                         )
+
+                add_lazy_table_tree_node(
+                    label,
+                    lazy_create_array_items,
+                    table=self.attributes_table,
+                    tag=tag,
+                    before=before,
+                )
+                widget = get_row_node_item(tag)
 
         elif isinstance(value, HkbPointer):
             with table_tree_leaf(
-                table=f"{self.tag}_attributes_table",
+                table=self.attributes_table,
+                before=before,
             ):
                 self._create_attribute_widget_pointer(source_record, value, path, tag)
                 dpg.add_text(label, color=label_color)
 
         else:
             with table_tree_leaf(
-                table=f"{self.tag}_attributes_table",
+                table=self.attributes_table,
+                before=before,
             ):
                 self._create_attribute_widget_simple(source_record, value, path, tag)
                 dpg.add_text(label, color=label_color)
@@ -383,6 +411,7 @@ class BehaviorEditor(GraphEditor):
         pointer: HkbPointer,
         path: str,
         tag: str = 0,
+        before: dict[str, Any] = None,
     ) -> str:
         attribute = path.split("/")[-1]
 
@@ -663,11 +692,32 @@ class BehaviorEditor(GraphEditor):
                             object.object_id,
                         )
 
+                def go_to_pointer():
+                    oid = value.get_value()
+                    if not oid:
+                        return
+
+                    node = self.visible_nodes.get(oid, None)
+                    if not node:
+                        node = self._create_node(
+                            oid, 
+                            source_record.object_id, 
+                            self.selected_node.level
+                        )
+
+                    self._select_node(node)
+                    # TODO not quite right yet, not sure why
+                    self.look_at(node.x + node.width / 2, node.y + node.width / 2)
+
                 dpg.add_separator()
                 dpg.add_selectable(
                     label="New object",
                     callback=lambda s, a, u: self.open_create_object_dialog(*u),
                     user_data=(value.subtype, on_new_object, None),
+                )
+                dpg.add_selectable(
+                    label="Go to",
+                    callback=go_to_pointer
                 )
 
             if is_simple:

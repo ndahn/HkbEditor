@@ -9,10 +9,6 @@ from hkb_editor.gui.graph_editor import get_default_layout_path, get_custom_layo
 from hkb_editor.gui.style import setup_styles
 
 
-import sys
-sys.setrecursionlimit(100)
-
-
 def main():
     # Logging setup
     logging.basicConfig(level=logging.INFO)

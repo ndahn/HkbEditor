@@ -84,11 +84,14 @@ class GraphEditor:
 
         self.logger = getLogger(self.__class__.__name__)
         self.tag: str = tag
+        self.roots_table: str = None
+        self.canvas: str = None
+        self.attributes_table: str = None
         self.loaded_file: str = None
         self.last_save: float = 0.0
         self.graph: nx.DiGraph = None
         self.layout = Layout()
-        self.visible_nodes: dict[int, Node] = {}
+        self.visible_nodes: dict[str, Node] = {}
         self.root: Node = None
         self.selected_node: Node = None
         self.origin: tuple[float, float] = (0.0, 0.0)
@@ -331,7 +334,7 @@ class GraphEditor:
                     # policy=dpg.mvTable_SizingFixedFit,
                     scrollY=True,
                     tag=f"{self.tag}_roots_table",
-                ):
+                ) as self.roots_table:
                     dpg.add_table_column(label="Name")
 
             # Canvas
@@ -342,7 +345,7 @@ class GraphEditor:
                 no_scrollbar=True,
                 tag=f"{self.tag}_canvas_window",
             ):
-                with dpg.drawlist(800, 800, tag=f"{self.tag}_canvas"):
+                with dpg.drawlist(800, 800, tag=f"{self.tag}_canvas") as self.canvas:
                     dpg.add_draw_node(tag=f"{self.tag}_canvas_root")
 
             # Attributes panel
@@ -371,10 +374,11 @@ class GraphEditor:
                         no_host_extendX=True,
                         resizable=True,
                         borders_innerV=True,
+                        borders_innerH=True, # TODO remove
                         policy=dpg.mvTable_SizingFixedFit,
                         header_row=False,
                         tag=f"{self.tag}_attributes_table",
-                    ):
+                    ) as self.attributes_table:
                         dpg.add_table_column(label="Value", width_stretch=True)
                         dpg.add_table_column(label="Key", width_fixed=True)
 
@@ -385,17 +389,22 @@ class GraphEditor:
                 dpg.add_mouse_release_handler(
                     dpg.mvMouseButton_Right, callback=self._on_right_click
                 )
+                
                 dpg.add_mouse_down_handler(
                     dpg.mvMouseButton_Middle, callback=self._on_drag_start
                 )
                 dpg.add_mouse_release_handler(
                     dpg.mvMouseButton_Middle, callback=self._on_drag_release
                 )
-                dpg.add_mouse_drag_handler(callback=self._on_mouse_drag)
+                dpg.add_mouse_drag_handler(
+                    dpg.mvMouseButton_Middle, callback=self._on_mouse_drag
+                )
+
                 dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
 
             dpg.set_viewport_resize_callback(self._on_resize)
-            #self._on_resize()
+        
+        dpg.set_frame_callback(2, self._on_resize)
 
     # Callbacks
     def get_node_at_pos(self, x: float, y: float, *, absolute: bool = True) -> Node:
@@ -415,7 +424,7 @@ class GraphEditor:
         return None
 
     def _on_left_click(self, sender, button: int) -> None:
-        if not dpg.is_item_hovered(f"{self.tag}_canvas"):
+        if not dpg.is_item_hovered(self.canvas):
             return
 
         mx, my = dpg.get_drawing_mouse_pos()
@@ -427,7 +436,7 @@ class GraphEditor:
             self._select_node(node)
 
     def _on_right_click(self, sender, button: int) -> None:
-        if not dpg.is_item_hovered(f"{self.tag}_canvas"):
+        if not dpg.is_item_hovered(self.canvas):
             return
 
         mx, my = dpg.get_drawing_mouse_pos()
@@ -442,7 +451,7 @@ class GraphEditor:
             self._open_canvas_menu()
 
     def _on_drag_start(self) -> None:
-        if dpg.is_item_hovered(f"{self.tag}_canvas"):
+        if dpg.is_item_hovered(self.canvas):
             self.dragging = True
 
     def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
@@ -454,15 +463,19 @@ class GraphEditor:
         self.look_at(self.origin[0] + delta_x, self.origin[1] + delta_y)
 
     def _on_drag_release(self, sender, mouse_button) -> None:
+        if not self.dragging:
+            return
+
         self.set_origin(
-            self.origin[0] + self.last_drag[0], self.origin[1] + self.last_drag[1]
+            self.origin[0] + self.last_drag[0], 
+            self.origin[1] + self.last_drag[1]
         )
 
         self.last_drag = (0.0, 0.0)
         self.dragging = False
 
     def _on_mouse_wheel(self, sender, wheel_delta: int):
-        if not dpg.is_item_hovered(f"{self.tag}_canvas"):
+        if not dpg.is_item_hovered(self.canvas):
             return
 
         mouse_pos = dpg.get_drawing_mouse_pos()
@@ -471,8 +484,8 @@ class GraphEditor:
 
     def _on_resize(self):
         cw, ch = dpg.get_item_rect_size(f"{self.tag}_canvas_window")
-        dpg.set_item_width(f"{self.tag}_canvas", cw)
-        dpg.set_item_height(f"{self.tag}_canvas", ch)
+        dpg.set_item_width(self.canvas, cw)
+        dpg.set_item_height(self.canvas, ch)
 
     def set_origin(self, new_x: float, new_y: float) -> None:
         self.origin = (new_x, new_y)
@@ -532,7 +545,7 @@ class GraphEditor:
         bbox = self.get_canvas_content_bbox()
         center_x = bbox[0] + bbox[2] / 2
         center_y = bbox[1] + bbox[3] / 2
-        canvas_w, canvas_h = dpg.get_item_rect_size(f"{self.tag}_canvas")
+        canvas_w, canvas_h = dpg.get_item_rect_size(self.canvas)
         zw = math.log(canvas_w / bbox[2], self.layout.zoom_factor)
         zh = math.log(canvas_h / bbox[3], self.layout.zoom_factor)
         zoom_level = min(zw, zh)
@@ -799,16 +812,16 @@ class GraphEditor:
                 dpg.delete_item(f"{parent_id}_TO_{node.id}")
 
     def _update_roots(self) -> None:
-        dpg.delete_item(f"{self.tag}_roots_table", children_only=True, slot=1)
+        dpg.delete_item(self.roots_table, children_only=True, slot=1)
 
         # Columns will be hidden if header_row=False and no rows exist initially
-        for col in dpg.get_item_children(f"{self.tag}_roots_table", slot=0):
+        for col in dpg.get_item_children(self.roots_table, slot=0):
             dpg.show_item(col)
 
         root_ids = self.get_roots()
         for root_id in root_ids:
             label = self.get_node_frontpage_short(root_id)
-            with dpg.table_row(filter_key=label, parent=f"{self.tag}_roots_table"):
+            with dpg.table_row(filter_key=label, parent=self.roots_table):
                 dpg.add_selectable(
                     label=label,
                     user_data=root_id,
@@ -818,7 +831,7 @@ class GraphEditor:
 
     def _clear_attributes(self) -> None:
         dpg.set_value(f"{self.tag}_attributes_title", "Attributes")
-        dpg.delete_item(f"{self.tag}_attributes_table", children_only=True, slot=1)
+        dpg.delete_item(self.attributes_table, children_only=True, slot=1)
 
     def _update_attributes(self, node: Node) -> None:
         if node is None:
@@ -827,13 +840,13 @@ class GraphEditor:
         dpg.set_value(f"{self.tag}_attributes_title", node.id)
 
         # Columns will be hidden if header_row=False and no rows exist initially
-        for col in dpg.get_item_children(f"{self.tag}_attributes_table", slot=0):
+        for col in dpg.get_item_children(self.attributes_table, slot=0):
             dpg.show_item(col)
 
         for key, val in self.get_node_attributes(node).items():
             with dpg.table_row(
                 filter_key=key,
-                parent=f"{self.tag}_attributes_table",
+                parent=self.attributes_table,
             ):
                 self._add_attribute_row_contents(key, val, node)
 

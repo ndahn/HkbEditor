@@ -14,12 +14,8 @@ def select_pointer_dialog(
     selected = ptr.get_value()
     tag = dpg.generate_uuid()
 
-    def on_filter_update(sender, app_data, user_data):
-        dpg.delete_item(table, children_only=True, slot=1)
-
-        # TODO come up with a filter syntax like "id=... & type=..."
-        filt: str = dpg.get_value(sender)
-        matches = [
+    def get_matching_objects(filt):
+        return [
             obj
             for obj in beh.objects.values()
             if ptr.subtype in (None, obj.type_id)
@@ -27,6 +23,13 @@ def select_pointer_dialog(
                 filt in obj.object_id or filt in obj.type_id or filt in obj.get_field("name", "")
             )
         ]
+
+    def on_filter_update(sender, app_data, user_data):
+        dpg.delete_item(table, children_only=True, slot=1)
+
+        # TODO come up with a filter syntax like "id=... & type=..."
+        filt = dpg.get_value(sender)
+        matches = get_matching_objects(filt)
 
         if len(matches) > 100:
             return
@@ -76,10 +79,14 @@ def select_pointer_dialog(
     ) as dialog:
         # TODO use a clipper!
         # Way too many options, instead fill the table according to user input
-        dpg.add_input_text(
-            hint="Find Object...",
-            callback=on_filter_update,
-        )
+        with dpg.group(horizontal=True):
+            dpg.add_input_text(
+                hint="Find Object...",
+                callback=on_filter_update,
+            )
+
+            num_total = len(get_matching_objects(""))
+            dpg.add_text(f"({num_total} candidates)")
 
         dpg.add_separator()
 
