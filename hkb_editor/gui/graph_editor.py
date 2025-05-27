@@ -632,6 +632,13 @@ class GraphEditor:
         for node in self.nodes.values():
             if node.visible:
                 self._draw_node(node)
+        
+        for node in self.nodes.values():
+            if node.visible:
+                for child_id in self.graph.successors(node.id):
+                    child_node = self.nodes[child_id]
+                    if child_node.visible:
+                        self._draw_edge(node, child_node)
 
         if self.selected_node:
             self._select_node(self.selected_node)
