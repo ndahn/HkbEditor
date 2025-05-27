@@ -91,11 +91,9 @@ class GraphEditor:
         self.graph: nx.DiGraph = nx.DiGraph()
         self.layout = Layout()
         self.nodes: dict[str, Node] = {}
-        self.selected_roots: list[str] = set()
+        self.selected_roots: set[str] = set()
         self.selected_node: Node = None
         self.canvas_transform: tuple[float, float] = (0.0, 0.0)
-        self.mouse_down_pos: tuple[float, float] = (0.0, 0.0)
-        self.mouse_down = False
         self.dragging = False
         self.last_drag: tuple[float, float] = (0.0, 0.0)
         self.zoom_level = 0
@@ -405,19 +403,21 @@ class GraphEditor:
         dpg.set_frame_callback(2, self._on_resize)
 
     # Callbacks
-    def get_node_at_pos(self, x: float, y: float, *, absolute: bool = True) -> Node:
-        # TODO sometimes doesn't work, probably when zooming too fast
-        # Separate node drawing from creation, nodes should store x/y at zoom 0
-        if absolute:
-            ox, oy = self.canvas_transform
-            x = x - ox
-            y = y - oy
+    def get_canvas_mouse_pos(self) -> tuple[float, float]:
+        if not dpg.is_item_hovered(self.canvas):
+            return (0.0, 0.0)
 
+        mx, my = dpg.get_drawing_mouse_pos()
+        ox, oy = self.canvas_transform
+        return ((mx - ox), (my - oy))
+
+    def get_node_at_pos(self, x: float, y: float) -> Node:
         for node in self.nodes.values():
             # TODO Something like a b-tree might have better performance,
             # but so far this is not a bottleneck
-            if node.visible and node.contains(x, y):
-                return node
+            if node.visible:
+                if node.contains(x, y):
+                    return node
 
         return None
 
@@ -425,7 +425,7 @@ class GraphEditor:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        mx, my = dpg.get_drawing_mouse_pos()
+        mx, my = self.get_canvas_mouse_pos()
         node = self.get_node_at_pos(mx, my)
 
         if not node:
@@ -437,7 +437,7 @@ class GraphEditor:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        mx, my = dpg.get_drawing_mouse_pos()
+        mx, my = self.get_canvas_mouse_pos()
         node = self.get_node_at_pos(mx, my)
 
         if node:
@@ -478,13 +478,9 @@ class GraphEditor:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        # TODO Scrolling too fast can cause problems, is this a solution?
+        # Scrolling too fast can cause problems
         with dpg.mutex():
-            mouse_pos = dpg.get_drawing_mouse_pos()
-            zoom_point = (
-                self.canvas_transform[0] + mouse_pos[0],
-                self.canvas_transform[1] + mouse_pos[1],
-            )
+            zoom_point = self.get_canvas_mouse_pos()
             self.set_zoom(self.zoom_level - wheel_delta, zoom_point)
 
     def _on_resize(self):
@@ -516,7 +512,7 @@ class GraphEditor:
             zoom_level = min(max(zoom_level, self.zoom_min), self.zoom_max)
 
         if zoom_point is not None:
-            self.canvas_transform = zoom_point
+            self.set_origin(*zoom_point)
 
         self.zoom_level = zoom_level
         self._regenerate_canvas()
@@ -568,19 +564,16 @@ class GraphEditor:
         root_pos = pos[root_id]
 
         for key, val in pos.items():
-            pos[key] = tuple((val[i] - root_pos[i]) * 3 for i in range(len(val)))
+            pos[key] = tuple((val[i] - root_pos[i]) * 3 * self.zoom for i in range(len(val)))
 
         return pos
 
     def _on_root_selected(self, sender: str, selected: bool, root_id: str):
-        # For now we only allow one root to be selected
-        if not selected:
-            # Prevent deselecting a root
-            dpg.set_value(f"{self.tag}_root_{root_id}_selectable", True)
-            return
-
         self.graph.clear()
+
+        # For now we only allow one root to be selected
         for other in self.get_roots():
+            self.selected_roots.discard(other)
             tag = f"{self.tag}_root_{other}_selectable"
             if other != root_id and dpg.does_item_exist(tag):
                 dpg.set_value(tag, False)
@@ -618,10 +611,6 @@ class GraphEditor:
                 del self.nodes[n]
 
             self.graph.remove_nodes_from(root_graph.nodes)
-            pos = self.get_graph_layout(self.graph, root_id)
-
-            for node in self.nodes.values():
-                node.pos = pos[node.id]
 
             if self.selected_node and self.selected_node not in self.nodes:
                 self.selected_node = None
@@ -685,14 +674,11 @@ class GraphEditor:
                         else:
                             self._remove_from_canvas(n)
 
-            print("###", root_id in self.graph)
-
         # Update the attributes panel
         self._clear_attributes()
         self._update_attributes(node)
 
         self.selected_node = node
-        self._draw_node(node)  # TODO neccessary?
         self._unfold_node(node)
         self.set_highlight(node, True)
         self.on_node_selected(node)
@@ -744,6 +730,8 @@ class GraphEditor:
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
 
     def _unfold_node(self, node: Node) -> None:
+        self._draw_node(node)
+
         for child_id in self.graph.successors(node.id):
             child_node = self.nodes[child_id]
             self._draw_node(child_node)
@@ -767,6 +755,38 @@ class GraphEditor:
                 self._remove_from_canvas(self.nodes[child_id])
 
         node.unfolded = False
+
+    def _get_pos_for_node(self, node: Node) -> tuple[float, float]:
+        zoom_factor = self.zoom
+
+        if level == 0:
+            px = self.layout.node0_margin[0]
+        else:
+            px = (
+                max(
+                    n.x + n.width
+                    for n in self.visible_nodes.values()
+                    if n.level == level - 1
+                )
+                + self.layout.gap_x * zoom_factor
+            )
+
+        try:
+            py = (
+                max(
+                    n.y + n.height
+                    for n in self.visible_nodes.values()
+                    if n.level == level
+                )
+                + self.layout.step_y * zoom_factor
+            )
+        except ValueError:
+            if parent_id:
+                py = self.visible_nodes[parent_id].y
+            else:
+                py = self.layout.node0_margin[1]
+
+        return px, py
 
     def _draw_node(self, node: Node) -> None:
         tag = f"{self.tag}_node_{node.id}"
@@ -793,7 +813,6 @@ class GraphEditor:
         text_h = 12
         w = max_len * 6.5 + margin * 2
         h = text_h * len(lines) + margin * 2
-        node.size = (w, h)
 
         # px *= zoom_factor
         # py *= zoom_factor
@@ -822,6 +841,7 @@ class GraphEditor:
                 )
 
         node.visible = True
+        node.size = (w, h)
         dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
 
     def _draw_edge(self, node_a: Node, node_b: Node) -> None:
