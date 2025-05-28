@@ -23,7 +23,7 @@ def get_custom_layout_path():
 
 @dataclass
 class Layout:
-    gap_x: int = 20
+    gap_x: int = 30
     step_y: int = 20
     node0_margin: tuple[int, int] = (50, 50)
     text_margin: int = 5
@@ -149,6 +149,7 @@ class GraphEditor:
     def create_app_menu(self):
         self._create_file_menu()
         dpg.add_separator()
+        self._create_settings_menu()
         self._create_dpg_menu()
 
     def _save_layout(self):
@@ -201,6 +202,18 @@ class GraphEditor:
 
             dpg.add_separator()
             dpg.add_menu_item(label="Exit", callback=self.exit_app)
+
+    def _create_settings_menu(self):
+        with dpg.menu(label="Settings", tag=f"{self.tag}_menu_settings"):
+            dpg.add_menu_item(
+                label="Invert Zoom", check=True, tag=f"{self.tag}_settings_invert_zoom"
+            )
+            dpg.add_menu_item(
+                label="Single Branch Mode",
+                check=True,
+                default_value=True,
+                tag=f"{self.tag}_settings_single_branch_mode",
+            )
 
     def _create_dpg_menu(self):
         with dpg.menu(label="dearpygui"):
@@ -431,7 +444,7 @@ class GraphEditor:
 
         if not node:
             self._deselect_active_node()
-        elif self.selected_node != node:
+        else:
             self._select_node(node)
 
     def _on_right_click(self, sender, button: int) -> None:
@@ -478,6 +491,9 @@ class GraphEditor:
     def _on_mouse_wheel(self, sender, wheel_delta: int):
         if not dpg.is_item_hovered(self.canvas):
             return
+
+        if dpg.get_value(f"{self.tag}_settings_invert_zoom"):
+            wheel_delta = -wheel_delta
 
         # Scrolling too fast can cause problems
         with dpg.mutex():
@@ -639,49 +655,46 @@ class GraphEditor:
         if selected:
             self._select_node(selected)
 
-    # TODO not used at the moment, add to node menu
-    def _isolate(self, target_node: Node):
-        # Find the root of the node
-        root_id = target_node
-        while True:
-            preds = list(self.graph.predecessors(root_id))
-            if not preds:
-                break
-            root_id = preds[0]
-
-        required_visible = nx.shortest_path(self.graph, root_id, target_node.id)
-        self._clear_canvas()
-
-        for node_id in enumerate(required_visible):
-            node = self.nodes[node_id]
-            self._draw_node(node)
-            self._unfold_node(node)
-
-    def _select_node(self, node: Node):
+    def _isolate_branch(self, node: Node) -> None:
         # Remove all nodes that don't need to be visible anymore. This is more complicated as it
         # seems, as we need to keep the branch unfolded by the user as it is
-        if self.selected_node and node != self.selected_node:
-            self.set_highlight(self.selected_node, False)
-            
-            root = next(r for r in self.selected_roots if nx.has_path(self.graph, r, node.id))
-            branch = [node.id]
+        root = next(
+            r for r in self.selected_roots if nx.has_path(self.graph, r, node.id)
+        )
+        branch = [node.id]
 
-            while True:
-                if branch[-1] == root:
-                    break
+        while True:
+            if branch[-1] == root:
+                break
 
-                # Find the visible parents and their children 
-                preds = self.graph.predecessors(branch[-1])
-                for parent_id in preds:
-                    if self.nodes[parent_id].visible:
-                        branch.extend(self.graph.successors(parent_id))
-                        branch.append(parent_id)
+            # Find the visible parents and their children
+            preds = self.graph.predecessors(branch[-1])
+            for parent_id in preds:
+                if self.nodes[parent_id].visible:
+                    branch.extend(self.graph.successors(parent_id))
+                    branch.append(parent_id)
 
-            branch_nodes = set(branch)
-            for n in self.nodes.values():
-                if n.visible and n.id not in branch_nodes:
-                    self._remove_from_canvas(n)
-            
+        branch_nodes = set(branch)
+        for n in self.nodes.values():
+            if n.visible and n.id not in branch_nodes:
+                self._remove_from_canvas(n)
+
+    def _select_node(self, node: Node):
+        single_branch_mode = dpg.get_value(f"{self.tag}_settings_single_branch_mode")
+
+        if single_branch_mode:
+            if self.selected_node and node != self.selected_node:
+                self.set_highlight(self.selected_node, False)
+                self._isolate_branch(node)
+        else:
+            if node == self.selected_node:
+                self._deselect_active_node()
+                return
+            else:
+                if self.selected_node:
+                    self.set_highlight(self.selected_node, False)
+                self._unfold_node(node)
+
         # Update the attributes panel
         self._clear_attributes()
         self._update_attributes(node)
@@ -746,6 +759,15 @@ class GraphEditor:
             self._draw_edge(node, child_node)
 
         node.unfolded = True
+
+    # TODO not used at the moment, layout is not clean
+    def _unfold_all(self, node: Node) -> None:
+        for succ_id in nx.descendants(self.graph, node.id):
+            succ = self.nodes[succ_id]
+            succ.visible = True
+            succ.unfolded = True
+
+        self._regenerate_canvas()
 
     def _fold_node(self, node: Node) -> None:
         # Set visible status first, otherwise we make mistakes if nodes have multiple parents

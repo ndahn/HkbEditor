@@ -159,13 +159,8 @@ class BehaviorEditor(GraphEditor):
                 label="Create CMSG...", enabled=False, callback=self.create_cmsg
             )
 
-        # TODO persist settings
-        with dpg.menu(label="Settings", tag=f"{self.tag}_menu_settings"):
-            dpg.add_menu_item(
-                label="Invert Zoom", check=True, tag=f"{self.tag}_settings_invert_zoom"
-            )
-
         dpg.add_separator()
+        self._create_settings_menu()
         self._create_dpg_menu()
 
     def _on_key_press(self, sender, key: int) -> None:
@@ -174,12 +169,6 @@ class BehaviorEditor(GraphEditor):
                 self.undo()
             elif key == dpg.mvKey_Y:
                 self.redo()
-
-    def _on_mouse_wheel(self, sender, wheel_delta):
-        if dpg.get_value(f"{self.tag}_settings_invert_zoom"):
-            wheel_delta = -wheel_delta
-
-        super()._on_mouse_wheel(sender, wheel_delta)
 
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
