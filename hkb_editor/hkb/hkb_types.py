@@ -1,6 +1,6 @@
 from typing import Any, Type, Generator, Iterator
 import struct
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 
 from .tagfile import Tagfile
 from .type_registry import TypeRegistry
@@ -28,8 +28,7 @@ class XmlValueHandler:
         raise NotImplementedError()
 
     def xml(self) -> str:
-        ET.indent(self.element)
-        return ET.tostring(self.element, encoding="unicode")
+        return ET.tostring(self.element, pretty_print=True, encoding="unicode")
 
     def __str__(self) -> str:
         return str(self.get_value())

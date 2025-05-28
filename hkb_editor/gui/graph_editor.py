@@ -148,8 +148,8 @@ class GraphEditor:
 
     def create_app_menu(self):
         self._create_file_menu()
-        dpg.add_separator()
         self._create_settings_menu()
+        dpg.add_separator()
         self._create_dpg_menu()
 
     def _save_layout(self):
@@ -654,6 +654,18 @@ class GraphEditor:
 
         if selected:
             self._select_node(selected)
+
+    def _show_node_path(self, path: list[Node]) -> None:
+        self._clear_canvas()
+        self._clear_attributes()
+
+        if not path:
+            return
+        
+        for node in path:
+            self._unfold_node(node)
+
+        self._select_node(path[-1])
 
     def _isolate_branch(self, node: Node) -> None:
         # Remove all nodes that don't need to be visible anymore. This is more complicated as it

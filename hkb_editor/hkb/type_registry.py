@@ -1,6 +1,6 @@
 from typing import Any
 from logging import getLogger
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 
 
 _logger = getLogger(__name__)

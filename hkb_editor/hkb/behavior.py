@@ -1,5 +1,5 @@
 from collections import deque
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 import networkx as nx
 
 from .tagfile import Tagfile
@@ -9,10 +9,16 @@ from .hkb_types import HkbArray, HkbString
 class HavokBehavior(Tagfile):
     def __init__(self, xml_file: str):
         super().__init__(xml_file)
-        
+
         # There's a special object storing the string values referenced from HKS
-        strings_type_id = self.type_registry.find_type_by_name("hkbBehaviorGraphStringData")
-        strings_id = self._tree.getroot().find(f".//object[@typeid='{strings_type_id}']").attrib["id"]
+        strings_type_id = self.type_registry.find_type_by_name(
+            "hkbBehaviorGraphStringData"
+        )
+        strings_id = (
+            self._tree.getroot()
+            .find(f".//object[@typeid='{strings_type_id}']")
+            .attrib["id"]
+        )
         strings_obj = self.objects[strings_id]
 
         self.events: HkbArray = strings_obj["eventNames"]

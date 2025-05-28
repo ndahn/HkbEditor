@@ -3,7 +3,7 @@ import logging
 from threading import Thread
 import textwrap
 import time
-from xml.etree import ElementTree as ET
+from lxml import etree as ET
 from dearpygui import dearpygui as dpg
 import networkx as nx
 import pyperclip
@@ -25,6 +25,7 @@ from .graph_editor import GraphEditor, Node
 from .widgets import (
     select_pointer_dialog,
     edit_simple_array_dialog,
+    find_object_dialog,
 )
 from .table_tree import (
     table_tree_leaf,
@@ -141,8 +142,6 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
             dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
             dpg.add_separator()
-            dpg.add_menu_item(label="Load bone names...", callback=self.load_bone_names)
-            dpg.add_separator()
             dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
             dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
             dpg.add_menu_item(
@@ -152,9 +151,10 @@ class BehaviorEditor(GraphEditor):
         with dpg.menu(
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
-            dpg.add_menu_item(label="Load skeleton...", callback=self.load_bone_names)
+            dpg.add_menu_item(label="Find Object...", callback=lambda: self.open_search_dialog())
+            dpg.add_menu_item(label="Load Skeleton...", callback=self.load_bone_names)
             # TODO enable
-            dpg.add_menu_item(label="Attribute aliases...", enabled=False)
+            dpg.add_menu_item(label="Attribute Aliases...", enabled=False)
             dpg.add_menu_item(
                 label="Create CMSG...", enabled=False, callback=self.create_cmsg
             )
@@ -233,6 +233,8 @@ class BehaviorEditor(GraphEditor):
         if obj.get_field("name", None) is not None:
             actions.append("Copy Name")
 
+        actions.append("Copy XML")
+
         return actions
 
     def on_node_menu_item_selected(self, node: Node, selected_item: str) -> None:
@@ -241,6 +243,9 @@ class BehaviorEditor(GraphEditor):
         elif selected_item == "Copy Name":
             obj = self.beh.objects[node.id]
             self._copy_to_clipboard(obj["name"])
+        elif selected_item == "Copy XML":
+            obj = self.beh.objects[node.id]
+            self._copy_to_clipboard(obj.xml())
         else:
             self.logger.warning("Not implemented yet")
 
@@ -869,6 +874,22 @@ class BehaviorEditor(GraphEditor):
 
         if callback:
             callback(None, obj, user_data)
+
+    def open_search_dialog(self, close_after_select: bool = False):
+        def jump_to_object(sender: str, object_id: str, user_data: Any):
+            # Open the associated state machine
+            sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
+            root = next(sm for sm in self.beh.find_parents_by_type(object_id, sm_type))
+            self._on_root_selected(sender, True, root.object_id)
+            
+            # Reveal the node in the state machine graph
+            path = nx.shortest_path(self.graph, root.object_id, object_id)
+            self._show_node_path([self.nodes[n] for n in path])
+
+            if close_after_select:
+                dpg.delete_item(dialog)
+
+        dialog = find_object_dialog(self.beh, jump_to_object)
 
     def create_cmsg(self):
         # TODO a wizard that lets the user create a new generator and attach it to another node

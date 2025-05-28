@@ -6,19 +6,19 @@ from hkb_editor.hkb.behavior import HavokBehavior
 
 
 def select_pointer_dialog(
-    beh: HavokBehavior,
+    behavior: HavokBehavior,
     callback: Callable[[str, str, Any], None],
-    ptr: HkbPointer,
+    pointer: HkbPointer,
     user_data: Any = None,
 ) -> None:
-    selected = ptr.get_value()
+    selected = pointer.get_value()
     tag = dpg.generate_uuid()
 
     def get_matching_objects(filt):
         return [
             obj
-            for obj in beh.objects.values()
-            if ptr.subtype in (None, obj.type_id)
+            for obj in behavior.objects.values()
+            if pointer.subtype in (None, obj.type_id)
             and (
                 filt in obj.object_id or filt in obj.type_id or filt in obj.get_field("name", "")
             )
@@ -36,7 +36,7 @@ def select_pointer_dialog(
 
         for obj in sorted(matches, key=lambda o: o.object_id):
             name = obj["name"]
-            type_name = beh.type_registry.get_name(obj.type_id)
+            type_name = behavior.type_registry.get_name(obj.type_id)
             with dpg.table_row(parent=table, user_data=obj.object_id):
                 dpg.add_selectable(
                     label=obj.object_id,

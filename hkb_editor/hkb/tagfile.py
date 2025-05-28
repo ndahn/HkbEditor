@@ -1,7 +1,10 @@
 from typing import Generator, TYPE_CHECKING
-import xml.etree.ElementTree as ET
+
+# lxml supports full xpath, which is beneficial for us
+from lxml import etree as ET
 
 from .type_registry import TypeRegistry
+
 if TYPE_CHECKING:
     from .hkb_types import HkbRecord
 
@@ -10,8 +13,8 @@ class Tagfile:
     def __init__(self, xml_file: str):
         from .hkb_types import HkbRecord
 
-        self._tree = ET.parse(xml_file)
-        root = self._tree.getroot()
+        self._tree: ET._ElementTree = ET.parse(xml_file)
+        root: ET._Element = self._tree.getroot()
 
         self.type_registry = TypeRegistry()
         self.type_registry.load_types(root)
@@ -29,6 +32,33 @@ class Tagfile:
         for obj in self.objects.values():
             if obj.type_id == type_id:
                 yield obj
+
+    def find_parents_by_type(
+        self, object_id: str, parent_type: str
+    ) -> Generator["HkbRecord", None, None]:
+        candidates = [object_id]
+        visited = set(candidates)
+
+        while candidates:
+            candidate = candidates.pop()
+
+            # Search upwards through the hierarchy to see if any ancestors match our criteria
+            parents: list[ET._Element] = self._tree.xpath(
+                f"/*/object[.//pointer[@id='{candidate}']]"
+            )
+
+            for parent_elem in parents:
+                pid = parent_elem.attrib["id"]
+
+                if parent_elem.attrib["typeid"] == parent_type:
+                    yield self.objects[pid]
+
+                # Parent didn't match, but might still have a matching parent
+                if pid not in visited:
+                    candidates.append(pid)
+                    visited.add(pid)
+
+        return None
 
     def new_id(self, base: str = "object", offset: int = 1) -> str:
         last_key = max(
