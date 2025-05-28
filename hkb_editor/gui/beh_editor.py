@@ -654,23 +654,28 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_selectable(
                     label="Cut",
                     callback=self._cut_value,
-                    user_data=(widget, value),
+                    user_data=(widget, path, value),
                 )
 
             dpg.add_selectable(
                 label="Copy",
                 callback=self._copy_value,
-                user_data=(widget, value),
+                user_data=(widget, path, value),
             )
             dpg.add_selectable(
-                label="Copy as XML",
+                label="Copy XML",
                 callback=self._copy_value_xml,
-                user_data=(widget, value),
+                user_data=(widget, path, value),
+            )
+            dpg.add_selectable(
+                label="Copy Path",
+                callback=self._copy_value_path,
+                user_data=(widget, path, value),
             )
             dpg.add_selectable(
                 label="Paste",
                 callback=self._paste_value,
-                user_data=(widget, value),
+                user_data=(widget, path, value),
             )
 
             if isinstance(value, HkbPointer):
@@ -688,17 +693,10 @@ class BehaviorEditor(GraphEditor):
 
                 def go_to_pointer():
                     oid = value.get_value()
-                    if not oid:
+                    if not oid or oid == "object0":
                         return
 
-                    node = self.visible_nodes.get(oid, None)
-                    if not node:
-                        node = self._draw_node(
-                            oid, 
-                            source_record.object_id, 
-                            self.selected_node.level
-                        )
-
+                    node = self.nodes[oid]
                     self._select_node(node)
                     # TODO not quite right yet, not sure why
                     self.look_at(node.x + node.width / 2, node.y + node.width / 2)
@@ -762,7 +760,7 @@ class BehaviorEditor(GraphEditor):
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, value = user_data
+        widget, path, value = user_data
         val = dpg.get_value(widget)
 
         try:
@@ -783,7 +781,7 @@ class BehaviorEditor(GraphEditor):
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, _ = user_data
+        widget, path, value = user_data
         val = dpg.get_value(widget)
         self._copy_to_clipboard(val)
 
@@ -793,9 +791,18 @@ class BehaviorEditor(GraphEditor):
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        _, value = user_data
+        widget, path, value = user_data
         val = value.xml().strip().strip("\n")
-        self._copy_to_clipboard(str(val))
+        self._copy_to_clipboard(val)
+
+    def _copy_value_path(
+        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
+    ) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        widget, path, value = user_data
+        self._copy_to_clipboard(path)
 
     def _paste_value(
         self, sender, app_data, user_data: tuple[str, XmlValueHandler]
@@ -803,7 +810,7 @@ class BehaviorEditor(GraphEditor):
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, value = user_data
+        widget, path, value = user_data
         data = pyperclip.paste()
 
         try:
