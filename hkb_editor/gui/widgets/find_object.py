@@ -1,9 +1,12 @@
 from typing import Any, Callable
+import webbrowser
 from dearpygui import dearpygui as dpg
 import pyperclip
 
 from hkb_editor.hkb.hkb_types import HkbRecord
 from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.query import lucene_help_text, lucene_url
+from hkb_editor.gui import style
 
 
 def find_object_dialog(
@@ -18,21 +21,18 @@ def find_object_dialog(
     
     selected_id: HkbRecord = None
 
-    # TODO come up with a filter syntax like "id=... & type=..."
-    def get_matching_objects(filt):
-        return [
-            obj
-            for obj in behavior.objects.values()
-            if filt in obj.object_id
-            or filt in obj.type_id
-            or filt in obj.get_field("name", "", resolve=True)
-        ]
+    def get_matching_objects(filt: str):
+        try:
+            return list(behavior.query(filt))
+        except ValueError:
+            return []
 
     def on_filter_update(sender, app_data, user_data):
         dpg.delete_item(table, children_only=True, slot=1)
 
         filt = dpg.get_value(sender)
         matches = get_matching_objects(filt)
+        dpg.set_value(f"{tag}_total", f"({len(matches)} candidates)")
 
         if len(matches) > 100:
             return
@@ -152,8 +152,27 @@ def find_object_dialog(
                 callback=on_filter_update,
             )
 
-            num_total = len(get_matching_objects(""))
-            dpg.add_text(f"({num_total} candidates)")
+            # A helpful tooltip full of help
+            dpg.add_button(
+                label="?", 
+                callback=lambda: webbrowser.open(lucene_url)
+            )
+            with dpg.tooltip(dpg.last_item()):
+                for line in lucene_help_text.split("\n"):
+                    bullet = False
+                    if line.startswith("- "):
+                        line = line[2:]
+                        bullet = True
+
+                    dpg.add_text(line, bullet=bullet)
+
+                dpg.add_text(
+                    "(Click the '?' to open the official documentation)", 
+                    color=style.blue
+                )
+
+            num_total = len(get_matching_objects("*"))
+            dpg.add_text(f"({num_total} total)", tag=f"{tag}_total")
 
         dpg.add_separator()
 

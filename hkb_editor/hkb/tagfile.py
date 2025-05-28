@@ -4,6 +4,7 @@ from typing import Generator, TYPE_CHECKING
 from lxml import etree as ET
 
 from .type_registry import TypeRegistry
+from .query import query_objects
 
 if TYPE_CHECKING:
     from .hkb_types import HkbRecord
@@ -59,6 +60,9 @@ class Tagfile:
                     visited.add(pid)
 
         return None
+
+    def query(self, query_str: str) -> Generator["HkbRecord", None, None]:
+        yield from query_objects(self, query_str)
 
     def new_id(self, base: str = "object", offset: int = 1) -> str:
         last_key = max(

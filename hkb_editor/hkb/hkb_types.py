@@ -21,6 +21,10 @@ class XmlValueHandler:
         self.element = element
         self.type_id = type_id
 
+    @property
+    def type_name(self) -> str:
+        return self.tagfile.type_registry.get_name(self.type_id)
+
     def get_value(self) -> Any:
         raise NotImplementedError()
 
@@ -376,7 +380,7 @@ class HkbRecord(XmlValueHandler):
         except (AttributeError, KeyError) as e:
             if default != _undefined:
                 return default
-            raise e
+            raise KeyError from e
 
         if resolve:
             return obj.get_value()

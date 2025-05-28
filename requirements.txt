@@ -3,3 +3,5 @@ lxml
 networkx
 pyperclip
 crossfiledialog
+lark
+rapidfuzz

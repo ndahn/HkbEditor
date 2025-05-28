@@ -1,8 +1,11 @@
 from typing import Any, Callable
+import webbrowser
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.query import lucene_help_text, lucene_url
+from hkb_editor.gui import style
 
 
 def select_pointer_dialog(
@@ -10,19 +13,21 @@ def select_pointer_dialog(
     callback: Callable[[str, str, Any], None],
     pointer: HkbPointer,
     user_data: Any = None,
-) -> None:
+    tag: str = 0,
+) -> str:
+    if tag in (0, "", None):
+        tag = dpg.generate_uuid()
+    
     selected = pointer.get_value()
-    tag = dpg.generate_uuid()
 
-    def get_matching_objects(filt):
-        return [
-            obj
-            for obj in behavior.objects.values()
-            if pointer.subtype in (None, obj.type_id)
-            and (
-                filt in obj.object_id or filt in obj.type_id or filt in obj.get_field("name", "")
-            )
-        ]
+    def get_matching_objects(filt: str):
+        if pointer.subtype not in (None, "", "type0"):
+            filt = f"type_id:{pointer.subtype} AND {filt}"
+
+        try:
+            return list(behavior.query(filt))
+        except ValueError:
+            return []
 
     def on_filter_update(sender, app_data, user_data):
         dpg.delete_item(table, children_only=True, slot=1)
@@ -30,6 +35,7 @@ def select_pointer_dialog(
         # TODO come up with a filter syntax like "id=... & type=..."
         filt = dpg.get_value(sender)
         matches = get_matching_objects(filt)
+        dpg.set_value(f"{tag}_total", f"({len(matches)} candidates)")
 
         if len(matches) > 100:
             return
@@ -76,6 +82,7 @@ def select_pointer_dialog(
         label="Select Pointer",
         modal=True,
         on_close=lambda: dpg.delete_item(dialog),
+        tag=tag,
     ) as dialog:
         # TODO use a clipper!
         # Way too many options, instead fill the table according to user input
@@ -85,8 +92,27 @@ def select_pointer_dialog(
                 callback=on_filter_update,
             )
 
+            # A helpful tooltip full of help
+            dpg.add_button(
+                label="?", 
+                callback=lambda: webbrowser.open(lucene_url)
+            )
+            with dpg.tooltip(dpg.last_item()):
+                for line in lucene_help_text.split("\n"):
+                    bullet = False
+                    if line.startswith("- "):
+                        line = line[2:]
+                        bullet = True
+
+                    dpg.add_text(line, bullet=bullet)
+
+                dpg.add_text(
+                    "(Click the '?' to open the official documentation)", 
+                    color=style.blue
+                )
+
             num_total = len(get_matching_objects(""))
-            dpg.add_text(f"({num_total} candidates)")
+            dpg.add_text(f"({num_total} total)", tag=f"{tag}_total")
 
         dpg.add_separator()
 
@@ -113,3 +139,5 @@ def select_pointer_dialog(
                 label="Cancel",
                 callback=on_cancel,
             )
+
+    return tag
