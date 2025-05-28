@@ -2,7 +2,7 @@ from typing import Any, Callable
 import re
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer, HkbString
+from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.gui import style
 
@@ -53,7 +53,7 @@ def open_new_cmsg_dialog(
         cmsg_name = base_name
         if not base_name.endswith("_CMSG"):
             base_name -= "_CMSG"
-        
+
         statemachine_type = types.find_type_by_name("hkbStateMachine")
         statemachine_id = next(
             behavior.query(f"type_id:{statemachine_type} AND name:{statemachine_val}")
@@ -62,26 +62,18 @@ def open_new_cmsg_dialog(
         # TODO include derived types
         transition_type = types.find_type_by_name("hkbTransitionEffect")
         transitions = behavior.find_objects_by_type(transition_type)
-        transition_id = next(t.object_id for t in transitions if t["name"] == transition_val)
+        transition_id = next(
+            t.object_id for t in transitions if t["name"] == transition_val
+        )
 
-        # Add entry to animations array
+        # Add entry to animations array. We also need the parts in some places
         anim_anum, anim_id = animation_val.split("_")
-        
-        hkb_graph_type = types.find_type_by_name("hkbBehaviorGraph")
-        hkb_graph_obj = next(behavior.find_objects_by_type(hkb_graph_type))
-        # TODO is this reliable?
-        char_id = hkb_graph_obj["name"].split(".")[0]
-
-        full_anim_name = f"..\..\..\..\..\Model\chr\{char_id}\hkx\{anim_anum}\{animation_val}.hkx"
         try:
-            anim_id = behavior.animations.index(full_anim_name)
+            anim_id = behavior.get_animation_index(animation_val)
         except ValueError:
-            anim_id = behavior.create_animation(full_anim_name)
+            anim_id = behavior.create_animation(animation_val)
 
-        # Fix event name and add it to the events array
-        if not event_val.startswith("W_"):
-            event_val = "W_" + event_val
-        
+        # Add event to the events array
         try:
             event_id = behavior.events.index(event_val)
         except ValueError:
@@ -126,7 +118,7 @@ def open_new_cmsg_dialog(
                 "transitions": transitioninfoarray_id,  # TODO create new
                 # stateId in StateInfo directly correlates to toStateId in the transitionInfoArray.
                 # It doesn't have to be unique, but it has to be unique within that array
-                "stateId": stateid_val,  # TODO do we need this?
+                "stateId": stateid_val,  # TODO depends on transition info array
             },
             stateinfo_id,
         )
@@ -148,8 +140,10 @@ def open_new_cmsg_dialog(
         # add stateinfo to statemachine/states array
         statemachine = behavior.objects[statemachine_id]
         sm_states: HkbArray = statemachine.get_field("states")
-        sm_states.append(HkbPointer.new(behavior, sm_states.element_type_id, stateinfo_id))
-        
+        sm_states.append(
+            HkbPointer.new(behavior, sm_states.element_type_id, stateinfo_id)
+        )
+
         # TODO set/update wildcard transition?
 
         # TODO tell user where to place generated event(s)
@@ -239,7 +233,11 @@ def open_new_cmsg_dialog(
         dpg.add_separator()
 
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")
+            dpg.add_button(
+                label="Okay", 
+                callback=on_okay, 
+                tag=f"{tag}_button_okay"
+            )
             dpg.add_button(
                 label="Cancel",
                 callback=on_cancel,
