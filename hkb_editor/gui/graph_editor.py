@@ -618,19 +618,26 @@ class GraphEditor:
     def _regenerate_canvas(self):
         dpg.delete_item(f"{self.tag}_canvas_root", children_only=True)
 
-        for node in self.nodes.values():
-            if node.visible:
-                self._draw_node(node)
+        want_visible = []
+        selected = self.selected_node
+        self.selected_node = None
 
         for node in self.nodes.values():
             if node.visible:
-                for child_id in self.graph.successors(node.id):
-                    child_node = self.nodes[child_id]
-                    if child_node.visible:
-                        self._draw_edge(node, child_node)
+                want_visible.append(node)
+                node.visible = False
 
-        if self.selected_node:
-            self._select_node(self.selected_node)
+        for node in want_visible:
+            self._draw_node(node)
+
+        for node in want_visible:
+            for child_id in self.graph.successors(node.id):
+                child_node = self.nodes[child_id]
+                if child_node.visible:
+                    self._draw_edge(node, child_node)
+
+        if selected:
+            self._select_node(selected)
 
     # TODO not used at the moment, add to node menu
     def _isolate(self, target_node: Node):
