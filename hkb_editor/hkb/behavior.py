@@ -23,23 +23,21 @@ class HavokBehavior(Tagfile):
         super().__init__(xml_file)
 
         # There's some special objects storing the string values referenced from HKS
-        # TODO hide all of these behind properties or getters
         strings_type_id = self.type_registry.find_type_by_name(
             "hkbBehaviorGraphStringData"
         )
         strings_obj = next(self.find_objects_by_type(strings_type_id))
 
-        self.events: HkbArray = strings_obj["eventNames"]
-        self.variables: HkbArray = strings_obj["variableNames"]
-        self.animations: HkbArray = strings_obj["animationNames"]
+        self._events: HkbArray = strings_obj["eventNames"]
+        self._variables: HkbArray = strings_obj["variableNames"]
+        self._animations: HkbArray = strings_obj["animationNames"]
 
-        # TODO hide all of these behind properties or getters
         graphdata_type_id = self.type_registry.find_type_by_name("hkbBehaviorGraphData")
         graphdata_obj = next(self.find_objects_by_type(graphdata_type_id))
 
-        self.event_infos: HkbArray = graphdata_obj["eventInfos"]
-        self.variable_infos: HkbArray = graphdata_obj["variableInfos"]
-        self.variable_bounds: HkbArray = graphdata_obj["variableBounds"]
+        self._event_infos: HkbArray = graphdata_obj["eventInfos"]
+        self._variable_infos: HkbArray = graphdata_obj["variableInfos"]
+        self._variable_bounds: HkbArray = graphdata_obj["variableBounds"]
 
     def build_graph(self, root_id: str):
         g = nx.DiGraph()
@@ -69,30 +67,44 @@ class HavokBehavior(Tagfile):
         return g
 
     def create_event(self, event_name: str) -> int:
-        self.events.append(HkbString.new(self, self.events.element_type_id, event_name))
-        self.event_infos.append(HkbRecord.new(self, self.event_infos.element_type_id))
-        return len(self.events) - 1
+        self._events.append(HkbString.new(self, self._events.element_type_id, event_name))
+        # This one never has any meaningful data, but must still have an entry 
+        self._event_infos.append(HkbRecord.new(self, self._event_infos.element_type_id))
+        return len(self._events) - 1
 
+    def get_event(self, idx: int) -> str:
+        return self._events[idx].get_value()
+
+    def find_event(self, event: str) -> int:
+        return self._events.index(event)
+
+    def delete_event(self, idx: int = -1) -> None:
+        del self._event_infos[idx]
+        del self._events[idx]
+
+    # HKS variables
     # TODO not so simple after all, add type and bounds to dialog
     def create_variable(
         self, variable_name: str, type_: VariableType = VariableType.INT32, min_: int = 0, max_: int = 0
     ) -> int:
-        self.variables.append(
-            HkbString.new(self, self.variables.element_type_id, variable_name)
+        self._variables.append(
+            HkbString.new(self, self._variables.element_type_id, variable_name)
         )
-        self.variable_infos.append(
+
+        # TODO these must have matching entries as well
+        self._variable_infos.append(
             HkbRecord.new(
                 self,
-                self.variable_infos.element_type_id,
+                self._variable_infos.element_type_id,
                 {
                     "type": type_,
                 },
             )
         )
-        self.variable_bounds.append(
+        self._variable_bounds.append(
             HkbRecord.new(
                 self,
-                self.variable_bounds.element_type_id,
+                self._variable_bounds.element_type_id,
                 {
                     "min/value": min_,
                     "max/value": max_,
@@ -100,8 +112,30 @@ class HavokBehavior(Tagfile):
             )
         )
 
-        return len(self.variables) - 1
+        return len(self._variables) - 1
 
+    def get_variable(self, idx: int) -> str:
+        return self._variables[idx].get_value()
+
+    def find_variable(self, variable: str) -> int:
+        return self._variables.index(variable)
+
+    def get_variable_bounds(self, idx: int) -> tuple[int, int]:
+        bounds: HkbRecord = self._variable_bounds[idx]
+        lo = bounds.get_path_value("min/value", resolve=True)
+        hi = bounds.get_path_value("max/value", resolve=True)
+        return [lo, hi]
+
+    def get_variable_type(self, idx: int) -> VariableType:
+        info: HkbRecord = self._variable_infos[idx]
+        return info.get_field("type", resolve=True)
+
+    def delete_variable(self, idx: int = -1) -> None:
+        del self._variable_bounds[idx]
+        del self._variable_infos[idx]
+        del self._variables[idx]
+
+    # animationNames array
     def get_full_animation_name(self, animation_name: str, char_id: str = None) -> str:
         if not char_id:
             hkb_graph_type = self.type_registry.find_type_by_name("hkbBehaviorGraph")
@@ -112,13 +146,24 @@ class HavokBehavior(Tagfile):
         anim_anum = animation_name.split("_")[0]
         return f"..\..\..\..\..\Model\chr\{char_id}\hkx\{anim_anum}\{animation_name}.hkx"
 
-    def get_animation_index(self, animation_name: str, char_id: str = None) -> int:
-        full_anim_name = self.get_full_animation_name(animation_name, char_id)
-        return self.animations.index(full_anim_name)
-
     def create_animation(self, animation_name: str, char_id: str = None) -> int:
         full_anim_name = self.get_full_animation_name(animation_name, char_id)
-        self.animations.append(
-            HkbString.new(self, self.animations.element_type_id, full_anim_name)
+        self._animations.append(
+            HkbString.new(self, self._animations.element_type_id, full_anim_name)
         )
-        return len(self.animations) - 1
+        return len(self._animations) - 1
+
+    def get_animation(self, idx: int, full_name: bool = False) -> str:
+        anim: str = self._animations[idx].get_value()
+        if full_name:
+            return anim
+
+        # Extract the aXXX_YYYYYY part (see get_full_animation_name)
+        return anim.rsplit("\\", maxsplit=1)[-1].rsplit(".", maxsplit=1)[0]
+
+    def find_animation(self, animation_name: str, char_id: str = None) -> int:
+        full_anim_name = self.get_full_animation_name(animation_name, char_id)
+        return self._animations.index(full_anim_name)
+
+    def delete_animation(self, idx: int = -1) -> None:
+        del self._animations[idx]

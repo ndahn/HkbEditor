@@ -229,6 +229,9 @@ class HkbArray(XmlValueHandler):
         return wrap_element(self.tagfile, item, self.element_type_id)
 
     def __setitem__(self, index: int, value: Any) -> None:
+        if index < 0:
+            index = len(self) + index
+        
         if isinstance(value, XmlValueHandler):
             if value.type_id != self.element_type_id:
                 raise ValueError(
@@ -240,6 +243,9 @@ class HkbArray(XmlValueHandler):
         self[index].set_value(value)
 
     def __delitem__(self, index: int) -> None:
+        if index < 0:
+            index = len(self) + index
+        
         self.element[:] = [
             e.element for i, e in enumerate(self.get_value()) if e != index
         ]

@@ -44,7 +44,7 @@ def set_bindable_attribute_state(
     behavior: HavokBehavior, bindable_attribute: str, bound_var_idx: int = -1
 ):
     if bound_var_idx >= 0:
-        variable_name = behavior.variables[bound_var_idx].get_value()
+        variable_name = behavior.get_variable(bound_var_idx)
         dpg.set_value(f"{bindable_attribute}_bound", f"@{variable_name}")
         dpg.show_item(f"{bindable_attribute}_bound")
         dpg.hide_item(f"{bindable_attribute}_unbound")
@@ -76,7 +76,8 @@ def select_variable_to_bind(
                 on_bind(sender, [selected_idx, binding_id], user_data)
 
     select_simple_array_item_dialog(
-        behavior.variables, on_variable_selected, bound_var_idx, user_data=user_data
+        # FIXME won't work anymore, no direct access to variables
+        behavior._variables, on_variable_selected, bound_var_idx, user_data=user_data
     )
 
 

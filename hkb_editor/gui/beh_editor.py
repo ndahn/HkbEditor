@@ -643,7 +643,7 @@ class BehaviorEditor(GraphEditor):
             dpg.add_text(f"<{type_name}>")
 
             if is_simple and bound_var_idx >= 0:
-                bound_var_name = self.beh.variables[bound_var_idx]
+                bound_var_name = self.beh.get_variable(bound_var_idx)
                 dpg.add_text(
                     f"bound: {bound_var_name}",
                     color=style.pink,
@@ -847,21 +847,24 @@ class BehaviorEditor(GraphEditor):
         self._show_node_path([self.nodes[n] for n in path])
 
     def open_variable_editor(self):
+        ## FIXME won't work anymore, no direct access to variables
         edit_simple_array_dialog(
             self.beh,
-            self.beh.variables,
+            self.beh._variables,
             "Edit Variables",
         )
 
     def open_event_editor(self):
+        # FIXME won't work anymore, no direct access to events
         edit_simple_array_dialog(
             self.beh,
-            self.beh.events,
+            self.beh._events,
             "Edit Events",
         )
 
     def open_animation_editor(self):
-        edit_simple_array_dialog(self.beh, self.beh.animations, "Edit Animations")
+        # FIXME won't work anymore, no direct access to animations
+        edit_simple_array_dialog(self.beh, self.beh._animations, "Edit Animations")
 
     def open_array_aliases_editor(self):
         # TODO open dialog, update alias manager

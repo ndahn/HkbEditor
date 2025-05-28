@@ -69,13 +69,13 @@ def open_new_cmsg_dialog(
         # Add entry to animations array. We also need the parts in some places
         anim_anum, anim_id = animation_val.split("_")
         try:
-            anim_id = behavior.get_animation_index(animation_val)
+            anim_id = behavior.find_animation(animation_val)
         except ValueError:
             anim_id = behavior.create_animation(animation_val)
 
         # Add event to the events array
         try:
-            event_id = behavior.events.index(event_val)
+            event_id = behavior.find_event(event_val)
         except ValueError:
             event_id = behavior.create_event(event_val)
 
