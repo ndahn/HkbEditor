@@ -142,6 +142,10 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
             dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
             dpg.add_separator()
+            dpg.add_menu_item(label="Load Skeleton...", callback=self.load_bone_names)
+            # TODO enable
+            dpg.add_menu_item(label="Attribute Aliases...", enabled=False)
+            dpg.add_separator()
             dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
             dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
             dpg.add_menu_item(
@@ -152,12 +156,10 @@ class BehaviorEditor(GraphEditor):
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
             dpg.add_menu_item(label="Find Object...", callback=lambda: self.open_search_dialog())
-            dpg.add_menu_item(label="Load Skeleton...", callback=self.load_bone_names)
+            dpg.add_separator()
             # TODO enable
-            dpg.add_menu_item(label="Attribute Aliases...", enabled=False)
-            dpg.add_menu_item(
-                label="Create CMSG...", enabled=False, callback=self.create_cmsg
-            )
+            dpg.add_menu_item(label="Register Clip...", enabled=False)
+            dpg.add_menu_item(label="Create CMSG...", callback=self.create_cmsg)
 
         dpg.add_separator()
         self._create_settings_menu()
@@ -833,7 +835,17 @@ class BehaviorEditor(GraphEditor):
 
         self.logger.info("Copied value:\n%s", data)
 
-    # Fleshing out common use cases here
+    # Common use cases
+    def jump_to_object(self, object_id: str):
+        # Open the associated state machine
+        sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
+        root = next(sm for sm in self.beh.find_parents_by_type(object_id, sm_type))
+        self._on_root_selected("", True, root.object_id)
+        
+        # Reveal the node in the state machine graph
+        path = nx.shortest_path(self.graph, root.object_id, object_id)
+        self._show_node_path([self.nodes[n] for n in path])
+
     def open_variable_editor(self):
         edit_simple_array_dialog(
             self.beh,
@@ -883,21 +895,24 @@ class BehaviorEditor(GraphEditor):
             callback(None, obj, user_data)
 
     def open_search_dialog(self, close_after_select: bool = False):
-        def jump_to_object(sender: str, object_id: str, user_data: Any):
-            # Open the associated state machine
-            sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
-            root = next(sm for sm in self.beh.find_parents_by_type(object_id, sm_type))
-            self._on_root_selected(sender, True, root.object_id)
-            
-            # Reveal the node in the state machine graph
-            path = nx.shortest_path(self.graph, root.object_id, object_id)
-            self._show_node_path([self.nodes[n] for n in path])
+        def jump(sender: str, object_id: str, user_data: Any):
+            self.jump_to_object(object_id)
 
             if close_after_select:
                 dpg.delete_item(dialog)
 
-        dialog = find_object_dialog(self.beh, jump_to_object)
+        dialog = find_object_dialog(self.beh, jump)
+
+    def register_clip(self):
+        # This is basically what ERClipGenerator does
+        # TODO open dialog, find CMSG for animation ID, add clip to CMSG generators
+        pass
 
     def create_cmsg(self):
-        # TODO a wizard that lets the user create a new generator and attach it to another node
+        # This is basically what Wind's ERBehInjector does
+        def on_cmsg_created(sender: str, cmsg: HkbRecord, user_data: Any):
+            self.jump_to_object(cmsg.object_id)
+
+        # TODO open dialog
         pass
+

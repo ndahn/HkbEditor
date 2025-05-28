@@ -45,7 +45,7 @@ def set_bindable_attribute_state(
 ):
     if bound_var_idx >= 0:
         variable_name = behavior.variables[bound_var_idx].get_value()
-        dpg.set_value(f"{bindable_attribute}_bound", f"<{variable_name}>")
+        dpg.set_value(f"{bindable_attribute}_bound", f"@{variable_name}")
         dpg.show_item(f"{bindable_attribute}_bound")
         dpg.hide_item(f"{bindable_attribute}_unbound")
     else:

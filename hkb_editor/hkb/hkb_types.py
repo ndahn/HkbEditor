@@ -167,14 +167,14 @@ class HkbArray(XmlValueHandler):
         cls,
         tagfile: Tagfile,
         type_id: str,
-        values: list[XmlValueHandler] = None,
+        items: list[XmlValueHandler] = None,
     ) -> "HkbArray":
-        if values is None:
-            values = []
+        if items is None:
+            items = []
 
         elem_type_id = tagfile.type_registry.get_subtype(type_id)
-        elem = ET.Element("array", count=len(values), elementtypeid=elem_type_id)
-        elem.extend(item.element for item in values)
+        elem = ET.Element("array", count=len(items), elementtypeid=elem_type_id)
+        elem.extend(item.element for item in items)
 
         return HkbArray(tagfile, elem, type_id)
 
@@ -285,7 +285,7 @@ class HkbRecord(XmlValueHandler):
         cls,
         tagfile: Tagfile,
         type_id: str,
-        values: dict[str, Any] = None,
+        path_values: dict[str, Any] = None,
         object_id: str = None,
     ) -> "HkbRecord":
         elem = ET.Element("record")
@@ -296,6 +296,9 @@ class HkbRecord(XmlValueHandler):
             for fname, ftype in tagfile.type_registry.get_fields(
                 record_type_id
             ).items():
+                if fname == "userData":
+                    print("WARNING: TODO userData value needs to be unique!")
+
                 field_elem = ET.SubElement(parent_elem, "field", name=fname)
                 Handler = get_value_handler(tagfile.type_registry, ftype)
                 field_val = Handler.new(tagfile, ftype)
@@ -307,9 +310,9 @@ class HkbRecord(XmlValueHandler):
 
         create_fields(elem, type_id)
 
-        if values:
-            for key, val in values.items():
-                record[key] = val
+        if path_values:
+            for path, val in path_values.items():
+                record.set_path_value(path, val)
 
         return record
 
@@ -365,7 +368,7 @@ class HkbRecord(XmlValueHandler):
         return None
 
     def get_path_value(
-        self, path: str, default: Any = _undefined, resolve: bool = True
+        self, path: str, default: Any = _undefined, *, resolve: bool = False
     ) -> XmlValueHandler:
         keys = path.split("/")
         obj = self
@@ -386,6 +389,10 @@ class HkbRecord(XmlValueHandler):
             return obj.get_value()
 
         return obj
+
+    def set_path_value(self, path: str, value: Any) -> None:
+        handler = self.get_path_value(path, resolve=False)
+        handler.set_value(value)
 
     def get_field(
         self, name: str, default: Any = _undefined, resolve: bool = False

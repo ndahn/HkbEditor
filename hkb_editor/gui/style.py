@@ -17,9 +17,13 @@ black = (0, 0, 0, 255)
 
 bound_attribute_theme = None
 pointer_attribute_theme = None
+
 notification_info_theme = None
 notification_warning_theme = None
 notification_error_theme = None
+
+input_field_error_theme = None
+input_field_okay_theme = None
 
 
 def pastel(color: tuple[int, int, int, int]):
@@ -32,6 +36,8 @@ def setup_styles():
     global notification_info_theme
     global notification_warning_theme
     global notification_error_theme
+    global input_field_okay_theme
+    global input_field_error_theme
 
     with dpg.theme() as bound_attribute_theme:
         with dpg.theme_component(dpg.mvAll):
@@ -58,3 +64,11 @@ def setup_styles():
             dpg.add_theme_color(dpg.mvThemeCol_WindowBg, pastel(red))
             dpg.add_theme_color(dpg.mvThemeCol_Border, white)
             dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 5)
+
+    with dpg.theme() as input_field_okay_theme:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Border, white)
+
+    with dpg.theme() as input_field_error_theme:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Border, red)

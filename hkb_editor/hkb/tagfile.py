@@ -29,6 +29,7 @@ class Tagfile:
     def save_to_file(self, file_path: str) -> None:
         self._tree.write(file_path)
 
+    # TODO include subtypes
     def find_objects_by_type(self, type_id: str) -> Generator["HkbRecord", None, None]:
         for obj in self.objects.values():
             if obj.type_id == type_id:
