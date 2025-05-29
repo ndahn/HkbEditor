@@ -89,22 +89,6 @@ class UpdateArrayItem(UndoAction):
         return f"[{self.index}]: {self.old_value} -> {self.new_value}"
 
 
-class AddBehaviorObjectAction(UndoAction):
-    def __init__(self, behavior: HavokBehavior, object: HkbRecord):
-        super().__init__()
-        self.behavior = behavior
-        self.object = object
-
-    def undo(self):
-        self.behavior.remove_object(self.object)
-
-    def redo(self):
-        self.behavior.add_object(self.object)
-
-    def __str__(self):
-        return f"new object {self.object.object_id}"
-
-
 class CustomUndoAction(UndoAction):
     def __init__(self, undo_func: Callable, redo_func: Callable):
         super().__init__()
@@ -185,11 +169,6 @@ class UndoManager:
         self, array: HkbArray, index: int, old_value: Any, new_value: Any
     ) -> None:
         self._on_action(UpdateArrayItem(array, index, old_value, new_value))
-
-    def on_add_behavior_object(
-        self, behavior: HavokBehavior, object: HkbRecord
-    ) -> None:
-        self._on_action(AddBehaviorObjectAction(behavior, object))
 
     def on_complex_action(
         self, undo_func: Callable, redo_func: Callable
