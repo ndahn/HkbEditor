@@ -3,5 +3,6 @@ lxml
 networkx
 pyperclip
 crossfiledialog
+pywin32; sys_platform == "windows"
 lark
 rapidfuzz

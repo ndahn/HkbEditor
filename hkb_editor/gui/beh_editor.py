@@ -847,7 +847,7 @@ class BehaviorEditor(GraphEditor):
         self._show_node_path([self.nodes[n] for n in path])
 
     def open_variable_editor(self):
-        ## FIXME won't work anymore, no direct access to variables
+        ## FIXME variables are more complex than this
         edit_simple_array_dialog(
             self.beh,
             self.beh._variables,
@@ -855,16 +855,90 @@ class BehaviorEditor(GraphEditor):
         )
 
     def open_event_editor(self):
-        # FIXME won't work anymore, no direct access to events
+        def on_add(idx: int, new_value: str):
+            if self.beh.find_event(new_value, None):
+                self.logger.warning("An event named '%s' already exists (%d)", new_value, idx)
+
+            undo_manager.on_complex_action(
+                lambda i=idx: self.beh.delete_event(i),
+                lambda i=idx, v=new_value: self.beh.create_event(v, i)
+            )
+            self.beh.create_event(new_value, idx)
+
+        def on_update(idx: int, old_value: str, new_value: str):
+            if self.beh.find_event(new_value, None):
+                self.logger.warning("An event named '%s' already exists (%d)", new_value, idx)
+            
+            undo_manager.on_complex_action(
+                lambda i=idx, v=old_value: self.beh.rename_event(i, v),
+                lambda i=idx, v=new_value: self.beh.rename_event(i, v),
+            )
+            self.beh.rename_event(idx, new_value)
+
+        def on_delete(idx: int):
+            # TODO list transition infos affected by this
+            old_value = self.beh.get_event(idx)
+            undo_manager.on_complex_action(
+                lambda i=idx: self.beh.delete_event(i),
+                lambda i=idx, v=old_value: self.beh.create_event(v, i),
+            )
+            self.beh.delete_event(idx)
+
         edit_simple_array_dialog(
-            self.beh,
-            self.beh._events,
-            "Edit Events",
+            self.beh.get_events(),
+            title="Edit Events",
+            help=[
+                "Warning:",
+                "Events are referenced by their index in TransitionInfos.",
+                "Deleting or inserting events may invalidate your behavior."
+            ],
+            on_add=on_add,
+            on_update=on_update,
+            on_delete=on_delete,
         )
 
     def open_animation_editor(self):
-        # FIXME won't work anymore, no direct access to animations
-        edit_simple_array_dialog(self.beh, self.beh._animations, "Edit Animations")
+        def on_add(idx: int, new_value: str):
+            if self.beh.find_animation(new_value, None):
+                self.logger.warning("An animation named '%s' already exists (%d)", new_value, idx)
+
+            undo_manager.on_complex_action(
+                lambda i=idx: self.beh.delete_animation(i),
+                lambda i=idx, v=new_value: self.beh.create_animation(v, i)
+            )
+            self.beh.create_animation(new_value, idx)
+
+        def on_update(idx: int, old_value: str, new_value: str):
+            if self.beh.find_event(new_value, None):
+                self.logger.warning("An animation named '%s' already exists (%d)", new_value, idx)
+            
+            undo_manager.on_complex_action(
+                lambda i=idx, v=old_value: self.beh.rename_animation(i, v),
+                lambda i=idx, v=new_value: self.beh.rename_animation(i, v),
+            )
+            self.beh.rename_animation(idx, new_value)
+
+        def on_delete(idx: int):
+            # TODO list generators affected by this
+            old_value = self.beh.get_animation(idx)
+            undo_manager.on_complex_action(
+                lambda i=idx: self.beh.delete_animation(i),
+                lambda i=idx, v=old_value: self.beh.create_animation(v, i),
+            )
+            self.beh.delete_animation(idx)
+
+        edit_simple_array_dialog(
+            self.beh.get_animations(),
+            title="Edit Animation Names",
+            help=[
+                "Warning:",
+                "Animation names are referenced by their index in ClipGenerators.",
+                "Deleting or inserting names may invalidate your behavior."
+            ],
+            on_add=on_add,
+            on_update=on_update,
+            on_delete=on_delete,
+        )
 
     def open_array_aliases_editor(self):
         # TODO open dialog, update alias manager

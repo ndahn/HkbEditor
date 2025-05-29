@@ -1,4 +1,4 @@
-from typing import Generator, TYPE_CHECKING
+from typing import Generator, TYPE_CHECKING, Any
 
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
@@ -14,7 +14,12 @@ class Tagfile:
     def __init__(self, xml_file: str):
         from .hkb_types import HkbRecord
 
-        self._tree: ET._ElementTree = ET.parse(xml_file)
+        self._tree: ET._ElementTree = ET.parse(
+            # lxml keeps comments, which affect subelement counts and iterations. 
+            # TODO we should handle comments properly at some point so they are kept, 
+            # but for now this is easier
+            xml_file, parser=ET.XMLParser(remove_comments=True)
+        )
         root: ET._Element = self._tree.getroot()
 
         self.type_registry = TypeRegistry()
@@ -34,6 +39,12 @@ class Tagfile:
         for obj in self.objects.values():
             if obj.type_id == type_id:
                 yield obj
+
+    def find_first_by_type_name(
+        self, type_name: str, default: Any = None
+    ) -> "HkbRecord":
+        type_id = self.type_registry.find_type_by_name(type_name)
+        return next(self.find_objects_by_type(type_id), default)
 
     def find_parents_by_type(
         self, object_id: str, parent_type: str

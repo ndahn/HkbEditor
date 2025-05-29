@@ -1,146 +1,142 @@
 from typing import Any, Callable
-from logging import getLogger
 from dearpygui import dearpygui as dpg
-
-from hkb_editor.hkb.behavior import HavokBehavior
-from hkb_editor.hkb.hkb_types import (
-    XmlValueHandler,
-    HkbArray,
-    HkbString,
-    HkbInteger,
-    HkbFloat,
-    HkbBool,
-    get_value_handler
-)
-from hkb_editor.gui.workflows.undo import undo_manager
-
-
-_logger = getLogger(__name__)
 
 
 def edit_simple_array_dialog(
-    behavior: HavokBehavior,
-    array: HkbArray,
-    title: str = "Edit Array",
+    items: list[str],
     *,
-    on_change: Callable[[HkbArray, int, Any], bool] = None,
-    on_add: Callable[[HkbArray, Any], bool] = None,
-    on_delete: Callable[[HkbArray, int], bool] = None,
-    #on_insert: Callable[[HkbArray, int, Any], bool] = None,
-    #on_move: Callable[[HkbArray, int, int], bool] = None,
+    title: str = "Edit Array",
+    help: list[str] = None,
+    on_add: Callable[[int, str], bool] = None,
+    on_update: Callable[[int, str, str], bool] = None,
+    on_delete: Callable[[int], bool] = None,
+    on_close: Callable[[str, list[str], Any], None] = None,
+    get_item_hint: Callable[[int], list[str]] = None,
+    tag: str = 0,
+    user_data: Any = None,
 ) -> None:
-    def update_entry(sender, new_value: Any, index: int):
-        old_value = array[index].get_value()
-        if on_change:
-            veto = on_change(array, index, new_value)
-            if veto:
-                dpg.set_value(sender, array[index].get_value())
-                return
+    if tag in (0, "", None):
+        tag = dpg.generate_uuid()
 
-        undo_manager.on_update_value(array[index], old_value, new_value)
-        array[index].set_value(new_value)
-
-    def get_new_entry_value(sender, app_data, callback: Callable):
-        Handler = get_value_handler(behavior.type_registry, array.element_type_id)
-        val = Handler.new(behavior, array.element_type_id)
-
-        def on_value_update(sender, app_data, user_data):
-            val.set_value(app_data)
-
-        def on_okay():
-            if not val.get_value():
-                return
-            
-            callback(sender, val, None)
-            dpg.delete_item(wnd)
+    def new_entry_dialog(sender, app_data, index: int):
+        def create_entry():
+            new_val = dpg.get_value(f"{tag}_new_entry_input")
+            add_entry(sender, new_val, index)
+            dpg.delete_item(create_entry_popup)
 
         with dpg.window(
             modal=True,
+            min_size=(100, 30),
+            autosize=True,
             label="New Entry",
-            on_close=lambda: dpg.delete_item(wnd),
-        ) as wnd:
-            add_value_widget(-1, val, on_value_update)
-            
+            on_close=lambda: dpg.delete_item(create_entry_popup),
+            tag=f"{tag}_create_entry_popup",
+        ) as create_entry_popup:
+            dpg.add_input_text(
+                hint="<name>",
+                tag=f"{tag}_new_entry_input",
+            )
+
             with dpg.group(horizontal=True):
-                dpg.add_button(label="Okay", callback=on_okay)
-                dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(wnd))
-
-    def add_entry(sender, app_data, user_data):
-        if on_add:
-            veto = on_add(array, app_data)
-            if veto:
-                return
-
-        Handler = get_value_handler(behavior.type_registry, array.element_type_id)
-        val = Handler.new(behavior, array.element_type_id, app_data)
-        
-        undo_manager.on_update_array_item(array, -1, None, val)
-        array.append(val)
-        
-        fill_table()
-        dpg.split_frame()
-        dpg.set_y_scroll(table, dpg.get_y_scroll_max(table))
-
-    def delete_entry(sender, app_data, index: int):
-        if on_delete:
-            veto = on_delete(array, index)
-            if veto:
-                return
-
-        undo_manager.on_update_array_item(array, -1, array[index], None)
-        del array[index]
-        fill_table()
-
-    # TODO insert, move
-
-    def fill_table():
-        dpg.delete_item(table, children_only=True, slot=1)
-
-        for idx, item in enumerate(array):
-            with dpg.table_row(filter_key=f"{idx}:{item.get_value()}", parent=table):
-                dpg.add_text(str(idx))
-                add_value_widget(idx, item, update_entry)
+                dpg.add_button(label="Okay", callback=create_entry)
                 dpg.add_button(
-                    label="(-)", 
-                    small=True, 
-                    callback=delete_entry, 
-                    user_data=idx,
+                    label="Cancel", callback=lambda: dpg.delete_item(create_entry_popup)
                 )
 
-    def add_value_widget(idx: int, val: XmlValueHandler, callback):
-        if isinstance(val, HkbString):
-            dpg.add_input_text(
-                callback=callback,
-                user_data=idx,
-                default_value=val.get_value(),
-            )
-        elif isinstance(val, HkbInteger):
-            dpg.add_input_int(
-                callback=callback,
-                user_data=idx,
-                default_value=val.get_value(),
-            )
-        elif isinstance(val, HkbFloat):
-            dpg.add_input_double(
-                callback=callback,
-                user_data=idx,
-                default_value=val.get_value(),
-            )
-        elif isinstance(val, HkbBool):
-            dpg.add_checkbox(
-                callback=callback,
-                user_data=idx,
-                default_value=val.get_value(),
-            )
-        else:
-            _logger.warning("Unknown array value type %s", type(val))
+        dpg.split_frame()
+        dpos = dpg.get_item_pos(tag)
+        dsize = dpg.get_item_rect_size(tag)
+        psize = dpg.get_item_rect_size(create_entry_popup)
+
+        dpg.set_item_pos(
+            create_entry_popup,
+            (
+                dpos[0] + (dsize[0] - psize[0]) / 2,
+                dpos[1] + (dsize[1] - psize[1]) / 2,
+            ),
+        )
+
+    def add_entry(sender, new_value: str, index: int):
+        # May return True as a veto
+        if on_add and on_add(index, new_value):
+            return
+
+        items.insert(index, new_value)
+        fill_table()
+
+        # row = dpg.get_item_children(f"{tag}_table", slot=1)[index]
+        # input_box = dpg.get_item_children(row, slot=1)[1]
+        # dpg.focus_item(input_box)
+
+    def update_entry(sender, new_value: Any, index: int):
+        # May return True as a veto
+        if on_update and on_update(index, items[index], new_value):
+            return
+
+        items[index] = new_value
+        fill_table()
+
+    def delete_entry(sender: str, app_data: Any, index: int):
+        # May return True as a veto
+        if on_delete and on_delete(index):
+            return
+
+        del items[index]
+        fill_table()
+
+    # TODO move
+
+    def show_item_hint(sender: str, app_data: Any, index: int):
+        # TODO can use this to show where items are referenced
+        print("TODO not implemented yet")
+
+    def fill_table():
+        dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
+
+        for idx, item in enumerate(items):
+            with dpg.table_row(filter_key=f"{idx}:{item}", parent=table) as row:
+                dpg.add_text(str(idx))
+                dpg.add_input_text(
+                    callback=update_entry,
+                    user_data=idx,
+                    default_value=item,
+                    on_enter=True,
+                    width=-1,
+                )
+                with dpg.group(horizontal=True, horizontal_spacing=2):
+                    dpg.add_button(
+                        label="(-)",
+                        small=True,
+                        callback=delete_entry,
+                        user_data=idx,
+                    )
+                    dpg.add_button(
+                        label="(+)",
+                        callback=new_entry_dialog,
+                        user_data=idx + 1,
+                    )
+                    if get_item_hint:
+                        dpg.add_button(
+                            label="(?)",
+                            callback=show_item_hint,
+                            user_data=idx,
+                        )
+
+    def cloe_dialog():
+        if on_close:
+            on_close(dialog, items, user_data)
+
+        dpg.delete_item(dialog)
+        if dpg.does_item_exist(f"{tag}_create_entry_popup"):
+            dpg.delete_item(f"{tag}_create_entry_popup")
 
     with dpg.window(
         width=600,
         height=400,
         label=title,
-        #modal=True,
-        on_close=lambda: dpg.delete_item(dialog),
+        on_close=cloe_dialog,
+        autosize=True,
+        tag=tag,
     ) as dialog:
         dpg.add_input_text(
             hint="Filter Entries",
@@ -155,18 +151,15 @@ def edit_simple_array_dialog(
             policy=dpg.mvTable_SizingStretchSame,
             scrollY=True,
             height=310,
+            tag=f"{tag}_table",
         ) as table:
             dpg.add_table_column(label="Index")
             dpg.add_table_column(label="Name", width_stretch=True)
             dpg.add_table_column()
 
-        dpg.add_separator()
-
-        dpg.add_button(
-            label="Add...",
-            #small=True,
-            callback=get_new_entry_value,
-            user_data=add_entry,
-        )
+        if help:
+            dpg.add_separator()
+            for line in help:
+                dpg.add_text(line)
 
     fill_table()

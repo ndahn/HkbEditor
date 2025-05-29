@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 from collections import deque
 import itertools
 from contextlib import contextmanager
@@ -105,6 +105,22 @@ class AddBehaviorObjectAction(UndoAction):
         return f"new object {self.object.object_id}"
 
 
+class CustomUndoAction(UndoAction):
+    def __init__(self, undo_func: Callable, redo_func: Callable):
+        super().__init__()
+        self.undo_func = undo_func
+        self.redo_func = redo_func
+
+    def undo(self):
+        self.undo_func()
+
+    def redo(self):
+        self.redo_func()
+
+    def __str__(self):
+        return f"call {self.undo_func} <-> {self.redo_func}"
+
+
 class UndoManager:
     def __init__(self, maxlen: int = 100):
         self.history: deque[UndoAction] = deque(maxlen=maxlen)
@@ -174,6 +190,11 @@ class UndoManager:
         self, behavior: HavokBehavior, object: HkbRecord
     ) -> None:
         self._on_action(AddBehaviorObjectAction(behavior, object))
+
+    def on_complex_action(
+        self, undo_func: Callable, redo_func: Callable
+    ) -> None:
+        self._on_action(CustomUndoAction(undo_func, redo_func))
 
     @contextmanager
     def combine(self):

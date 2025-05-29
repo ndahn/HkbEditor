@@ -16,7 +16,7 @@ class XmlValueHandler:
     ) -> "XmlValueHandler":
         raise NotImplementedError()
 
-    def __init__(self, tagfile: Tagfile, element: ET.Element, type_id: str):
+    def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         self.tagfile = tagfile
         self.element = element
         self.type_id = type_id
@@ -190,13 +190,18 @@ class HkbArray(XmlValueHandler):
         super().__init__(tagfile, element, type_id)
         self.element_type_id = element.attrib["elementtypeid"]
 
+    # NOTE not for public use, just use len(array)
     @property
     def _count(self) -> int:
         return int(self.element.attrib["count"])
 
     @_count.setter
     def _count(self, new_count: int) -> None:
-        self.element.attrib["count"] = new_count
+        self.element.attrib["count"] = str(new_count)
+
+    def clear(self) -> None:
+        for child in self.element:
+            self.element.remove(child)
 
     def get_value(self) -> list[XmlValueHandler]:
         return [
@@ -206,11 +211,13 @@ class HkbArray(XmlValueHandler):
 
     def set_value(self, values: list[XmlValueHandler]) -> None:
         for idx, item in enumerate(values):
+            # TODO check type compatibility
             if item.type_id != self.element_type_id:
                 raise ValueError(
                     f"Non-matching value type {item.type_id} (should be {self.element_type_id})"
                 )
 
+        # TODO untested
         self.element[:] = [v.element for v in values]
         self._count = len(values)
 
@@ -264,7 +271,7 @@ class HkbArray(XmlValueHandler):
             if item.get_value() == value:
                 return idx
 
-        raise ValueError("Item not found")
+        raise IndexError("Item not found")
 
     def append(self, value: XmlValueHandler):
         if value.type_id != self.element_type_id:
@@ -276,6 +283,9 @@ class HkbArray(XmlValueHandler):
         self._count += 1
 
     def insert(self, index: int, value: XmlValueHandler) -> None:
+        if index < 0:
+            index = len(self) + index
+        
         if value.type_id != self.element_type_id:
             raise ValueError(
                 f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
