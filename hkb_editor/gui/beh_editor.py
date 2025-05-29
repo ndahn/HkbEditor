@@ -8,7 +8,7 @@ from dearpygui import dearpygui as dpg
 import networkx as nx
 import pyperclip
 
-from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.behavior import HavokBehavior, VariableType
 from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
     HkbRecord,
@@ -891,6 +891,9 @@ class BehaviorEditor(GraphEditor):
                 "Variables are referenced by their index in VariableBindingSets.",
                 "Deleting or inserting names may invalidate your behavior.",
             ],
+            choices = {
+                1: [v.name for v in VariableType],
+            },
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,

@@ -8,6 +8,7 @@ def edit_simple_array_dialog(
     *,
     title: str = "Edit Array",
     help: list[str] = None,
+    choices: dict[int, list[str]] = None,
     on_add: Callable[[int, str], bool] = None,
     on_update: Callable[[int, str, str], bool] = None,
     on_delete: Callable[[int], bool] = None,
@@ -25,6 +26,11 @@ def edit_simple_array_dialog(
 
         def assemble(sender: str, new_value: Any, user_data: tuple[int, int]):
             _, val_idx = user_data
+
+            if choices and val_idx in choices:
+                items = choices[val_idx]
+                new_value = items.index(new_value)
+
             new_val[val_idx] = new_value
 
         def create_entry():
@@ -113,7 +119,16 @@ def edit_simple_array_dialog(
         on_enter: bool = False,
         **kwargs,
     ):
-        if val is None or isinstance(val, str):
+        if choices and val_idx in choices:
+            items = choices[val_idx]
+            dpg.add_combo(
+                items,
+                callback=callback,
+                user_data=(item_idx, val_idx),
+                default_value=items[val if val is not None else 0],
+                **kwargs,
+            )
+        elif val is None or isinstance(val, str):
             dpg.add_input_text(
                 callback=callback,
                 user_data=(item_idx, val_idx),
@@ -206,12 +221,16 @@ def edit_simple_array_dialog(
 
         dpg.add_separator()
 
+        spare_height = 30
+        if help:
+            spare_height += 15 * len(help)
+
         with dpg.table(
             delay_search=True,
             resizable=True,
             policy=dpg.mvTable_SizingStretchSame,
             scrollY=True,
-            height=310,
+            height=-spare_height,
             tag=f"{tag}_table",
         ) as table:
             dpg.add_table_column(label="Index")
