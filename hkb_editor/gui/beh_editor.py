@@ -20,6 +20,7 @@ from hkb_editor.hkb.hkb_types import (
     HkbBool,
     get_value_handler,
 )
+from hkb_editor.hkb.hkb_enums import get_hkb_enum
 
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
@@ -549,12 +550,34 @@ class BehaviorEditor(GraphEditor):
                 )
 
             elif isinstance(value, HkbInteger):
-                dpg.add_input_int(
-                    filter_key=attribute,
-                    callback=self.on_attribute_update,
-                    user_data=value,
-                    default_value=value.get_value(),
-                )
+                current_record = source_record
+                if "/" in path:
+                    # The path will become deeper if and only if we descended into 
+                    # record fields, so the parent object will always be a record
+                    parent_path = "/".join(path.split("/")[:-1])
+                    current_record = source_record.get_path_value(parent_path)
+
+                enum = get_hkb_enum(self.beh.type_registry, current_record.type_id, path)
+
+                if enum:
+                    def on_enum_change(sender: str, new_value: str, val: HkbInteger):
+                        int_value = enum[new_value].value
+                        self.on_attribute_update(sender, int_value, val)
+
+                    dpg.add_combo(
+                        [e.name for e in enum],
+                        filter_key=attribute,
+                        callback=on_enum_change,
+                        user_data=value,
+                        default_value=enum(value.get_value()).name
+                    )
+                else:
+                    dpg.add_input_int(
+                        filter_key=attribute,
+                        callback=self.on_attribute_update,
+                        user_data=value,
+                        default_value=value.get_value(),
+                    )
 
             elif isinstance(value, HkbFloat):
                 dpg.add_input_double(

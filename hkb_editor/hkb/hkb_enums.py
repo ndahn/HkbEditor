@@ -1,7 +1,8 @@
+from typing import Type
 from enum import IntEnum
 from functools import cache
 
-from .tagfile import Tagfile
+from .type_registry import TypeRegistry
 
 
 # Enum values are not documented within the behavior files, but we can discover
@@ -56,19 +57,20 @@ class hkbClipGenerator_PlaybackMode(IntEnum):
 
 
 @cache
-def get_hkb_enum(tagfile: Tagfile, object_id: str, field: str) -> dict[int, str]:
-    types = tagfile.type_registry
-    record = tagfile.objects[object_id]
-    field_type = record.get_field_type(field)
+def get_hkb_enum(
+    type_registry: TypeRegistry, record_type_id: str, field: str
+) -> Type[IntEnum]:
+    # Not all records are objects or have IDs, so going from the record type is better
+    field_type = type_registry.get_fields(record_type_id).get(field, None)
 
-    if types.get_name(field_type) != "hkEnum":
+    if not field_type or type_registry.get_name(field_type) != "hkEnum":
         # Not robust, but seems consistent so far
         return None
 
     try:
-        enum_type = types.get_typeparams(field_type)[0]
+        enum_type = type_registry.get_typeparams(field_type)[0]
     except IndexError:
         return None
 
-    enum_name = types.get_name(enum_type).replace("_", "_")
+    enum_name = type_registry.get_name(enum_type).replace("::", "_")
     return globals().get(enum_name, None)
