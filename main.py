@@ -11,7 +11,7 @@ from hkb_editor.gui.style import setup_styles
 
 def main():
     # Logging setup
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     _logger = logging.getLogger(__name__)
 
     # Check for clipboard support, will print instructions if it fails

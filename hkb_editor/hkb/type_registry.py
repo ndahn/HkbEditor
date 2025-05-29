@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Generator
 from logging import getLogger
 from lxml import etree as ET
 
@@ -33,6 +33,15 @@ class TypeRegistry:
                 else []
             )
 
+            typeparams = (
+                [
+                    tp.attrib["id"]
+                    for tp in type_el.find("parameters").findall("typeparam")
+                ]
+                if type_el.find("parameters") is not None
+                else []
+            )
+
             subtype = self._get_attribute(type_el, "subtype", "id")
             parent = self._get_attribute(type_el, "parent", "id")
 
@@ -41,6 +50,7 @@ class TypeRegistry:
                 "format": fmt,
                 "fields": fields,
                 "subtype": subtype,
+                "typeparams": typeparams,
                 "parent": parent,
             }
 
@@ -61,12 +71,13 @@ class TypeRegistry:
             
         return val
 
-    def find_type_by_name(self, type_name: str) -> str:
+    def find_types_by_name(self, type_name: str) -> Generator[str, None, None]:
         for tid, t in self.types.items():
             if t["name"] == type_name:
-                return tid
+                yield tid
 
-        return None
+    def find_first_type_by_name(self, type_name: str) -> str:
+        return next(self.find_types_by_name(type_name))
 
     def get_name(self, type_id: str) -> str:
         return self.types[type_id]["name"]
@@ -88,5 +99,21 @@ class TypeRegistry:
     def get_subtype(self, type_id: str) -> str:
         return self.types[type_id].get("subtype", None)
 
+    def get_typeparams(self, type_id: str) -> list[str]:
+        return self.types[type_id].get("typeparams", [])
+
     def get_parent(self, type_id: str) -> str:
         return self.types[type_id].get("parent", None)
+
+    def get_compatible_types(self, type_id: str) -> list[str]:
+        parents = [type_id]
+        res = []
+
+        while parents:
+            p = parents.pop()
+            for tid, t in self.types.items():
+                if p == t["parent"]:
+                    res.append(tid)
+                    parents.append(tid)
+
+        return res

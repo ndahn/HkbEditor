@@ -42,6 +42,7 @@ from .workflows.bind_attribute import (
 from .workflows.file_dialog import open_file_dialog
 from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager
+from .workflows.create_cmsg import open_new_cmsg_dialog
 from . import style
 
 
@@ -163,8 +164,9 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(label="Register Clip...", enabled=False)
             dpg.add_menu_item(label="Create CMSG...", callback=self.create_cmsg)
 
-        dpg.add_separator()
         self._create_settings_menu()
+        
+        dpg.add_separator()
         self._create_dpg_menu()
 
     def _on_key_press(self, sender, key: int) -> None:
@@ -187,12 +189,14 @@ class BehaviorEditor(GraphEditor):
     def get_supported_file_extensions(self):
         return {"Behavior XML": "*.xml"}
 
-    def get_roots(self) -> list[str]:
-        sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
+    def get_root_ids(self) -> list[str]:
+        sm_type = self.beh.type_registry.find_first_type_by_name("hkbStateMachine")
         roots = [
             (obj["name"].get_value(), obj.object_id)
             for obj in self.beh.find_objects_by_type(sm_type)
         ]
+        # Names for sorting, but return root IDs. They'll be resolved to names via 
+        # get_node_frontpage_short
         return [r[1] for r in sorted(roots)]
 
     def get_graph(self, root_id: str) -> nx.DiGraph:
@@ -415,7 +419,7 @@ class BehaviorEditor(GraphEditor):
             )
 
             # If the binding set pointer changed we should regenerate all attribute widgets
-            vbs_type_id = self.beh.type_registry.find_type_by_name(
+            vbs_type_id = self.beh.type_registry.find_first_type_by_name(
                 "hkbVariableBindingSet"
             )
             if pointer.type_id == vbs_type_id:
@@ -833,7 +837,7 @@ class BehaviorEditor(GraphEditor):
     # Common use cases
     def jump_to_object(self, object_id: str):
         # Open the associated state machine
-        sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
+        sm_type = self.beh.type_registry.find_first_type_by_name("hkbStateMachine")
         root = next(sm for sm in self.beh.find_parents_by_type(object_id, sm_type))
         self._on_root_selected("", True, root.object_id)
 
@@ -1032,8 +1036,11 @@ class BehaviorEditor(GraphEditor):
 
     def create_cmsg(self):
         # This is basically what Wind's ERBehInjector does
-        def on_cmsg_created(sender: str, cmsg: HkbRecord, user_data: Any):
-            self.jump_to_object(cmsg.object_id)
+        def on_cmsg_created(sender: str, ids: tuple[str, str, str], user_data: Any):
+            cmsg_id, _, _ = ids
+            self.jump_to_object(cmsg_id)
 
-        # TODO open dialog
-        pass
+        open_new_cmsg_dialog(
+            self.beh,
+            callback=on_cmsg_created,
+        )

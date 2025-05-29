@@ -173,7 +173,7 @@ class HkbArray(XmlValueHandler):
             items = []
 
         elem_type_id = tagfile.type_registry.get_subtype(type_id)
-        elem = ET.Element("array", count=len(items), elementtypeid=elem_type_id)
+        elem = ET.Element("array", count=str(len(items)), elementtypeid=elem_type_id)
         elem.extend(item.element for item in items)
 
         return HkbArray(tagfile, elem, type_id)
@@ -209,16 +209,30 @@ class HkbArray(XmlValueHandler):
             for elem in self.element
         ]
 
-    def set_value(self, values: list[XmlValueHandler]) -> None:
-        for idx, item in enumerate(values):
-            # TODO check type compatibility
-            if item.type_id != self.element_type_id:
-                raise ValueError(
-                    f"Non-matching value type {item.type_id} (should be {self.element_type_id})"
-                )
+    def set_value(self, values: list[XmlValueHandler | Any], autowrap: bool = True) -> None:
+        if autowrap:
+            wrapped = []
+            ElemHandler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
+            for v in values:
+                if not isinstance(v, XmlValueHandler):
+                    # Could use self._wrap_value, but this way we safe some lookups
+                    v = ElemHandler.new(self.tagfile, self.element_type_id, v)
+                wrapped.append(v)
 
-        # TODO untested
-        self.element[:] = [v.element for v in values]
+            values = wrapped
+
+        for idx, item in enumerate(values):
+            if isinstance(item, XmlValueHandler):
+                if item.type_id != self.element_type_id:
+                    raise ValueError(
+                        f"Non-matching value type {item.type_id} (should be {self.element_type_id})"
+                    )
+
+        for child in list(self.element):
+            self.element.remove(child)
+
+        for v in values:
+            self.element.append(v.element)
         self._count = len(values)
 
     def __len__(self) -> int:
@@ -258,6 +272,10 @@ class HkbArray(XmlValueHandler):
         ]
         self._count -= 1
 
+    def _wrap_value(self, value: Any) -> XmlValueHandler:
+        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
+        return Handler.new(self.tagfile, self.element_type_id, value)
+
     def index(self, value: XmlValueHandler) -> int:
         if isinstance(value, XmlValueHandler):
             if value.type_id != self.element_type_id:
@@ -273,7 +291,10 @@ class HkbArray(XmlValueHandler):
 
         raise IndexError("Item not found")
 
-    def append(self, value: XmlValueHandler):
+    def append(self, value: XmlValueHandler | Any):
+        if not isinstance(value, XmlValueHandler):
+            value = self._wrap_value(value)
+        
         if value.type_id != self.element_type_id:
             raise ValueError(
                 f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
@@ -285,6 +306,9 @@ class HkbArray(XmlValueHandler):
     def insert(self, index: int, value: XmlValueHandler) -> None:
         if index < 0:
             index = len(self) + index
+        
+        if not isinstance(value, XmlValueHandler):
+            value = self._wrap_value(value)
         
         if value.type_id != self.element_type_id:
             raise ValueError(
@@ -457,7 +481,7 @@ class HkbRecord(XmlValueHandler):
         if not id:
             id = self.object_id
 
-        obj = ET.Element("object", type_id=self.type_id, id=id)
+        obj = ET.Element("object", typeid=self.type_id, id=id)
         obj.append(self.element)
 
         return obj

@@ -19,7 +19,7 @@ class VariableType(IntEnum):
     INT32 = 3
     REAL = 4
     POINTER = 5
-    STRING = 6  # NOTE just an assumption, no examples for this
+    STRING = 6  # NOTE just an assumption, no examples for this (ER, Sekiro)
     VECTOR4 = 7
     QUATERNION = 8
 
@@ -38,7 +38,7 @@ class HavokBehavior(Tagfile):
         super().__init__(xml_file)
 
         # There's some special objects storing the string values referenced from HKS
-        strings_type_id = self.type_registry.find_type_by_name(
+        strings_type_id = self.type_registry.find_first_type_by_name(
             "hkbBehaviorGraphStringData"
         )
         strings_obj = next(self.find_objects_by_type(strings_type_id))
@@ -47,7 +47,7 @@ class HavokBehavior(Tagfile):
         self._variables: HkbArray = strings_obj["variableNames"]
         self._animations: HkbArray = strings_obj["animationNames"]
 
-        graphdata_type_id = self.type_registry.find_type_by_name("hkbBehaviorGraphData")
+        graphdata_type_id = self.type_registry.find_first_type_by_name("hkbBehaviorGraphData")
         graphdata_obj = next(self.find_objects_by_type(graphdata_type_id))
 
         self._event_infos: HkbArray = graphdata_obj["eventInfos"]

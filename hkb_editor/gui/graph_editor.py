@@ -111,7 +111,7 @@ class GraphEditor:
     def get_supported_file_extensions(self) -> dict[str, str]:
         return {"All files": "*.*"}
 
-    def get_roots(self) -> list[str]:
+    def get_root_ids(self) -> list[str]:
         return []
 
     def make_node(self, node_id: str) -> None:
@@ -585,7 +585,7 @@ class GraphEditor:
         self.graph.clear()
 
         # For now we only allow one root to be selected
-        for other in self.get_roots():
+        for other in self.get_root_ids():
             self.selected_roots.discard(other)
             tag = f"{self.tag}_root_{other}_selectable"
             if other != root_id and dpg.does_item_exist(tag):
@@ -929,7 +929,7 @@ class GraphEditor:
         for col in dpg.get_item_children(self.roots_table, slot=0):
             dpg.show_item(col)
 
-        root_ids = self.get_roots()
+        root_ids = self.get_root_ids()
         for root_id in root_ids:
             label = self.get_node_frontpage_short(root_id)
             with dpg.table_row(filter_key=label, parent=self.roots_table):

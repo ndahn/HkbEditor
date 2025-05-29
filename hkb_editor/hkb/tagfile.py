@@ -1,4 +1,5 @@
 from typing import Generator, TYPE_CHECKING, Any
+from contextlib import contextmanager
 
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
@@ -15,10 +16,11 @@ class Tagfile:
         from .hkb_types import HkbRecord
 
         self._tree: ET._ElementTree = ET.parse(
-            # lxml keeps comments, which affect subelement counts and iterations. 
-            # TODO we should handle comments properly at some point so they are kept, 
+            # lxml keeps comments, which affect subelement counts and iterations.
+            # TODO we should handle comments properly at some point so they are kept,
             # but for now this is easier
-            xml_file, parser=ET.XMLParser(remove_comments=True)
+            xml_file,
+            parser=ET.XMLParser(remove_comments=True),
         )
         root: ET._Element = self._tree.getroot()
 
@@ -35,15 +37,23 @@ class Tagfile:
         self._tree.write(file_path)
 
     # TODO include subtypes
-    def find_objects_by_type(self, type_id: str) -> Generator["HkbRecord", None, None]:
+    def find_objects_by_type(
+        self, type_id: str, include_derived: bool = False
+    ) -> Generator["HkbRecord", None, None]:
+        compatible = set([type_id])
+
+        if include_derived:
+            compatible.update(self.type_registry.get_compatible_types(type_id))
+
         for obj in self.objects.values():
-            if obj.type_id == type_id:
+            if obj.type_id in compatible:
                 yield obj
 
     def find_first_by_type_name(
         self, type_name: str, default: Any = None
     ) -> "HkbRecord":
-        type_id = self.type_registry.find_type_by_name(type_name)
+        # Used often enough to create a helper
+        type_id = self.type_registry.find_first_type_by_name(type_name)
         return next(self.find_objects_by_type(type_id), default)
 
     def find_parents_by_type(
@@ -77,11 +87,31 @@ class Tagfile:
         yield from query_objects(self, query_str)
 
     def new_id(self, base: str = "object", offset: int = 1) -> str:
+        # TODO maintaining an internal ID offset seems better than searching every time
         last_key = max(
             int(k[len(base) :]) for k in self.objects.keys() if k.startswith(base)
         )
 
         return f"{base}{last_key + offset}"
+
+    @contextmanager
+    def reserve_ids(
+        self, num: int = 1, base_str: str = "object", base_offset: int = 0
+    ) -> Generator[int | tuple[int, ...], None, None]:
+        ids = tuple(
+            self.new_id(base=base_str, offset=base_offset + i) for i in range(num)
+        )
+        try:
+            if num == 1:
+                yield ids[0]
+            else:
+                yield ids
+        finally:
+            # TODO For when we give new_id a new coat
+            # for oid in ids:
+            #    if not oid in self.objects:
+            #        free_id(oid)
+            pass
 
     def add_object(self, record: "HkbRecord", id: str = None) -> str:
         if id is None:

@@ -61,7 +61,7 @@ class AliasManager:
 
     def load_bone_names(self, tagfile: Tagfile, file_path: str):
         skeleton_beh = Tagfile(file_path)
-        skeleton_type_id = skeleton_beh.type_registry.find_type_by_name("hkaSkeleton")
+        skeleton_type_id = skeleton_beh.type_registry.find_first_type_by_name("hkaSkeleton")
         skeletons = list(skeleton_beh.find_objects_by_type(skeleton_type_id))
 
         if not skeletons:
@@ -72,7 +72,7 @@ class AliasManager:
 
         bone_array: HkbArray = skeletons[0]["bones"]
 
-        boneweights_type_id = tagfile.type_registry.find_type_by_name(
+        boneweights_type_id = tagfile.type_registry.find_first_type_by_name(
             "hkbBoneWeightArray"
         )
         basepath = "boneWeights"
