@@ -4,15 +4,24 @@ from functools import cache
 from .tagfile import Tagfile
 
 
-# Enum values are not documented within the behavior files, but we can discover 
+# Enum values are not documented within the behavior files, but we can discover
 # many values from when they are used and the comments going with them
 # hkbBehaviorGraph_VariableMode(IntEnum): pass
 # hkbVariableInfo_VariableType(IntEnum): pass
 # hkbRoleAttribute_Role(IntEnum): pass
 # hkbVariableBindingSet_Binding_BindingType(IntEnum): pass
 # hkbStateMachine_StartStateMode(IntEnum): pass
-# hkbStateMachine_StateMachineSelfTransitionMode(IntEnum): pass
-# hkbTransitionEffect_SelfTransitionMode(IntEnum): pass
+class hkbStateMachine_StateMachineSelfTransitionMode(IntEnum):
+    NO_TRANSITION = 0
+    TRANSITION_TO_START_STATE = 1
+
+
+class hkbTransitionEffect_SelfTransitionMode(IntEnum):
+    CONTINUE_IF_CYCLIC_BLEND_IF_ACYCLIC = 0
+    CONTINUE = 1
+    RESET = 2
+
+
 # hkbTransitionEffect_EventMode(IntEnum): pass
 # hkbHandIkControlData_HandleChangeMode(IntEnum): pass
 # hkbTransitionEffect_EventMode(IntEnum): pass
@@ -31,6 +40,8 @@ class CustomManualSelectorGenerator_AnimeEndEventType(IntEnum):
     FIRE_STATE_END_EVENT = 1
     FIRE_IDLE_EVENT = 2
     NONE = 3
+
+
 # CustomManualSelectorGenerator_ChangeTypeOfSelectedIndexAfterActivate(IntEnum): pass
 # CustomManualSelectorGenerator_ReplanningAI(IntEnum): pass
 # hkbBlendingTransitionEffect_EndMode(IntEnum): pass
@@ -38,6 +49,8 @@ class CustomManualSelectorGenerator_AnimeEndEventType(IntEnum):
 class hkbClipGenerator_PlaybackMode(IntEnum):
     SINGLE_PLAY = 0
     LOOPING = 1
+
+
 # CustomDockingGenerator_DockingType(IntEnum): pass
 # hkbDockingGenerator_BlendType(IntEnum): pass
 

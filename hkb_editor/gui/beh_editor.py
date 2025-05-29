@@ -22,7 +22,7 @@ from hkb_editor.hkb.hkb_types import (
 )
 
 from .graph_editor import GraphEditor, Node
-from .widgets import (
+from .dialogs import (
     select_pointer_dialog,
     edit_simple_array_dialog,
     find_object_dialog,
@@ -165,7 +165,7 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(label="Create CMSG...", callback=self.create_cmsg)
 
         self._create_settings_menu()
-        
+
         dpg.add_separator()
         self._create_dpg_menu()
 
@@ -195,7 +195,7 @@ class BehaviorEditor(GraphEditor):
             (obj["name"].get_value(), obj.object_id)
             for obj in self.beh.find_objects_by_type(sm_type)
         ]
-        # Names for sorting, but return root IDs. They'll be resolved to names via 
+        # Names for sorting, but return root IDs. They'll be resolved to names via
         # get_node_frontpage_short
         return [r[1] for r in sorted(roots)]
 
@@ -835,10 +835,28 @@ class BehaviorEditor(GraphEditor):
         self.logger.info("Copied value:\n%s", data)
 
     # Common use cases
+    def get_active_statemachine(self, for_object_id: str = None) -> HkbRecord:
+        if not for_object_id:
+            if self.selected_node:
+                for_object_id = self.selected_node.id
+            elif self.graph.number_of_nodes() > 0:
+                for_object_id = next(
+                    n for n, in_deg in self.graph.in_degree() if in_deg == 0
+                )
+
+        if not for_object_id:
+            return None
+
+        sm_type = self.beh.type_registry.find_first_type_by_name("hkbStateMachine")
+        obj = self.beh.objects[for_object_id]
+        if obj.type_id == sm_type:
+            return obj
+
+        return next(sm for sm in self.beh.find_parents_by_type(for_object_id, sm_type))
+
     def jump_to_object(self, object_id: str):
         # Open the associated state machine
-        sm_type = self.beh.type_registry.find_first_type_by_name("hkbStateMachine")
-        root = next(sm for sm in self.beh.find_parents_by_type(object_id, sm_type))
+        root = self.get_active_statemachine(object_id)
         self._on_root_selected("", True, root.object_id)
 
         # Reveal the node in the state machine graph
@@ -895,7 +913,7 @@ class BehaviorEditor(GraphEditor):
                 "Variables are referenced by their index in VariableBindingSets.",
                 "Deleting or inserting names may invalidate your behavior.",
             ],
-            choices = {
+            choices={
                 1: [v.name for v in VariableType],
             },
             on_add=on_add,
@@ -1040,7 +1058,9 @@ class BehaviorEditor(GraphEditor):
             cmsg_id, _, _ = ids
             self.jump_to_object(cmsg_id)
 
+        active_sm = self.get_active_statemachine()
         open_new_cmsg_dialog(
             self.beh,
+            active_sm.object_id if active_sm else None,
             callback=on_cmsg_created,
         )

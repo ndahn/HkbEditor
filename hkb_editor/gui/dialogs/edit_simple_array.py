@@ -1,6 +1,8 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
+from hkb_editor.gui.helpers import center_window
+
 
 def edit_simple_array_dialog(
     items: list[tuple],
@@ -57,17 +59,7 @@ def edit_simple_array_dialog(
                 )
 
         dpg.split_frame()
-        dpos = dpg.get_item_pos(tag)
-        dsize = dpg.get_item_rect_size(tag)
-        psize = dpg.get_item_rect_size(create_entry_popup)
-
-        dpg.set_item_pos(
-            create_entry_popup,
-            (
-                dpos[0] + (dsize[0] - psize[0]) / 2,
-                dpos[1] + (dsize[1] - psize[1]) / 2,
-            ),
-        )
+        center_window(create_entry_popup, tag)
 
     def add_entry(sender, new_value: tuple, index: int):
         # May return True as a veto

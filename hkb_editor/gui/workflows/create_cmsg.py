@@ -10,6 +10,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
 from hkb_editor.gui.workflows.undo import undo_manager
+from hkb_editor.gui.helpers import center_window
 from hkb_editor.gui import style
 
 
@@ -18,7 +19,7 @@ _logger = getLogger(__name__)
 
 def open_new_cmsg_dialog(
     behavior: HavokBehavior,
-    active_statemachine: str = None,
+    active_statemachine_id: str = None,
     tag: str = 0,
     callback: Callable[
         [str, tuple[HkbRecord, HkbRecord, HkbRecord, HkbRecord], Any], None
@@ -58,6 +59,7 @@ def open_new_cmsg_dialog(
         stateinfo_transitions_val: str = dpg.get_value(f"{tag}_stateinfo_transitions")
 
         # Look up the types we need
+        _logger.debug("Resolving object types")
         cmsg_type = types.find_first_type_by_name("CustomManualSelectorGenerator")
         clipgen_type = types.find_first_type_by_name("hkbClipGenerator")
         stateinfo_type = types.find_first_type_by_name("hkbStateMachine::StateInfo")
@@ -66,11 +68,17 @@ def open_new_cmsg_dialog(
         )
 
         # Resolve values
+        _logger.debug("Resolving user values")
         statemachine_type = types.find_first_type_by_name("hkbStateMachine")
         statemachine_id = next(
             behavior.query(f"type_id:{statemachine_type} AND name:{statemachine_val}")
         ).object_id
         statemachine = behavior.objects[statemachine_id]
+
+        wildcard_transitions_ptr = statemachine.get_field("wildcardTransitions")
+        if not wildcard_transitions_ptr.get_value():
+            _logger.error("Statemachine does not have a wildcard transitions object")
+            return
 
         # stateId in StateInfo directly correlates to toStateId in the transitionInfoArray.
         # It doesn't have to be unique, but it has to match and be unique within those
@@ -91,12 +99,16 @@ def open_new_cmsg_dialog(
         try:
             anim_idx = behavior.find_animation(animation_val)
         except IndexError:
+            _logger.debug("Creating new animation name %s", animation_val)
+            # TODO undo action
             anim_idx = behavior.create_animation(animation_val)
 
         # Add event to the events array
         try:
             event_id = behavior.find_event(event_val)
         except IndexError:
+            _logger.debug("Creating new event %s", event_val)
+            # TODO undo action
             event_id = behavior.create_event(event_val)
 
         playback_mode = PlaybackMode[playback_mode_val].value
@@ -191,10 +203,9 @@ def open_new_cmsg_dialog(
             sm_states.append(stateinfo_pointer)
 
             # Add transition info to statemachine
-            wildcard_transitions_ptr = statemachine.get_field(
-                "wildcardTransitions"
-            )
-            wildcard_transitions_obj = behavior.objects[wildcard_transitions_ptr.get_value()]
+            wildcard_transitions_obj = behavior.objects[
+                wildcard_transitions_ptr.get_value()
+            ]
             wildcard_transitions: HkbArray = wildcard_transitions_obj["transitions"]
             undo_manager.on_update_array_item(
                 wildcard_transitions, -1, None, transitioninfo
@@ -205,7 +216,7 @@ def open_new_cmsg_dialog(
 
         if callback:
             callback(dialog, (cmsg_id, clipgen_id, stateinfo_id), user_data)
-        
+
         dpg.delete_item(dialog)
 
     def on_cancel():
@@ -239,6 +250,7 @@ def open_new_cmsg_dialog(
         label="Create CMSG",
         width=400,
         height=600,
+        autosize=True,
         on_close=on_cancel,
         tag=tag,
     ) as dialog:
@@ -246,16 +258,19 @@ def open_new_cmsg_dialog(
         sm_type = types.find_first_type_by_name("hkbStateMachine")
         statemachines = behavior.find_objects_by_type(sm_type)
         sm_items = [sm["name"] for sm in statemachines]
+        
+        default_sm = sm_items[0]
+        if active_statemachine_id:
+            default_sm = behavior.objects[active_statemachine_id]["name"].get_value()
+        
         dpg.add_combo(
             items=sm_items,
-            default_value=(
-                active_statemachine["name"] if active_statemachine else sm_items[0]
-            ),
+            default_value=default_sm,
             label="Statemachine",
             tag=f"{tag}_statemachine",
         )
-        # with dpg.tooltip(dpg.last_item()):
-        dpg.add_text("The StateMachine the CMSG will be linked to")
+        with dpg.tooltip(dpg.last_item()):
+            dpg.add_text("The StateMachine the CMSG will be linked to")
 
         # Base name
         dpg.add_input_text(
@@ -263,72 +278,82 @@ def open_new_cmsg_dialog(
             label="Base Name",
             tag=f"{tag}_base_name",
         )
-        # with dpg.tooltip(dpg.last_item()):
-        dpg.add_text("Used for the CMSG, ClipGenerator and TransitionInfo")
+        with dpg.tooltip(dpg.last_item()):
+            dpg.add_text("Used for the CMSG, ClipGenerator and TransitionInfo")
 
-        dpg.add_input_text(
-            default_value="a000_000000",
-            no_spaces=True,
-            callback=verify_animation,
-            label="Animation",
-            tag=f"{tag}_animation",
-        )
-        # with dpg.tooltip(dpg.last_item()):
-        dpg.add_text("Animation ID the ClipGenerator uses (aXXX_YYYYYY)")
-
+        # CMSG event
         dpg.add_input_text(
             default_value="",
             no_spaces=True,
             callback=verify_event,
-            label="Event",
+            label="CMSG Event",
             tag=f"{tag}_event",
         )
-        # with dpg.tooltip(dpg.last_item()):
-        dpg.add_text("Used to trigger the transitoin to the CMSG from HKS")
+        with dpg.tooltip(dpg.last_item()):
+            dpg.add_text("Used to trigger the transitoin to the CMSG from HKS")
 
-        # TransitionInfo
-        transition_type = types.find_first_type_by_name("hkbTransitionEffect")
-        transitions = behavior.find_objects_by_type(
-            transition_type, include_derived=True
+        # ClipGenerator animation
+        dpg.add_input_text(
+            default_value="a000_000000",
+            hint="aXXX_YYYYYY",
+            no_spaces=True,
+            callback=verify_animation,
+            label="Clip Animation",
+            tag=f"{tag}_animation",
         )
-        transition_items = [t["name"].get_value() for t in transitions]
-        default_transition = (
-            "TaeBlend" if "TaeBlend" in transition_items else transition_items[0]
-        )
+        with dpg.tooltip(dpg.last_item()):
+            dpg.add_text("Animation ID the ClipGenerator uses")
+
+        # Clip playback mode
         dpg.add_combo(
-            items=transition_items,
-            default_value=default_transition,
-            label="Transition",
-            tag=f"{tag}_transition",
-        )
-        # with dpg.tooltip(dpg.last_item()):
-        dpg.add_text(
-            "Decides how animations are blended when transitioning to the CMSG"
+            [e.name for e in PlaybackMode],
+            default_value=PlaybackMode.SINGLE_PLAY.name,
+            label="Playback Mode",
+            tag=f"{tag}_playback_mode",
         )
 
-        dpg.add_spacer(height=5)
+        dpg.add_spacer(height=1)
 
         with dpg.tree_node(label="Advanced"):
-            dpg.add_combo(
-                [e.name for e in PlaybackMode],
-                default_value=PlaybackMode.SINGLE_PLAY.name,
-                label="Playback Mode",
-                tag=f"{tag}_playback_mode",
+            # TransitionInfo
+            transition_type = types.find_first_type_by_name("hkbTransitionEffect")
+            transitions = behavior.find_objects_by_type(
+                transition_type, include_derived=True
             )
+            transition_items = [t["name"].get_value() for t in transitions]
+            default_transition = (
+                "TaeBlend" if "TaeBlend" in transition_items else transition_items[0]
+            )
+
+            # TODO search dialog, option to create new -> general "new object" dialog
+            dpg.add_combo(
+                items=transition_items,
+                default_value=default_transition,
+                label="Transition",
+                tag=f"{tag}_transition",
+            )
+            with dpg.tooltip(dpg.last_item()):
+                dpg.add_text(
+                    "Decides how animations are blended when transitioning to the CMSG"
+                )
+
+            # AnimeEndEventType
             dpg.add_combo(
                 [e.name for e in AnimeEndEventType],
                 default_value=AnimeEndEventType.NONE.name,
                 label="Animation End Event Type",
                 tag=f"{tag}_animation_end_event_type",
             )
+
+            # TODO pointer select
             dpg.add_input_text(
                 default_value="",
-                label="StateInfo Transitions",
                 hint="Object ID",
+                label="StateInfo Transitions",
                 tag=f"{tag}_stateinfo_transitions",
             )
 
-            
+        dpg.add_spacer(height=3)
 
         # Main form done, now just some buttons and such
         dpg.add_separator()
@@ -338,3 +363,6 @@ def open_new_cmsg_dialog(
                 label="Cancel",
                 callback=on_cancel,
             )
+
+    dpg.split_frame()
+    center_window(dialog)

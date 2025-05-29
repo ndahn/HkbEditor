@@ -5,7 +5,7 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
-from hkb_editor.gui.widgets import select_simple_array_item_dialog
+from hkb_editor.gui.dialogs import select_simple_array_item_dialog
 from hkb_editor.gui import style
 from hkb_editor.gui.workflows.undo import undo_manager
 
