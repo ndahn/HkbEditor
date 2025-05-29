@@ -885,7 +885,8 @@ class BehaviorEditor(GraphEditor):
             self.beh.delete_event(idx)
 
         edit_simple_array_dialog(
-            self.beh.get_events(),
+            [(e,) for e in self.beh.get_events()],
+            ["Name"],
             title="Edit Events",
             help=[
                 "Warning:",
@@ -928,7 +929,8 @@ class BehaviorEditor(GraphEditor):
             self.beh.delete_animation(idx)
 
         edit_simple_array_dialog(
-            self.beh.get_animations(),
+            [(a,) for a in self.beh.get_animations()],
+            ["Name"],
             title="Edit Animation Names",
             help=[
                 "Warning:",

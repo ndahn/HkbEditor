@@ -3,7 +3,8 @@ from dearpygui import dearpygui as dpg
 
 
 def edit_simple_array_dialog(
-    items: list[str],
+    items: list[tuple],
+    columns: list[str],
     *,
     title: str = "Edit Array",
     help: list[str] = None,
@@ -19,9 +20,15 @@ def edit_simple_array_dialog(
         tag = dpg.generate_uuid()
 
     def new_entry_dialog(sender, app_data, index: int):
+        ref = items[0]
+        new_val = [type(v)() for v in ref]
+
+        def assemble(sender: str, new_value: Any, user_data: tuple[int, int]):
+            _, val_idx = user_data
+            new_val[val_idx] = new_value
+
         def create_entry():
-            new_val = dpg.get_value(f"{tag}_new_entry_input")
-            add_entry(sender, new_val, index)
+            add_entry(sender, tuple(new_val), index)
             dpg.delete_item(create_entry_popup)
 
         with dpg.window(
@@ -32,10 +39,10 @@ def edit_simple_array_dialog(
             on_close=lambda: dpg.delete_item(create_entry_popup),
             tag=f"{tag}_create_entry_popup",
         ) as create_entry_popup:
-            dpg.add_input_text(
-                hint="<name>",
-                tag=f"{tag}_new_entry_input",
-            )
+            for idx, (col, ref_val) in enumerate(zip(columns, ref)):
+                create_value_widget(
+                    index, idx, type(ref_val)(), callback=assemble, label=col
+                )
 
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Okay", callback=create_entry)
@@ -56,7 +63,7 @@ def edit_simple_array_dialog(
             ),
         )
 
-    def add_entry(sender, new_value: str, index: int):
+    def add_entry(sender, new_value: tuple, index: int):
         # May return True as a veto
         if on_add and on_add(index, new_value):
             return
@@ -68,12 +75,19 @@ def edit_simple_array_dialog(
         # input_box = dpg.get_item_children(row, slot=1)[1]
         # dpg.focus_item(input_box)
 
-    def update_entry(sender, new_value: Any, index: int):
+    def update_entry(sender, new_value: Any, user_data: tuple[int, int]):
         # May return True as a veto
-        if on_update and on_update(index, items[index], new_value):
+        item_idx, val_idx = user_data
+
+        old_val = items[item_idx]
+        new_val = list(old_val)
+        new_val[val_idx] = new_value
+        new_val = tuple(new_val)
+
+        if on_update and on_update(item_idx, old_val, new_value):
             return
 
-        items[index] = new_value
+        items[item_idx] = new_value
         fill_table()
 
     def delete_entry(sender: str, app_data: Any, index: int):
@@ -90,36 +104,83 @@ def edit_simple_array_dialog(
         # TODO can use this to show where items are referenced
         print("TODO not implemented yet")
 
+    def create_value_widget(
+        item_idx: int,
+        val_idx: int,
+        val: Any,
+        *,
+        callback: Callable[[str, Any, Any], None] = None,
+        on_enter: bool = False,
+        **kwargs,
+    ):
+        if val is None or isinstance(val, str):
+            dpg.add_input_text(
+                callback=callback,
+                user_data=(item_idx, val_idx),
+                default_value=val or "",
+                on_enter=on_enter,
+                **kwargs,
+            )
+        elif isinstance(val, int):
+            dpg.add_input_int(
+                callback=callback,
+                user_data=(item_idx, val_idx),
+                default_value=val,
+                on_enter=on_enter,
+                **kwargs,
+            )
+        elif isinstance(val, float):
+            dpg.add_input_float(
+                callback=callback,
+                user_data=(item_idx, val_idx),
+                default_value=val,
+                on_enter=on_enter,
+                **kwargs,
+            )
+        elif isinstance(val, bool):
+            dpg.add_checkbox(
+                callback=callback,
+                user_data=(item_idx, val_idx),
+                default_value=val,
+                **kwargs,
+            )
+        else:
+            print(f"WARNING cannot handle value {val} with unknown type")
+
     def fill_table():
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
 
-        for idx, item in enumerate(items):
-            with dpg.table_row(filter_key=f"{idx}:{item}", parent=table) as row:
-                dpg.add_text(str(idx))
-                dpg.add_input_text(
-                    callback=update_entry,
-                    user_data=idx,
-                    default_value=item,
-                    on_enter=True,
-                    width=-1,
-                )
+        for item_idx, item in enumerate(items):
+            with dpg.table_row(filter_key=f"{item_idx}:{item}", parent=table) as row:
+                dpg.add_text(str(item_idx))
+
+                for val_idx, val in enumerate(item):
+                    create_value_widget(
+                        item_idx,
+                        val_idx,
+                        val,
+                        callback=update_entry,
+                        on_enter=True,
+                        width=-1,
+                    )
+
                 with dpg.group(horizontal=True, horizontal_spacing=2):
                     dpg.add_button(
                         label="(-)",
                         small=True,
                         callback=delete_entry,
-                        user_data=idx,
+                        user_data=item_idx,
                     )
                     dpg.add_button(
                         label="(+)",
                         callback=new_entry_dialog,
-                        user_data=idx + 1,
+                        user_data=item_idx + 1,
                     )
                     if get_item_hint:
                         dpg.add_button(
                             label="(?)",
                             callback=show_item_hint,
-                            user_data=idx,
+                            user_data=item_idx,
                         )
 
     def cloe_dialog():
@@ -154,7 +215,8 @@ def edit_simple_array_dialog(
             tag=f"{tag}_table",
         ) as table:
             dpg.add_table_column(label="Index")
-            dpg.add_table_column(label="Name", width_stretch=True)
+            for col in columns:
+                dpg.add_table_column(label=col, width_stretch=True)
             dpg.add_table_column()
 
         if help:
