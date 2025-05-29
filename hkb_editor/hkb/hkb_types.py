@@ -336,8 +336,6 @@ class HkbRecord(XmlValueHandler):
             for fname, ftype in tagfile.type_registry.get_fields(
                 record_type_id
             ).items():
-                if fname == "userData":
-                    print("WARNING: TODO userData value needs to be unique!")
 
                 field_elem = ET.SubElement(parent_elem, "field", name=fname)
                 Handler = get_value_handler(tagfile.type_registry, ftype)
@@ -345,6 +343,9 @@ class HkbRecord(XmlValueHandler):
 
                 if isinstance(field_val, HkbRecord):
                     create_fields(field_val.element, ftype)
+                elif fname == "userData":
+                    # Needs to be unique
+                    field_val.set_value(tagfile.new_userdata_value())
 
                 field_elem.append(field_val.element)
 

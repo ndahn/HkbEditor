@@ -1,5 +1,4 @@
 from typing import Generator, TYPE_CHECKING, Any
-from contextlib import contextmanager
 
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
@@ -32,6 +31,13 @@ class Tagfile:
             obj.attrib["id"]: HkbRecord.from_object(self, obj)
             for obj in root.findall(".//object")
         }
+
+        self._next_object_id = max(
+            int(k[len("object"):]) for k in self.objects.keys() if k.startswith("object")
+        ) + 1
+        self._next_userdata_value = max(
+            int(v for v in self._tree.xpath("//field[@name='userData']/integer/@value"))
+        ) + 1
 
     def save_to_file(self, file_path: str) -> None:
         self._tree.write(file_path)
@@ -86,32 +92,15 @@ class Tagfile:
     def query(self, query_str: str) -> Generator["HkbRecord", None, None]:
         yield from query_objects(self, query_str)
 
-    def new_id(self, base: str = "object", offset: int = 1) -> str:
-        # TODO maintaining an internal ID offset seems better than searching every time
-        last_key = max(
-            int(k[len(base) :]) for k in self.objects.keys() if k.startswith(base)
-        )
+    def new_id(self, offset: int = 0) -> str:
+        new_id = self._next_object_id + offset
+        self._next_object_id = new_id + 1
+        return f"object{new_id}"
 
-        return f"{base}{last_key + offset}"
-
-    @contextmanager
-    def reserve_ids(
-        self, num: int = 1, base_str: str = "object", base_offset: int = 0
-    ) -> Generator[int | tuple[int, ...], None, None]:
-        ids = tuple(
-            self.new_id(base=base_str, offset=base_offset + i) for i in range(num)
-        )
-        try:
-            if num == 1:
-                yield ids[0]
-            else:
-                yield ids
-        finally:
-            # TODO For when we give new_id a new coat
-            # for oid in ids:
-            #    if not oid in self.objects:
-            #        free_id(oid)
-            pass
+    def new_userdata_value(self, offset: int = 0) -> int:
+        new_value = self._next_userdata_value + offset
+        self._next_userdata_value = new_value + 1
+        return new_value
 
     def add_object(self, record: "HkbRecord", id: str = None) -> str:
         if id is None:

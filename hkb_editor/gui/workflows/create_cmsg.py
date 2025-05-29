@@ -123,9 +123,9 @@ def open_new_cmsg_dialog(
         )
 
         # Generate the new objects
-        cmsg_id = behavior.new_id(offset=1)
-        clipgen_id = behavior.new_id(offset=2)
-        stateinfo_id = behavior.new_id(offset=3)
+        cmsg_id = behavior.new_id()
+        clipgen_id = behavior.new_id()
+        stateinfo_id = behavior.new_id()
 
         cmsg = HkbRecord.new(
             behavior,
