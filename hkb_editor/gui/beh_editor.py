@@ -54,6 +54,7 @@ class BehaviorEditor(GraphEditor):
 
         self.beh: HavokBehavior = None
         self.alias_manager = AliasManager()
+        self.pinned_objects_table: str = None
 
         class LogHandler(logging.Handler):
             editor = self
@@ -190,6 +191,136 @@ class BehaviorEditor(GraphEditor):
     def get_supported_file_extensions(self):
         return {"Behavior XML": "*.xml"}
 
+    def _setup_content(self) -> None:
+        super()._setup_content()
+
+        with dpg.window(
+            label="Pinned Objects",
+            autosize=True,
+            no_close=True,
+            tag=f"{self.tag}_pinned_objects",
+        ):
+            # Child window to fix table sizing
+            with dpg.child_window(border=False):
+                with dpg.table(
+                    no_host_extendX=True,
+                    resizable=True,
+                    borders_innerV=True,
+                    policy=dpg.mvTable_SizingFixedFit,
+                    scrollY=True,
+                    tag=f"{self.tag}_pinned_objects_table",
+                ) as self.pinned_objects_table:
+                    dpg.add_table_column(label="ID")
+                    dpg.add_table_column(label="Name", width_stretch=True)
+                    dpg.add_table_column(label="Type", width_stretch=True)
+
+        with dpg.item_handler_registry(tag=f"{self.tag}_pin_registry"):
+            dpg.add_item_clicked_handler(
+                button=dpg.mvMouseButton_Right, callback=self.open_pin_menu
+            )
+
+    def add_pinned_object(self, object_id: str) -> None:
+        obj = self.beh.objects[object_id]
+
+        def on_select(sender: str):
+            # No selection
+            dpg.set_value(sender, False)
+
+        with dpg.table_row(
+            # For some reason self.pinned_objects_table doesn't work?
+            parent=f"{self.tag}_pinned_objects_table",
+            tag=f"{self.tag}_pin_{object_id}",
+            user_data=object_id,
+        ) as row:
+            dpg.add_selectable(
+                label=object_id,
+                span_columns=True,
+                callback=on_select,
+                user_data=object_id,
+            )
+            dpg.bind_item_handler_registry(dpg.last_item(), f"{self.tag}_pin_registry")
+            dpg.add_text(
+                obj.get_field("name", None, resolve=True),
+            )
+            dpg.add_text(obj.type_name)
+
+    def remove_pinned_object(self, object_id: str) -> None:
+        for row in dpg.get_item_children(f"{self.tag}_pinned_objects_table", slot=1):
+            if dpg.get_item_user_data(row) == object_id:
+                dpg.delete_item(row)
+                break
+
+    def open_pin_menu(self, sender: str, app_data: str, user_data: Any) -> None:
+        _, selectable = app_data
+        object_id = dpg.get_item_user_data(selectable)
+        pinned_obj: HkbRecord = self.beh.retrieve_object(object_id)
+
+        def show_attributes():
+            self._deselect_active_node()
+            self._clear_attributes()
+
+            # update_attributes wants a Node, not a record, so we do it ourselves
+            dpg.set_value(f"{self.tag}_attributes_title", object_id)
+
+            for key, val in pinned_obj.get_value().items():
+                with dpg.table_row(
+                    filter_key=key,
+                    parent=self.attributes_table,
+                ):
+                    self._create_attribute_widget(pinned_obj, val, key)
+
+        popup = f"{self.tag}_pin_menu"
+
+        if not dpg.does_item_exist(popup):
+            dpg.popup
+            with dpg.window(
+                popup=True,
+                min_size=(100, 20),
+                no_title_bar=True,
+                no_resize=True,
+                no_move=True,
+                no_saved_settings=True,
+                autosize=True,
+                show=False,
+                tag=popup,
+            ):
+                dpg.add_selectable(
+                    label="Unpin", callback=lambda: self.remove_pinned_object(object_id)
+                )
+                dpg.add_selectable(
+                    label="Jump To", callback=lambda: self.jump_to_object(object_id)
+                )
+                dpg.add_selectable(label="Show Attributes", callback=show_attributes)
+                self._make_copy_menu(pinned_obj)
+
+        dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
+        dpg.show_item(popup)
+
+    def _make_copy_menu(self, record: HkbRecord) -> None:
+        with dpg.menu(label="Copy"):
+            dpg.add_selectable(
+                label="ID",
+                callback=lambda: self._copy_to_clipboard(record.object_id),
+            )
+            dpg.add_selectable(
+                label="Name",
+                callback=lambda: self._copy_to_clipboard(
+                    record.get_field("name", "", resolve=True)
+                ),
+            )
+            dpg.add_selectable(
+                label="Type Name",
+                callback=lambda: self._copy_to_clipboard(record.type_name),
+            )
+            dpg.add_selectable(
+                label="Type ID",
+                callback=lambda: self._copy_to_clipboard(record.type_id),
+            )
+            dpg.add_selectable(
+                label="XML",
+                callback=lambda: self._copy_to_clipboard(record.xml()),
+            )
+
     def get_root_ids(self) -> list[str]:
         sm_type = self.beh.type_registry.find_first_type_by_name("hkbStateMachine")
         roots = [
@@ -242,11 +373,12 @@ class BehaviorEditor(GraphEditor):
         if obj.get_field("name", None) is not None:
             actions.append("Copy Name")
 
-        actions.append("Copy XML")
+        actions.extend(["Copy XML", "-", "Pin Object"])
 
         return actions
 
     def on_node_menu_item_selected(self, node: Node, selected_item: str) -> None:
+        # TODO redesign, just make normal menus and use _make_copy_menu
         if selected_item == "Copy ID":
             self._copy_to_clipboard(node.id)
         elif selected_item == "Copy Name":
@@ -255,6 +387,8 @@ class BehaviorEditor(GraphEditor):
         elif selected_item == "Copy XML":
             obj = self.beh.objects[node.id]
             self._copy_to_clipboard(obj.xml())
+        elif selected_item == "Pin Object":
+            self.add_pinned_object(node.id)
         else:
             self.logger.warning("Not implemented yet")
 
@@ -552,14 +686,17 @@ class BehaviorEditor(GraphEditor):
             elif isinstance(value, HkbInteger):
                 current_record = source_record
                 if "/" in path:
-                    # The path will become deeper if and only if we descended into 
+                    # The path will become deeper if and only if we descended into
                     # record fields, so the parent object will always be a record
                     parent_path = "/".join(path.split("/")[:-1])
                     current_record = source_record.get_path_value(parent_path)
 
-                enum = get_hkb_enum(self.beh.type_registry, current_record.type_id, path)
+                enum = get_hkb_enum(
+                    self.beh.type_registry, current_record.type_id, path
+                )
 
                 if enum:
+
                     def on_enum_change(sender: str, new_value: str, val: HkbInteger):
                         int_value = enum[new_value].value
                         self.on_attribute_update(sender, int_value, val)
@@ -569,7 +706,7 @@ class BehaviorEditor(GraphEditor):
                         filter_key=attribute,
                         callback=on_enum_change,
                         user_data=value,
-                        default_value=enum(value.get_value()).name
+                        default_value=enum(value.get_value()).name,
                     )
                 else:
                     dpg.add_input_int(
@@ -855,7 +992,7 @@ class BehaviorEditor(GraphEditor):
         except:
             pass
 
-        self.logger.info("Copied value:\n%s", data)
+        self.logger.debug("Copied value:\n%s", data)
 
     # Common use cases
     def get_active_statemachine(self, for_object_id: str = None) -> HkbRecord:

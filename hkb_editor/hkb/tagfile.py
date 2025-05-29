@@ -36,11 +36,24 @@ class Tagfile:
             int(k[len("object"):]) for k in self.objects.keys() if k.startswith("object")
         ) + 1
         self._next_userdata_value = max(
-            int(v for v in self._tree.xpath("//field[@name='userData']/integer/@value"))
+            int(v) for v in self._tree.xpath("//field[@name='userData']/integer/@value")
         ) + 1
 
     def save_to_file(self, file_path: str) -> None:
         self._tree.write(file_path)
+
+    def retrieve_object(self, object_id: str) -> "HkbRecord":
+        from .hkb_types import HkbRecord
+
+        try:
+            return self.objects[object_id]
+        except KeyError:
+            # Not cached, directly construct it from the xml
+            elem = next(self._tree.xpath(f".//object[@id='{object_id}']"), None)
+            if elem:
+                return HkbRecord.from_object(self, elem)
+        
+        return None
 
     # TODO include subtypes
     def find_objects_by_type(

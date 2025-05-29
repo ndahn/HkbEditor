@@ -321,99 +321,97 @@ class GraphEditor:
         with dpg.viewport_menu_bar():
             self.create_app_menu()
 
-        with dpg.group(horizontal=True):
-            # Roots
-            with dpg.window(
-                label="Root Nodes",
-                autosize=True,
-                no_close=True,
-                no_scrollbar=True,
-                tag=f"{self.tag}_roots_window",
-            ):
-                dpg.add_input_text(
-                    hint="Filter",
-                    tag=f"{self.tag}_roots_filter",
-                    callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
-                    user_data=f"{self.tag}_roots_table",
+        # Roots
+        with dpg.window(
+            label="Root Nodes",
+            autosize=True,
+            no_close=True,
+            no_scrollbar=True,
+            tag=f"{self.tag}_roots_window",
+        ):
+            dpg.add_input_text(
+                hint="Filter",
+                tag=f"{self.tag}_roots_filter",
+                callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
+                user_data=f"{self.tag}_roots_table",
+            )
+            dpg.add_separator()
+            # Tables are more flexible with item design and support filtering
+            with dpg.table(
+                delay_search=True,
+                no_host_extendX=True,
+                header_row=False,
+                # policy=dpg.mvTable_SizingFixedFit,
+                scrollY=True,
+                tag=f"{self.tag}_roots_table",
+            ) as self.roots_table:
+                dpg.add_table_column(label="Name")
+
+        # Canvas
+        with dpg.window(
+            label="Graph",
+            autosize=True,
+            no_close=True,
+            no_scrollbar=True,
+            tag=f"{self.tag}_canvas_window",
+        ):
+            with dpg.drawlist(800, 800, tag=f"{self.tag}_canvas") as self.canvas:
+                dpg.add_draw_node(tag=f"{self.tag}_canvas_root")
+
+        # Attributes panel
+        with dpg.window(
+            label="Attributes",
+            autosize=True,
+            no_close=True,
+            no_scrollbar=True,
+            tag=f"{self.tag}_attributes_window",
+        ):
+            dpg.add_input_text(
+                hint="Filter",
+                tag=f"{self.tag}_attribute_filter",
+                callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
+                user_data=f"{self.tag}_attributes_table",
+            )
+            dpg.add_separator()
+
+            # Child window is needed to fix table sizing
+            with dpg.child_window(border=False):
+                dpg.add_text(
+                    "", tag=f"{self.tag}_attributes_title", color=style.blue
                 )
-                dpg.add_separator()
-                # Tables are more flexible with item design and support filtering
                 with dpg.table(
                     delay_search=True,
                     no_host_extendX=True,
+                    resizable=True,
+                    borders_innerV=True,
+                    policy=dpg.mvTable_SizingFixedFit,
                     header_row=False,
-                    # policy=dpg.mvTable_SizingFixedFit,
-                    scrollY=True,
-                    tag=f"{self.tag}_roots_table",
-                ) as self.roots_table:
-                    dpg.add_table_column(label="Name")
+                    tag=f"{self.tag}_attributes_table",
+                ) as self.attributes_table:
+                    dpg.add_table_column(label="Value", width_stretch=True)
+                    dpg.add_table_column(label="Key", width_fixed=True)
 
-            # Canvas
-            with dpg.window(
-                label="Graph",
-                autosize=True,
-                no_close=True,
-                no_scrollbar=True,
-                tag=f"{self.tag}_canvas_window",
-            ):
-                with dpg.drawlist(800, 800, tag=f"{self.tag}_canvas") as self.canvas:
-                    dpg.add_draw_node(tag=f"{self.tag}_canvas_root")
+        with dpg.handler_registry():
+            dpg.add_mouse_release_handler(
+                dpg.mvMouseButton_Left, callback=self._on_left_click
+            )
+            dpg.add_mouse_release_handler(
+                dpg.mvMouseButton_Right, callback=self._on_right_click
+            )
 
-            # Attributes panel
-            with dpg.window(
-                label="Attributes",
-                autosize=True,
-                no_close=True,
-                no_scrollbar=True,
-                tag=f"{self.tag}_attributes_window",
-            ):
-                dpg.add_input_text(
-                    hint="Filter",
-                    tag=f"{self.tag}_attribute_filter",
-                    callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
-                    user_data=f"{self.tag}_attributes_table",
-                )
-                dpg.add_separator()
+            dpg.add_mouse_down_handler(
+                dpg.mvMouseButton_Middle, callback=self._on_drag_start
+            )
+            dpg.add_mouse_release_handler(
+                dpg.mvMouseButton_Middle, callback=self._on_drag_release
+            )
+            dpg.add_mouse_drag_handler(
+                dpg.mvMouseButton_Middle, callback=self._on_mouse_drag
+            )
 
-                # Child window is needed to fix table sizing
-                with dpg.child_window(border=False):
-                    dpg.add_text(
-                        "", tag=f"{self.tag}_attributes_title", color=style.blue
-                    )
-                    with dpg.table(
-                        delay_search=True,
-                        no_host_extendX=True,
-                        resizable=True,
-                        borders_innerV=True,
-                        policy=dpg.mvTable_SizingFixedFit,
-                        header_row=False,
-                        tag=f"{self.tag}_attributes_table",
-                    ) as self.attributes_table:
-                        dpg.add_table_column(label="Value", width_stretch=True)
-                        dpg.add_table_column(label="Key", width_fixed=True)
+            dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
 
-            with dpg.handler_registry():
-                dpg.add_mouse_release_handler(
-                    dpg.mvMouseButton_Left, callback=self._on_left_click
-                )
-                dpg.add_mouse_release_handler(
-                    dpg.mvMouseButton_Right, callback=self._on_right_click
-                )
-
-                dpg.add_mouse_down_handler(
-                    dpg.mvMouseButton_Middle, callback=self._on_drag_start
-                )
-                dpg.add_mouse_release_handler(
-                    dpg.mvMouseButton_Middle, callback=self._on_drag_release
-                )
-                dpg.add_mouse_drag_handler(
-                    dpg.mvMouseButton_Middle, callback=self._on_mouse_drag
-                )
-
-                dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
-
-            dpg.set_viewport_resize_callback(self._on_resize)
-
+        dpg.set_viewport_resize_callback(self._on_resize)
         dpg.set_frame_callback(2, self._on_resize)
 
     # Callbacks
