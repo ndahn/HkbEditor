@@ -10,7 +10,10 @@ from .type_registry import TypeRegistry
 # hkbBehaviorGraph_VariableMode(IntEnum): pass
 # hkbVariableInfo_VariableType(IntEnum): pass
 # hkbRoleAttribute_Role(IntEnum): pass
-# hkbVariableBindingSet_Binding_BindingType(IntEnum): pass
+class hkbVariableBindingSet_Binding_BindingType(IntEnum):
+    VARIABLE = 0
+
+
 # hkbStateMachine_StartStateMode(IntEnum): pass
 class hkbStateMachine_StateMachineSelfTransitionMode(IntEnum):
     NO_TRANSITION = 0
@@ -35,7 +38,16 @@ class hkbTransitionEffect_SelfTransitionMode(IntEnum):
 # hkbTwistModifier_SetAngleMethod(IntEnum): pass
 # hkbTwistModifier_RotationAxisCoordinates(IntEnum): pass
 # hkbEvaluateHandleModifier_HandleChangeMode(IntEnum): pass
-# CustomManualSelectorGenerator_OffsetType(IntEnum): pass
+class CustomManualSelectorGenerator_OffsetType(IntEnum):
+    NONE = 0
+    IDLE_CATEGORY = 11
+    WEAPON_CATEGORY_RIGHT = 13
+    WEAPON_CATEGORY_LEFT = 14
+    WEAPON_CATEGORY_HAND_STYLE = 16
+    MAGIC_CATEGORY = 17
+    SWORD_ARTS_CATEGORY = 18
+
+
 class CustomManualSelectorGenerator_AnimeEndEventType(IntEnum):
     FIRE_NEXT_STATE_EVENT = 0
     FIRE_STATE_END_EVENT = 1
@@ -43,8 +55,22 @@ class CustomManualSelectorGenerator_AnimeEndEventType(IntEnum):
     NONE = 3
 
 
-# CustomManualSelectorGenerator_ChangeTypeOfSelectedIndexAfterActivate(IntEnum): pass
-# CustomManualSelectorGenerator_ReplanningAI(IntEnum): pass
+class CustomManualSelectorGenerator_ChangeTypeOfSelectedIndexAfterActivate(IntEnum):
+    NONE = 0
+    SELF_TRANSITION = 1
+    UPDATE = 2
+
+
+class CustomManualSelectorGenerator_ReplanningAI(IntEnum):
+    ENABLE = 0
+    DISABLE = 1
+
+
+class CustomManualSelectorGenerator_RideSync(IntEnum):
+    DISABLE = 0
+    ENABLE = 1
+
+
 # hkbBlendingTransitionEffect_EndMode(IntEnum): pass
 # hkbBlendCurveUtils_BlendCurve(IntEnum): pass
 class hkbClipGenerator_PlaybackMode(IntEnum):
