@@ -1,5 +1,6 @@
 from typing import Any
 from collections import deque
+from dataclasses import dataclass
 from enum import IntEnum
 from lxml import etree as ET
 import networkx as nx
@@ -11,17 +12,27 @@ from .hkb_types import HkbRecord, HkbArray, HkbString
 _undefined = object()
 
 
+class VariableType(IntEnum):
+    BOOL = 0
+    INT8 = 1
+    INT16 = 2
+    INT32 = 3
+    REAL = 4
+    POINTER = 5
+    STRING = 6  # NOTE just an assumption, no examples for this
+    VECTOR4 = 7
+    QUATERNION = 8
+
+
+@dataclass
+class HkbVariable:
+    name: str
+    vtype: VariableType
+    vmin: int
+    vmax: int
+
+
 class HavokBehavior(Tagfile):
-    class VariableType(IntEnum):
-        BOOL = 0
-        INT8 = 1
-        INT16 = 2
-        INT32 = 3
-        REAL = 4
-        POINTER = 5
-        STRING = 6  # NOTE just an assumption, no examples for this
-        VECTOR4 = 7
-        QUATERNION = 8
 
     def __init__(self, xml_file: str):
         super().__init__(xml_file)
@@ -71,9 +82,13 @@ class HavokBehavior(Tagfile):
         return g
 
     def create_event(self, event_name: str, idx: int = -1) -> int:
-        self._events.insert(idx, HkbString.new(self, self._events.element_type_id, event_name))
-        # This one never has any meaningful data, but must still have an entry 
-        self._event_infos.insert(idx, HkbRecord.new(self, self._event_infos.element_type_id))
+        self._events.insert(
+            idx, HkbString.new(self, self._events.element_type_id, event_name)
+        )
+        # This one never has any meaningful data, but must still have an entry
+        self._event_infos.insert(
+            idx, HkbRecord.new(self, self._event_infos.element_type_id)
+        )
         return len(self._events) - 1
 
     def get_events(self) -> list[str]:
@@ -100,23 +115,30 @@ class HavokBehavior(Tagfile):
     # HKS variables
     # TODO not so simple after all, add type and bounds to dialog
     def create_variable(
-        self, variable_name: str, type_: VariableType = VariableType.INT32, min_: int = 0, max_: int = 0
+        self,
+        variable_name: str,
+        type_: VariableType = VariableType.INT32,
+        min_: int = 0,
+        max_: int = 0,
+        idx: int = -1,
     ) -> int:
-        self._variables.append(
-            HkbString.new(self, self._variables.element_type_id, variable_name)
+        self._variables.insert(
+            idx, HkbString.new(self, self._variables.element_type_id, variable_name)
         )
 
         # TODO these must have matching entries as well
-        self._variable_infos.append(
+        self._variable_infos.insert(
+            idx,
             HkbRecord.new(
                 self,
                 self._variable_infos.element_type_id,
                 {
                     "type": type_,
                 },
-            )
+            ),
         )
-        self._variable_bounds.append(
+        self._variable_bounds.insert(
+            idx,
             HkbRecord.new(
                 self,
                 self._variable_bounds.element_type_id,
@@ -124,26 +146,31 @@ class HavokBehavior(Tagfile):
                     "min/value": min_,
                     "max/value": max_,
                 },
-            )
+            ),
         )
 
         return len(self._variables) - 1
 
-    def get_variables(self) -> list[dict[str, Any]]:
-        ret = []
-        for idx in len(self._variables):
-            ret.append({
-                "name": self.get_variable(idx),
-                "type": self.get_variable_type(idx),
-                "bounds": self.get_variable_bounds(idx),
-            })
-        return ret
+    def get_variables(self) -> list[HkbVariable]:
+        return [self.get_variable(i) for i in range(len(self._variables))]
 
-    def get_variable(self, idx: int) -> str:
+    def get_variable_name(self, idx: int) -> str:
         return self._variables[idx].get_value()
 
-    def find_variable(self, variable: str) -> int:
-        return self._variables.index(variable)
+    def get_variable(self, idx: int) -> HkbVariable:
+        return HkbVariable(
+            self.get_variable_name(idx),
+            self.get_variable_type(idx),
+            *self.get_variable_bounds(idx),
+        )
+
+    def find_variable(self, variable: str, default: Any = _undefined) -> int:
+        try:
+            return self._variables.index(variable)
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
 
     def get_variable_type(self, idx: int) -> VariableType:
         info: HkbRecord = self._variable_infos[idx]
@@ -186,7 +213,7 @@ class HavokBehavior(Tagfile):
     def get_animations(self, full_names: bool = False) -> list[str]:
         if full_names:
             return [a.get_value() for a in self._animations]
-        
+
         return [self.get_animation(i, False) for i in range(len(self._animations))]
 
     def get_animation(self, idx: int, full_name: bool = False) -> str:

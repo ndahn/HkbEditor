@@ -44,7 +44,7 @@ def set_bindable_attribute_state(
     behavior: HavokBehavior, bindable_attribute: str, bound_var_idx: int = -1
 ):
     if bound_var_idx >= 0:
-        variable_name = behavior.get_variable(bound_var_idx)
+        variable_name = behavior.get_variable_name(bound_var_idx)
         dpg.set_value(f"{bindable_attribute}_bound", f"@{variable_name}")
         dpg.show_item(f"{bindable_attribute}_bound")
         dpg.hide_item(f"{bindable_attribute}_unbound")

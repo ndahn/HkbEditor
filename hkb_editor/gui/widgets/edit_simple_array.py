@@ -196,7 +196,7 @@ def edit_simple_array_dialog(
         height=400,
         label=title,
         on_close=cloe_dialog,
-        autosize=True,
+        #autosize=True,
         tag=tag,
     ) as dialog:
         dpg.add_input_text(

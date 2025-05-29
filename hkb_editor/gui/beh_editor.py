@@ -155,7 +155,9 @@ class BehaviorEditor(GraphEditor):
         with dpg.menu(
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
-            dpg.add_menu_item(label="Find Object...", callback=lambda: self.open_search_dialog())
+            dpg.add_menu_item(
+                label="Find Object...", callback=lambda: self.open_search_dialog()
+            )
             dpg.add_separator()
             # TODO enable
             dpg.add_menu_item(label="Register Clip...", enabled=False)
@@ -324,10 +326,7 @@ class BehaviorEditor(GraphEditor):
             def lazy_create_record_attributes(anchor: str):
                 for subkey, subval in value.get_value().items():
                     self._create_attribute_widget(
-                        source_record, 
-                        subval, 
-                        f"{path}/{subkey}", 
-                        before=anchor
+                        source_record, subval, f"{path}/{subkey}", before=anchor
                     )
 
             add_lazy_table_tree_node(
@@ -359,10 +358,7 @@ class BehaviorEditor(GraphEditor):
                 def lazy_create_array_items(anchor: str):
                     for idx, subval in enumerate(value):
                         self._create_attribute_widget(
-                            source_record, 
-                            subval, 
-                            f"{path}:{idx}", 
-                            before=anchor
+                            source_record, subval, f"{path}:{idx}", before=anchor
                         )
 
                     with table_tree_leaf(
@@ -371,7 +367,9 @@ class BehaviorEditor(GraphEditor):
                         before=anchor,
                     ):
                         self._create_attribute_widget_array_buttons(
-                            source_record, value, path,
+                            source_record,
+                            value,
+                            path,
                         )
 
                 add_lazy_table_tree_node(
@@ -643,7 +641,7 @@ class BehaviorEditor(GraphEditor):
             dpg.add_text(f"<{type_name}>")
 
             if is_simple and bound_var_idx >= 0:
-                bound_var_name = self.beh.get_variable(bound_var_idx)
+                bound_var_name = self.beh.get_variable_name(bound_var_idx)
                 dpg.add_text(
                     f"bound: {bound_var_name}",
                     color=style.pink,
@@ -709,10 +707,7 @@ class BehaviorEditor(GraphEditor):
                     callback=lambda s, a, u: self.open_create_object_dialog(*u),
                     user_data=(value.subtype, on_new_object, None),
                 )
-                dpg.add_selectable(
-                    label="Go to",
-                    callback=go_to_pointer
-                )
+                dpg.add_selectable(label="Go to", callback=go_to_pointer)
 
             if is_simple:
                 set_bindable_attribute_state(self.beh, widget, bound_var_idx)
@@ -841,34 +836,80 @@ class BehaviorEditor(GraphEditor):
         sm_type = self.beh.type_registry.find_type_by_name("hkbStateMachine")
         root = next(sm for sm in self.beh.find_parents_by_type(object_id, sm_type))
         self._on_root_selected("", True, root.object_id)
-        
+
         # Reveal the node in the state machine graph
         path = nx.shortest_path(self.graph, root.object_id, object_id)
         self._show_node_path([self.nodes[n] for n in path])
 
     def open_variable_editor(self):
-        ## FIXME variables are more complex than this
+        def on_add(idx: int, new_value: tuple[str, int, int, int]):
+            if self.beh.find_variable(new_value[0], None):
+                self.logger.warning(
+                    "A variable named '%s' already exists (%d)", new_value[0], idx
+                )
+
+            undo_manager.on_complex_action(
+                lambda i=idx: self.beh.delete_variable(i),
+                lambda i=idx, v=new_value: self.beh.create_variable(*v, idx=i),
+            )
+            self.beh.create_variable(new_value, idx)
+
+        def on_update(
+            idx: int,
+            old_value: tuple[str, int, int, int],
+            new_value: tuple[str, int, int, int],
+        ):
+            # Easier than updating each field individually
+            def local_update(idx: int, val: tuple):
+                self.beh.delete_variable(idx)
+                self.beh.create_variable(*val, idx=idx)
+
+            undo_manager.on_complex_action(
+                lambda i=idx, v=old_value: local_update(i, v),
+                lambda i=idx, v=new_value: local_update(i, v),
+            )
+            local_update(idx, new_value)
+
+        def on_delete(idx: int):
+            # TODO list variable bindings affected by this
+            old_value = self.beh.get_variable(idx)
+
+            undo_manager.on_complex_action(
+                lambda i=idx: self.beh.delete_variable(i),
+                lambda i=idx, v=old_value: self.beh.create_variable(
+                    v.name, v.vtype, v.vmin, v.vmax, idx=i
+                ),
+            )
+            self.beh.delete_variable(idx)
+
         edit_simple_array_dialog(
-            self.beh,
-            self.beh._variables,
-            "Edit Variables",
+            [(v.name, v.vtype, v.vmin, v.vmax) for v in self.beh.get_variables()],
+            ["Name", "Type", "Min", "Max"],
+            title="Edit Variables",
+            help=[
+                "Warning:",
+                "Variables are referenced by their index in VariableBindingSets.",
+                "Deleting or inserting names may invalidate your behavior.",
+            ],
+            on_add=on_add,
+            on_update=on_update,
+            on_delete=on_delete,
         )
 
     def open_event_editor(self):
         def on_add(idx: int, new_value: str):
             if self.beh.find_event(new_value, None):
-                self.logger.warning("An event named '%s' already exists (%d)", new_value, idx)
+                self.logger.warning(
+                    "An event named '%s' already exists (%d)", new_value, idx
+                )
 
             undo_manager.on_complex_action(
                 lambda i=idx: self.beh.delete_event(i),
-                lambda i=idx, v=new_value: self.beh.create_event(v, i)
+                lambda i=idx, v=new_value: self.beh.create_event(v, i),
             )
             self.beh.create_event(new_value, idx)
 
         def on_update(idx: int, old_value: str, new_value: str):
-            if self.beh.find_event(new_value, None):
-                self.logger.warning("An event named '%s' already exists (%d)", new_value, idx)
-            
             undo_manager.on_complex_action(
                 lambda i=idx, v=old_value: self.beh.rename_event(i, v),
                 lambda i=idx, v=new_value: self.beh.rename_event(i, v),
@@ -891,7 +932,7 @@ class BehaviorEditor(GraphEditor):
             help=[
                 "Warning:",
                 "Events are referenced by their index in TransitionInfos.",
-                "Deleting or inserting events may invalidate your behavior."
+                "Deleting or inserting events may invalidate your behavior.",
             ],
             on_add=on_add,
             on_update=on_update,
@@ -901,18 +942,17 @@ class BehaviorEditor(GraphEditor):
     def open_animation_editor(self):
         def on_add(idx: int, new_value: str):
             if self.beh.find_animation(new_value, None):
-                self.logger.warning("An animation named '%s' already exists (%d)", new_value, idx)
+                self.logger.warning(
+                    "An animation named '%s' already exists (%d)", new_value, idx
+                )
 
             undo_manager.on_complex_action(
                 lambda i=idx: self.beh.delete_animation(i),
-                lambda i=idx, v=new_value: self.beh.create_animation(v, i)
+                lambda i=idx, v=new_value: self.beh.create_animation(v, i),
             )
             self.beh.create_animation(new_value, idx)
 
         def on_update(idx: int, old_value: str, new_value: str):
-            if self.beh.find_event(new_value, None):
-                self.logger.warning("An animation named '%s' already exists (%d)", new_value, idx)
-            
             undo_manager.on_complex_action(
                 lambda i=idx, v=old_value: self.beh.rename_animation(i, v),
                 lambda i=idx, v=new_value: self.beh.rename_animation(i, v),
@@ -935,7 +975,7 @@ class BehaviorEditor(GraphEditor):
             help=[
                 "Warning:",
                 "Animation names are referenced by their index in ClipGenerators.",
-                "Deleting or inserting names may invalidate your behavior."
+                "Deleting or inserting names may invalidate your behavior.",
             ],
             on_add=on_add,
             on_update=on_update,
@@ -994,4 +1034,3 @@ class BehaviorEditor(GraphEditor):
 
         # TODO open dialog
         pass
-
