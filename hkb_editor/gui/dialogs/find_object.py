@@ -6,13 +6,15 @@ import pyperclip
 from hkb_editor.hkb.hkb_types import HkbRecord
 from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.query import lucene_help_text, lucene_url
+from hkb_editor.gui.helpers import make_copy_menu
 from hkb_editor.gui import style
 
 
 def find_object_dialog(
     behavior: HavokBehavior,
-    jump_callback: Callable[[str, str, Any], None],
+    jump_callback: Callable[[str, str, Any], None] = None,
     *,
+    context_menu: bool = True,
     user_data: Any = None,
     tag: str = 0,
 ) -> str:
@@ -48,6 +50,8 @@ def find_object_dialog(
                     user_data=obj.object_id,
                     tag=f"{tag}_pointer_selectable_{obj.object_id}",
                 )
+                if context_menu:
+                    dpg.bind_item_handler_registry(dpg.last_item(), right_click_handler)
 
                 dpg.add_text(name)
                 dpg.add_text(type_name)
@@ -62,25 +66,8 @@ def find_object_dialog(
         # Deselect all other selectables
         if is_selected:
             for row in dpg.get_item_children(table, slot=1):
-                is_selected_obj = (dpg.get_item_user_data(row) == object_id)
-                for cell in dpg.get_item_children(row, slot=1):
-                    if dpg.get_item_type(cell) == "mvAppItemType::mvSelectable":
-                        dpg.set_value(cell, is_selected_obj)
-
-    def on_mouse_click(sender, button: int):
-        if dpg.does_item_exist(f"{tag}_popup") and dpg.is_item_focused(f"{tag}_popup"):
-            return
-        
-        if button == dpg.mvMouseButton_Right:
-            for row in dpg.get_item_children(f"{tag}_table", slot=1):
-                for child in dpg.get_item_children(row, slot=1):
-                    if dpg.is_item_hovered(child):
-                        obj_id = dpg.get_item_user_data(row)
-                        on_select(row, True, obj_id)
-                        show_context_menu()
-                        return
-        
-        dpg.delete_item(f"{tag}_popup")
+                if dpg.get_item_user_data(row) != object_id:
+                    dpg.set_value(dpg.get_item_children(row, slot=1)[0], False)
 
     # Right click menu
     def show_context_menu():
@@ -91,51 +78,32 @@ def find_object_dialog(
 
         if not dpg.does_item_exist(popup):
             with dpg.window(
+                popup=True,
                 min_size=(100, 20),
-                no_title_bar=True,
-                no_resize=True,
-                no_move=True,
                 no_saved_settings=True,
                 autosize=True,
-                show=False,
                 tag=popup,
             ):
-                dpg.add_selectable(label="Copy ID", callback=copy_id)
-                dpg.add_selectable(label="Copy Name", callback=copy_name)
-                dpg.add_selectable(label="Copy XML", callback=copy_xml)
-                dpg.add_separator()
-                dpg.add_selectable(label="Jump To", callback=jump_to)
+                make_copy_menu(lambda: behavior.objects[selected_id])
+                if jump_callback:
+                    dpg.add_separator()
+                    dpg.add_selectable(label="Jump To", callback=jump_to)
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
         dpg.show_item(popup)
 
-    def copy_id():
-        dpg.delete_item(f"{tag}_popup")
-        pyperclip.copy(selected_id)
-
-    def copy_name():
-        dpg.delete_item(f"{tag}_popup")
-        obj = behavior.objects[selected_id]
-        pyperclip.copy(obj.get_field("name", "", resolve=True))
-
-    def copy_xml():
-        dpg.delete_item(f"{tag}_popup")
-        obj = behavior.objects[selected_id]
-        pyperclip.copy(obj.xml())
-
     def jump_to():
-        # We keep the window itself open
-        dpg.delete_item(f"{tag}_popup")
-        
         if selected_id:
             jump_callback(dialog, selected_id, user_data)
 
+    with dpg.item_handler_registry() as right_click_handler:
+        dpg.add_item_clicked_handler(
+            button=dpg.mvMouseButton_Right, callback=show_context_menu
+        )
+
     def on_window_close():
         dpg.delete_item(dialog)
-        dpg.delete_item(mouse_handler)
-
-    with dpg.handler_registry() as mouse_handler:
-        dpg.add_mouse_click_handler(callback=on_mouse_click)
+        dpg.delete_item(right_click_handler)
 
     # Window content
     with dpg.window(

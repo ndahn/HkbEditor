@@ -1,7 +1,7 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.gui.helpers import center_window
+from hkb_editor.gui.helpers import center_window, create_value_widget
 
 
 def edit_simple_array_dialog(
@@ -30,8 +30,8 @@ def edit_simple_array_dialog(
             _, val_idx = user_data
 
             if choices and val_idx in choices:
-                items = choices[val_idx]
-                new_value = items.index(new_value)
+                choice_values = choices[val_idx]
+                new_value = choice_values.index(new_value)
 
             new_val[val_idx] = new_value
 
@@ -49,7 +49,7 @@ def edit_simple_array_dialog(
         ) as create_entry_popup:
             for idx, (col, ref_val) in enumerate(zip(columns, ref)):
                 create_value_widget(
-                    index, idx, type(ref_val)(), callback=assemble, label=col
+                    index, idx, type(ref_val)(), callback=assemble, label=col, choices=choices
                 )
 
             with dpg.group(horizontal=True):
@@ -102,58 +102,6 @@ def edit_simple_array_dialog(
         # TODO can use this to show where items are referenced
         print("TODO not implemented yet")
 
-    def create_value_widget(
-        item_idx: int,
-        val_idx: int,
-        val: Any,
-        *,
-        callback: Callable[[str, Any, Any], None] = None,
-        on_enter: bool = False,
-        **kwargs,
-    ):
-        if choices and val_idx in choices:
-            items = choices[val_idx]
-            dpg.add_combo(
-                items,
-                callback=callback,
-                user_data=(item_idx, val_idx),
-                default_value=items[val if val is not None else 0],
-                **kwargs,
-            )
-        elif val is None or isinstance(val, str):
-            dpg.add_input_text(
-                callback=callback,
-                user_data=(item_idx, val_idx),
-                default_value=val or "",
-                on_enter=on_enter,
-                **kwargs,
-            )
-        elif isinstance(val, int):
-            dpg.add_input_int(
-                callback=callback,
-                user_data=(item_idx, val_idx),
-                default_value=val,
-                on_enter=on_enter,
-                **kwargs,
-            )
-        elif isinstance(val, float):
-            dpg.add_input_float(
-                callback=callback,
-                user_data=(item_idx, val_idx),
-                default_value=val,
-                on_enter=on_enter,
-                **kwargs,
-            )
-        elif isinstance(val, bool):
-            dpg.add_checkbox(
-                callback=callback,
-                user_data=(item_idx, val_idx),
-                default_value=val,
-                **kwargs,
-            )
-        else:
-            print(f"WARNING cannot handle value {val} with unknown type")
-
     def fill_table():
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
 
@@ -167,6 +115,7 @@ def edit_simple_array_dialog(
                         val_idx,
                         val,
                         callback=update_entry,
+                        choices=choices,
                         on_enter=True,
                         width=-1,
                     )

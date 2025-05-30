@@ -174,7 +174,8 @@ class HavokBehavior(Tagfile):
 
     def get_variable_type(self, idx: int) -> VariableType:
         info: HkbRecord = self._variable_infos[idx]
-        return info.get_field("type", resolve=True)
+        type_idx = info.get_field("type", resolve=True)
+        return VariableType(type_idx)
 
     def get_variable_bounds(self, idx: int) -> tuple[int, int]:
         bounds: HkbRecord = self._variable_bounds[idx]

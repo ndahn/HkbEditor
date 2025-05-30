@@ -608,7 +608,7 @@ class GraphEditor:
             self._draw_node(root_node)
 
         else:
-            self.selected_roots.remove(root_id)
+            self.selected_roots.pop(root_id)
             for n in root_graph.nodes:
                 del self.nodes[n]
 

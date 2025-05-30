@@ -33,11 +33,11 @@ def main():
         _logger.info("Loading layout %s", layout)
 
     dpg.configure_app(docking=True, docking_space=True, init_file=layout)
-    dpg.create_viewport(title="Behditor")
+    dpg.create_viewport(title="HkbEditor")
 
     setup_styles()
     with dpg.window() as main_window:
-        app = BehaviorEditor("graph_editor")
+        app = BehaviorEditor("hkbeditor")
 
     dpg.set_primary_window(main_window, True)
 

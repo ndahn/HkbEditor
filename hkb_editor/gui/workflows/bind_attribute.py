@@ -75,9 +75,15 @@ def select_variable_to_bind(
             if on_bind:
                 on_bind(sender, [selected_idx, binding_id], user_data)
 
+    variables = [
+        (v.name, v.vtype.name, v.vmin, v.vmax) for v in behavior.get_variables()
+    ]
+
     select_simple_array_item_dialog(
-        # FIXME won't work anymore, no direct access to variables
-        behavior._variables, on_variable_selected, bound_var_idx, user_data=user_data
+        variables,
+        ["Variable", "Type", "Min", "Max"],
+        on_variable_selected,
+        bound_var_idx,
     )
 
 
@@ -126,7 +132,7 @@ def create_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> s
         lambda: behavior.add_object(binding_set),
     )
     behavior.add_object(binding_set)
-    
+
     # Assign pointer to source record
     vbs = record["variableBindingSet"]
     undo_manager.on_update_value(vbs, vbs.get_value(), binding_id)
@@ -159,7 +165,7 @@ def bind_attribute(
             break
     else:
         new_binding = HkbRecord.new(
-            behavior.type_registry,
+            behavior,
             bindings.element_type_id,
             {
                 "memberPath": path,
@@ -172,8 +178,9 @@ def bind_attribute(
         bindings.append(new_binding)
 
     set_bindable_attribute_state(behavior, bindable_attribute, variable_idx)
-    
+
     return binding_id
+
 
 def unbind_attribute(
     behavior: HavokBehavior,

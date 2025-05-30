@@ -10,6 +10,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
 from hkb_editor.gui.workflows.undo import undo_manager
+from hkb_editor.gui.dialogs import select_simple_array_item_dialog
 from hkb_editor.gui.helpers import center_window
 from hkb_editor.gui import style
 

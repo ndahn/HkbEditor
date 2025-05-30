@@ -1,4 +1,5 @@
 from typing import Any, Callable
+import os
 import logging
 from threading import Thread
 import textwrap
@@ -24,8 +25,8 @@ from hkb_editor.hkb.hkb_enums import get_hkb_enum
 
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
-    select_pointer_dialog,
     edit_simple_array_dialog,
+    select_simple_array_item_dialog,
     find_object_dialog,
 )
 from .table_tree import (
@@ -44,6 +45,7 @@ from .workflows.file_dialog import open_file_dialog
 from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager
 from .workflows.create_cmsg import open_new_cmsg_dialog
+from .helpers import make_copy_menu
 from . import style
 
 
@@ -112,6 +114,8 @@ class BehaviorEditor(GraphEditor):
     def _do_load_from_file(self, file_path: str):
         undo_manager.clear()
         self.alias_manager.clear()
+        filename = os.path.basename(file_path)
+        dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
         self.beh = HavokBehavior(file_path)
         self._set_menus_enabled(True)
 
@@ -291,35 +295,10 @@ class BehaviorEditor(GraphEditor):
                     label="Jump To", callback=lambda: self.jump_to_object(object_id)
                 )
                 dpg.add_selectable(label="Show Attributes", callback=show_attributes)
-                self._make_copy_menu(pinned_obj)
+                make_copy_menu(pinned_obj)
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
         dpg.show_item(popup)
-
-    def _make_copy_menu(self, record: HkbRecord) -> None:
-        with dpg.menu(label="Copy"):
-            dpg.add_selectable(
-                label="ID",
-                callback=lambda: self._copy_to_clipboard(record.object_id),
-            )
-            dpg.add_selectable(
-                label="Name",
-                callback=lambda: self._copy_to_clipboard(
-                    record.get_field("name", "", resolve=True)
-                ),
-            )
-            dpg.add_selectable(
-                label="Type Name",
-                callback=lambda: self._copy_to_clipboard(record.type_name),
-            )
-            dpg.add_selectable(
-                label="Type ID",
-                callback=lambda: self._copy_to_clipboard(record.type_id),
-            )
-            dpg.add_selectable(
-                label="XML",
-                callback=lambda: self._copy_to_clipboard(record.xml()),
-            )
 
     def get_root_ids(self) -> list[str]:
         sm_type = self.beh.type_registry.find_first_type_by_name("hkbStateMachine")
@@ -418,23 +397,25 @@ class BehaviorEditor(GraphEditor):
 
     def on_update_pointer(
         self,
-        widget: str,
+        sender: str,
         record: HkbRecord,
         pointer: HkbPointer,
         old_value: str,
         new_value: str,
     ) -> None:
-        # Update the graph first
-        try:
-            self.graph.add_edge(record.object_id, new_value)
-            self.graph.remove_edge(record.object_id, old_value)
-        except:
-            pass
-
-        self.on_attribute_update(widget, new_value, pointer)
-
-        # Changing a pointer will change the rendered graph
-        self._regenerate_canvas()
+        self.on_attribute_update(sender, new_value, pointer)
+        
+        if new_value not in self.nodes:
+            # Edges have changed, previous node may not be connected anymore, new
+            # node may not be part of the current statemachine graph yet, ...
+            root_id = self.get_active_statemachine().object_id
+            selected = self.selected_node
+            self._on_root_selected(sender, True, root_id)
+            if selected:
+                self._select_node(selected)
+        else:
+            # Changing a pointer will change the rendered graph
+            self._regenerate_canvas()
 
     def _add_attribute_row_contents(self, attribute: str, val: Any, node: Node) -> None:
         obj = self.beh.objects.get(node.id)
@@ -548,9 +529,10 @@ class BehaviorEditor(GraphEditor):
     ) -> str:
         attribute = path.split("/")[-1]
 
-        def on_pointer_select(sender, new_value: str, ptr_widget: str):
+        def on_pointer_selected(sender, idx: int, candidates: list[HkbRecord]):
+            new_value = candidates[idx].object_id
             self.on_update_pointer(
-                ptr_widget, source_record, pointer, pointer.get_value(), new_value
+                sender, source_record, pointer, pointer.get_value(), new_value
             )
 
             # If the binding set pointer changed we should regenerate all attribute widgets
@@ -560,6 +542,22 @@ class BehaviorEditor(GraphEditor):
             if pointer.type_id == vbs_type_id:
                 self._clear_attributes()
                 self._update_attributes(self.selected_node)
+
+        def open_pointer_dialog():
+            target_type_name = self.beh.type_registry.get_name(pointer.subtype)
+            candidates = list(self.beh.find_objects_by_type(pointer.subtype, include_derived=True))
+            items = [
+                (c.object_id, c.get_field("name", "", resolve=True), c.type_name)
+                for c in candidates
+            ]
+
+            select_simple_array_item_dialog(
+                items,
+                ["ID", "Name", "Type"],
+                on_pointer_selected,
+                title=f"Select {target_type_name}",
+                user_data=candidates,
+            )
 
         with dpg.group(horizontal=True, filter_key=attribute, tag=tag) as group:
             ptr_input = dpg.add_input_text(
@@ -571,8 +569,7 @@ class BehaviorEditor(GraphEditor):
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,
-                callback=lambda s, a, u: select_pointer_dialog(*u),
-                user_data=(self.beh, on_pointer_select, pointer, ptr_input),
+                callback=open_pointer_dialog,
             )
 
         return group
@@ -827,13 +824,13 @@ class BehaviorEditor(GraphEditor):
                 user_data=(widget, path, value),
             )
             dpg.add_selectable(
-                label="Copy XML",
-                callback=self._copy_value_xml,
+                label="Copy Path",
+                callback=self._copy_value_path,
                 user_data=(widget, path, value),
             )
             dpg.add_selectable(
-                label="Copy Path",
-                callback=self._copy_value_path,
+                label="Copy XML",
+                callback=self._copy_value_xml,
                 user_data=(widget, path, value),
             )
             dpg.add_selectable(
@@ -1034,7 +1031,7 @@ class BehaviorEditor(GraphEditor):
                 lambda i=idx: self.beh.delete_variable(i),
                 lambda i=idx, v=new_value: self.beh.create_variable(*v, idx=i),
             )
-            self.beh.create_variable(new_value, idx)
+            self.beh.create_variable(*new_value, idx)
 
         def on_update(
             idx: int,
@@ -1065,7 +1062,7 @@ class BehaviorEditor(GraphEditor):
             self.beh.delete_variable(idx)
 
         edit_simple_array_dialog(
-            [(v.name, v.vtype, v.vmin, v.vmax) for v in self.beh.get_variables()],
+            [(v.name, v.vtype.value, v.vmin, v.vmax) for v in self.beh.get_variables()],
             ["Name", "Type", "Min", "Max"],
             title="Edit Variables",
             help=[
@@ -1082,7 +1079,8 @@ class BehaviorEditor(GraphEditor):
         )
 
     def open_event_editor(self):
-        def on_add(idx: int, new_value: str):
+        def on_add(idx: int, new_value: tuple[str]):
+            new_value = new_value[0]
             if self.beh.find_event(new_value, None):
                 self.logger.warning(
                     "An event named '%s' already exists (%d)", new_value, idx
@@ -1094,7 +1092,10 @@ class BehaviorEditor(GraphEditor):
             )
             self.beh.create_event(new_value, idx)
 
-        def on_update(idx: int, old_value: str, new_value: str):
+        def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
+            old_value = old_value[0]
+            new_value = new_value[0]
+
             undo_manager.on_complex_action(
                 lambda i=idx, v=old_value: self.beh.rename_event(i, v),
                 lambda i=idx, v=new_value: self.beh.rename_event(i, v),
@@ -1125,7 +1126,8 @@ class BehaviorEditor(GraphEditor):
         )
 
     def open_animation_editor(self):
-        def on_add(idx: int, new_value: str):
+        def on_add(idx: int, new_value: tuple[str]):
+            new_value = new_value[0]
             if self.beh.find_animation(new_value, None):
                 self.logger.warning(
                     "An animation named '%s' already exists (%d)", new_value, idx
@@ -1137,7 +1139,10 @@ class BehaviorEditor(GraphEditor):
             )
             self.beh.create_animation(new_value, idx)
 
-        def on_update(idx: int, old_value: str, new_value: str):
+        def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
+            old_value = old_value[0]
+            new_value = new_value[0]
+
             undo_manager.on_complex_action(
                 lambda i=idx, v=old_value: self.beh.rename_animation(i, v),
                 lambda i=idx, v=new_value: self.beh.rename_animation(i, v),

@@ -1,16 +1,21 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb.hkb_types import HkbArray
-
 
 def select_simple_array_item_dialog(
-    array: HkbArray,
+    items: list[tuple | str],
+    columns: list[str],
     callback: Callable[[str, int, Any], None],
     selected: int = -1,
+    *,
+    show_index: bool = True,
+    title: str = "Select Item",
     user_data: Any = None,
+    tag: str = 0,
+    **kwargs
 ) -> None:
-    tag = dpg.generate_uuid()
+    if tag in (0, "", None):
+        tag = dpg.generate_uuid()
 
     def on_select(sender, app_data, index: int):
         nonlocal selected
@@ -22,9 +27,7 @@ def select_simple_array_item_dialog(
         # Deselect all other selectables
         for row in dpg.get_item_children(table, slot=1):
             if dpg.get_item_user_data(row) != index:
-                for cell in dpg.get_item_children(row, slot=1):
-                    if dpg.get_item_type(cell) == "mvAppItemType::mvSelectable":
-                        dpg.set_value(cell, False)
+                dpg.set_value(dpg.get_item_children(row, slot=1)[0], False)
 
     def on_okay():
         if selected < 0:
@@ -39,11 +42,11 @@ def select_simple_array_item_dialog(
     with dpg.window(
         width=600,
         height=400,
-        label="Select Item",
-        modal=True,
+        label=title,
+        tag=tag,
         on_close=lambda: dpg.delete_item(dialog),
+        **kwargs,
     ) as dialog:
-        # Way too many options, instead fill the table according to user input
         dpg.add_input_text(
             hint="Find Object...",
             callback=lambda s, a, u: dpg.set_value(table, dpg.get_value(s)),
@@ -56,25 +59,38 @@ def select_simple_array_item_dialog(
             resizable=True,
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
-            # no_host_extendY=True,
             height=310,
+            clipper=True,
+            tag=f"{tag}_table",
         ) as table:
-            dpg.add_table_column(label="Index")
-            dpg.add_table_column(label="Name")
+            if show_index:
+                dpg.add_table_column(label="Index")
+            else:
+                dpg.add_table_column(no_header_label=True, width=1)
+            
+            dpg.add_table_column(label=columns[0], width_stretch=True)
+            for col in columns[1:]:
+                dpg.add_table_column(label=col)
 
-            for idx,item in enumerate(array):
-                val = item.get_value()
-                with dpg.table_row(filter_key=val, user_data=idx):
+            for item_idx, item in enumerate(items):
+                if not isinstance(item, (tuple, list)):
+                    item = (item,)
+
+                key = ",".join(f"{col}:{val}" for col, val in zip(columns, item))
+
+                with dpg.table_row(filter_key=key, user_data=item_idx):
                     dpg.add_selectable(
-                        label=idx,
+                        label=str(item_idx) if show_index else "",
                         span_columns=True,
-                        default_value=idx == selected,
+                        default_value=(item_idx == selected),
                         callback=on_select,
-                        user_data=idx,
-                        tag=f"{tag}_item_selectable_{idx}",
+                        user_data=item_idx,
+                        tag=f"{tag}_item_selectable_{item_idx}",
                     )
-                    dpg.add_text(val)
 
+                    for val in item:
+                        dpg.add_text(str(val))
+    
         dpg.add_separator()
 
         with dpg.group(horizontal=True):
