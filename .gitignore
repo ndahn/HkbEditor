@@ -2,3 +2,6 @@
 user_layout.ini
 dpg_demo.py
 __pycache__
+dist/
+build/
+*.spec

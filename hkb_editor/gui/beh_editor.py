@@ -1178,7 +1178,8 @@ class BehaviorEditor(GraphEditor):
 
     def load_bone_names(self) -> None:
         file_path = open_file_dialog(
-            title="Select Skeleton", filetypes=[("Skeleton files", "*.xml")]
+            title="Select Skeleton", 
+            filetypes={"Skeleton files": "*.xml"}
         )
 
         if file_path:
