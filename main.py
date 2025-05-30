@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 import os
 import shutil
 import logging
@@ -12,7 +13,14 @@ from hkb_editor.gui.style import setup_styles
 
 def main():
     # Logging setup
-    logging.basicConfig(level=logging.INFO)
+    logfile = os.path.join(os.path.dirname(sys.argv[0]), "log.txt")
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler(logfile),
+            logging.StreamHandler(),
+        ]
+    )
     _logger = logging.getLogger(__name__)
 
     # Check for clipboard support, will print instructions if it fails
