@@ -10,28 +10,26 @@ class TypeRegistry:
     def __init__(self):
         self.types: dict[str, dict] = {}
 
-    def load_types(self, root: ET.Element) -> None:
+    def load_types(self, root: ET._Element) -> None:
         self.types.clear()
 
         for type_el in root.findall(".//type"):
             type_id = type_el.attrib["id"]
             name = type_el.find("name").attrib["value"]
-            
+
             # Seems to be inherited from the parent types
-            fmt = self._resolve_attribute(root, type_id, "format", "value")
-            if fmt is None:
+            fmt = self._collect_typeinfo(root, type_id, "format", "value")
+            if not fmt:
                 _logger.warning("Could not resolve format of type %s", type_id)
             else:
-                fmt = int(fmt)
+                fmt = int(fmt[0])
 
-            fields = (
-                [
-                    (f.attrib["name"], f.attrib["typeid"])
-                    for f in type_el.find("fields").findall("field")
-                ]
-                if type_el.find("fields") is not None
-                else []
-            )
+            fields = {
+                f: ft
+                for f, ft in self._collect_typeinfo(
+                    root, type_id, "field", ("name", "typeid")
+                )
+            }
 
             typeparams = (
                 [
@@ -54,22 +52,41 @@ class TypeRegistry:
                 "parent": parent,
             }
 
-    def _get_attribute(self, elem: ET.Element, tag: str, key: str) -> str:
+    def _get_attribute(self, elem: ET._Element, tag: str, key: str) -> str:
         attr_el = elem.find(tag)
         if attr_el is not None:
             return attr_el.attrib.get(key, None)
 
         return None
 
-    def _resolve_attribute(self, root: ET.Element, type_id: str, attr_tag: str, attr: str) -> Any:
-        val = None
+    def _collect_typeinfo(
+        self,
+        root: ET._Element,
+        leaf_type_id: str,
+        attr_tag: str,
+        attributes: str | tuple[str],
+    ) -> list[str | tuple[str]]:
+        if not isinstance(attributes, tuple):
+            attributes = (attributes,)
 
-        while type_id and val is None:
-            elem = root.find(f".//type[@id='{type_id}']")
-            val = self._get_attribute(elem, attr_tag, attr)
-            type_id = self._get_attribute(elem, "parent", "id")
-            
-        return val
+        ret = []
+
+        while leaf_type_id:
+            type_el = root.find(f".//type[@id='{leaf_type_id}']")
+            level_vals = []
+
+            for attr_el in type_el.findall(f".//{attr_tag}"):
+                vals = tuple(attr_el.attrib[attr] for attr in attributes)
+                if len(vals) == 1:
+                    vals = vals[0]
+
+                level_vals.append(vals)
+
+            # Items found on a higher parent level should go in front
+            ret = level_vals + ret
+            leaf_type_id = self._get_attribute(type_el, "parent", "id")
+
+        return ret
 
     def find_types_by_name(self, type_name: str) -> Generator[str, None, None]:
         for tid, t in self.types.items():
@@ -86,15 +103,7 @@ class TypeRegistry:
         return self.types[type_id]["format"]
 
     def get_fields(self, type_id: str) -> dict[str, str]:
-        t = self.types[type_id]
-        fields = {}
-
-        while t:
-            fields.update({f:ft for f,ft in t["fields"]})
-            parent = t.get("parent", None)
-            t = self.types.get(parent, None)
-        
-        return fields
+        return self.types[type_id]["fields"]
 
     def get_subtype(self, type_id: str) -> str:
         return self.types[type_id].get("subtype", None)

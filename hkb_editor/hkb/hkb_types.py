@@ -32,6 +32,7 @@ class XmlValueHandler:
         raise NotImplementedError()
 
     def xml(self) -> str:
+        ET.indent(self.element)
         return ET.tostring(self.element, pretty_print=True, encoding="unicode")
 
     def __str__(self) -> str:

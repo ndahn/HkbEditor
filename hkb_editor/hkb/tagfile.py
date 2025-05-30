@@ -40,6 +40,7 @@ class Tagfile:
         ) + 1
 
     def save_to_file(self, file_path: str) -> None:
+        ET.indent(self._tree)
         self._tree.write(file_path)
 
     def retrieve_object(self, object_id: str) -> "HkbRecord":
