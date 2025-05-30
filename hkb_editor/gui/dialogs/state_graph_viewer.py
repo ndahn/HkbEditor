@@ -25,16 +25,16 @@ def open_state_graph_viewer(
         sm = next(sm for sm in statemachines.values() if sm["name"] == statemachine_name)
         
         state_pointers: HkbArray = sm["states"]
-        states = [behavior.objects[ptr.get_value()] for ptr in state_pointers]
-        #states = {s["stateId"]:s for s in state_records}
+        state_records = [behavior.objects[ptr.get_value()] for ptr in state_pointers]
+        states = {s["name"].get_value():s for s in state_records}
 
         transitions_array: HkbRecord = behavior.objects[sm["wildcardTransitions"].get_value()]
         transitions: HkbArray = transitions_array["transitions"]
         
         g = nx.DiGraph()
 
-        for s in states:
-            g.add_node(s["stateId"].get_value(), name=s["state"])
+        for sname, s in states.items():
+            g.add_node(s["stateId"].get_value(), name=sname)
 
         prev_state = sm["startStateId"].get_value()
 

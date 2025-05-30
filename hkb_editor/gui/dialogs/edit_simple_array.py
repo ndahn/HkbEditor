@@ -74,18 +74,18 @@ def edit_simple_array_dialog(
         # dpg.focus_item(input_box)
 
     def update_entry(sender, new_value: Any, user_data: tuple[int, int]):
-        # May return True as a veto
         item_idx, val_idx = user_data
 
-        old_val = items[item_idx]
-        new_val = list(old_val)
-        new_val[val_idx] = new_value
-        new_val = tuple(new_val)
+        old_value_tuple = items[item_idx]
+        new_value_tuple = list(old_value_tuple)
+        new_value_tuple[val_idx] = new_value
+        new_value_tuple = tuple(new_value_tuple)
 
-        if on_update and on_update(item_idx, old_val, new_value):
+        # May return True as a veto
+        if on_update and on_update(item_idx, old_value_tuple, new_value_tuple):
             return
 
-        items[item_idx] = new_value
+        items[item_idx] = new_value_tuple
         fill_table()
 
     def delete_entry(sender: str, app_data: Any, index: int):

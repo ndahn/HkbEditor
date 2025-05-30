@@ -1,6 +1,9 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
+from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.hkb_types import HkbRecord
+
 
 def select_simple_array_item_dialog(
     items: list[tuple | str],
@@ -102,3 +105,102 @@ def select_simple_array_item_dialog(
                 label="Cancel",
                 callback=on_cancel,
             )
+
+
+def select_pointer(
+    behavior: HavokBehavior,
+    target_type_id: str,
+    callback: Callable[[str, str, Any], None], 
+    *,
+    include_derived: bool = True,
+    title: str = None,
+    user_data: Any = None,
+) -> None:
+    def on_pointer_selected(sender: str, idx: int, candidates: list[HkbRecord]):
+        new_value = candidates[idx].object_id
+        callback(sender, new_value, user_data)
+
+    candidates = list(behavior.find_objects_by_type(target_type_id, include_derived=include_derived))
+    items = [
+        (c.object_id, c.get_field("name", "", resolve=True), c.type_name)
+        for c in candidates
+    ]
+
+    if not title:
+        target_type_name = behavior.type_registry.get_name(target_type_id)
+        title = f"Select {target_type_name}"
+
+    select_simple_array_item_dialog(
+        items,
+        ["ID", "Name", "Type"],
+        on_pointer_selected,
+        title=title,
+        user_data=candidates,
+    )
+
+
+def select_variable(
+    behavior: HavokBehavior,
+    callback: Callable[[str, int, Any], None],
+    *,
+    selected: int = -1,
+    title: str = "Select Variable",
+    user_data: Any = None,
+) -> None:
+    variables = [
+        (v.name, v.vtype.name, v.vmin, v.vmax) for v in behavior.get_variables()
+    ]
+
+    select_simple_array_item_dialog(
+        variables,
+        ["Variable", "Type", "Min", "Max"],
+        callback,
+        selected=selected,
+        title=title,
+        user_data=user_data,
+    )
+
+
+def select_event(
+    behavior: HavokBehavior,
+    callback: Callable[[str, int, Any], None],
+    *,
+    selected: int = -1,
+    title: str = "Select Event",
+    user_data: Any = None,
+) -> None:
+    events = [
+        (e,) for e in behavior.get_events()
+    ]
+
+    select_simple_array_item_dialog(
+        events,
+        ["Name"],
+        callback,
+        selected=selected,
+        title=title,
+        user_data=user_data,
+    )
+
+
+def select_animation_name(
+    behavior: HavokBehavior,
+    callback: Callable[[str, int, Any], None],
+    *,
+    full_names: bool = False,
+    selected: int = -1,
+    title: str = "Select Animation Name",
+    user_data: Any = None,
+) -> None:
+    events = [
+        (a,) for a in behavior.get_animations(full_names=full_names)
+    ]
+
+    select_simple_array_item_dialog(
+        events,
+        ["Name"],
+        callback,
+        selected=selected,
+        title=title,
+        user_data=user_data,
+    )

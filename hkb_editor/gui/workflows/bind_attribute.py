@@ -5,7 +5,7 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
-from hkb_editor.gui.dialogs import select_simple_array_item_dialog
+from hkb_editor.gui.dialogs import select_variable
 from hkb_editor.gui import style
 from hkb_editor.gui.workflows.undo import undo_manager
 
@@ -75,15 +75,8 @@ def select_variable_to_bind(
             if on_bind:
                 on_bind(sender, [selected_idx, binding_id], user_data)
 
-    variables = [
-        (v.name, v.vtype.name, v.vmin, v.vmax) for v in behavior.get_variables()
-    ]
-
-    select_simple_array_item_dialog(
-        variables,
-        ["Variable", "Type", "Min", "Max"],
-        on_variable_selected,
-        bound_var_idx,
+    select_variable(
+        behavior, on_variable_selected, selected=bound_var_idx, user_data=user_data
     )
 
 

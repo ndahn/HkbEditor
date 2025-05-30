@@ -10,7 +10,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.gui.dialogs import select_simple_array_item_dialog
+from hkb_editor.gui.dialogs import select_event, select_animation_name, select_pointer
 from hkb_editor.gui.helpers import center_window
 from hkb_editor.gui import style
 
@@ -42,9 +42,7 @@ def open_new_cmsg_dialog(
         tag = dpg.generate_uuid()
 
     types = behavior.type_registry
-    animation_regex = re.compile(r"a\d{3}_\d{6}")
-    event_regex = re.compile(r"\w+")
-
+    
     # CMSG generation
     def on_okay():
         # No need to verify, okay should be disabled when values are invalid
@@ -58,6 +56,11 @@ def open_new_cmsg_dialog(
             f"{tag}_animation_end_event_type"
         )
         stateinfo_transitions_val: str = dpg.get_value(f"{tag}_stateinfo_transitions")
+
+        # TODO this could be nicer
+        if not all([base_name, animation_val, event_val]):
+            _logger.error("Cannot create CMSG as some values were missing")
+            return
 
         # Look up the types we need
         _logger.debug("Resolving object types")
@@ -223,29 +226,6 @@ def open_new_cmsg_dialog(
     def on_cancel():
         dpg.delete_item(dialog)
 
-    # Input verification
-    def check_animation_name(anim: str) -> bool:
-        return re.fullmatch(animation_regex, anim)
-
-    def check_event_name(event: str) -> bool:
-        return re.fullmatch(event_regex, event)
-
-    def verify_animation(sender: str, value: str):
-        if check_animation_name(value):
-            dpg.bind_item_theme(sender, style.input_field_okay_theme)
-            dpg.enable_item(f"{tag}_button_okay")
-        else:
-            dpg.bind_item_theme(sender, style.input_field_error_theme)
-            dpg.disable_item(f"{tag}_button_okay")
-
-    def verify_event(sender: str, value: str):
-        if check_event_name(value):
-            dpg.bind_item_theme(sender, style.input_field_okay_theme)
-            dpg.enable_item(f"{tag}_button_okay")
-        else:
-            dpg.bind_item_theme(sender, style.input_field_error_theme)
-            dpg.disable_item(f"{tag}_button_okay")
-
     # Dialog content
     with dpg.window(
         label="Create CMSG",
@@ -283,27 +263,51 @@ def open_new_cmsg_dialog(
             dpg.add_text("Used for the CMSG, ClipGenerator and TransitionInfo")
 
         # CMSG event
-        dpg.add_input_text(
-            default_value="",
-            no_spaces=True,
-            callback=verify_event,
-            label="CMSG Event",
-            tag=f"{tag}_event",
-        )
-        with dpg.tooltip(dpg.last_item()):
-            dpg.add_text("Used to trigger the transitoin to the CMSG from HKS")
+        with dpg.group(horizontal=True):
+            def on_event_selected(sender: str, event_id: int, user_data: Any):
+                event_name = behavior.get_event(event_id)
+                dpg.set_value(f"{tag}_event", event_name)
+
+            dpg.add_input_text(
+                default_value="",
+                readonly=True,
+                tag=f"{tag}_event",
+            )
+            with dpg.tooltip(dpg.last_item()):
+                dpg.add_text("Used to trigger the transition to the CMSG from HKS")
+
+            dpg.add_button(
+                arrow=True,
+                direction=dpg.mvDir_Right,
+                callback=lambda s, a, u: select_event(*u),
+                user_data=(behavior, on_event_selected)
+            )
+
+            dpg.add_text("CMSG Event")
 
         # ClipGenerator animation
-        dpg.add_input_text(
-            default_value="a000_000000",
-            hint="aXXX_YYYYYY",
-            no_spaces=True,
-            callback=verify_animation,
-            label="Clip Animation",
-            tag=f"{tag}_animation",
-        )
-        with dpg.tooltip(dpg.last_item()):
-            dpg.add_text("Animation ID the ClipGenerator uses")
+        with dpg.group(horizontal=True):
+            def on_animation_selected(sender: str, animation_id: int, user_data: Any):
+                animation_name = behavior.get_animation(animation_id)
+                dpg.set_value(f"{tag}_animation", animation_name)
+
+            dpg.add_input_text(
+                default_value="",
+                hint="aXXX_YYYYYY",
+                readonly=True,
+                tag=f"{tag}_animation",
+            )
+            with dpg.tooltip(dpg.last_item()):
+                dpg.add_text("Animation ID the ClipGenerator uses")
+
+            dpg.add_button(
+                arrow=True,
+                direction=dpg.mvDir_Right,
+                callback=lambda s, a, u: select_animation_name(*u),
+                user_data=(behavior, on_animation_selected)
+            )
+
+            dpg.add_text("Clip Animation")
 
         # Clip playback mode
         dpg.add_combo(
@@ -346,13 +350,25 @@ def open_new_cmsg_dialog(
                 tag=f"{tag}_animation_end_event_type",
             )
 
-            # TODO pointer select
-            dpg.add_input_text(
-                default_value="",
-                hint="Object ID",
-                label="StateInfo Transitions",
-                tag=f"{tag}_stateinfo_transitions",
-            )
+            # StateInfo transition pointer
+            # TODO we probably need a table to get a clean layout
+            with dpg.group(horizontal=True):
+                def on_pointer_selected(sender: str, target_id: str, user_data: Any):
+                    dpg.set_value(f"{tag}_stateinfo_transitions", target_id)
+
+                dpg.add_input_text(
+                    default_value="",
+                    readonly=True,
+                    tag=f"{tag}_stateinfo_transitions",
+                )
+                dpg.bind_item_theme(dpg.last_item(), style.pointer_attribute_theme)
+                dpg.add_button(
+                    arrow=True,
+                    direction=dpg.mvDir_Right,
+                    callback=lambda s, a, u: select_pointer(*u),
+                    user_data=(behavior, transition_type, on_pointer_selected)
+                )
+                dpg.add_text("StateInfo Transitions")
 
         dpg.add_spacer(height=3)
 

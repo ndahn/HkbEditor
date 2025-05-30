@@ -204,9 +204,10 @@ class HavokBehavior(Tagfile):
 
         return "\\".join(parts)
 
-    def create_animation(self, animation_name: str, char_id: str = None) -> int:
-        full_anim_name = self.get_full_animation_name(animation_name, char_id)
-        self._animations.append(
+    def create_animation(self, animation_name: str, idx: int = -1) -> int:
+        full_anim_name = self.get_full_animation_name(animation_name)
+        self._animations.insert(
+            idx,
             HkbString.new(self, self._animations.element_type_id, full_anim_name)
         )
         return len(self._animations) - 1

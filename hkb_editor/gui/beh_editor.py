@@ -26,7 +26,7 @@ from hkb_editor.hkb.hkb_enums import get_hkb_enum
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
     edit_simple_array_dialog,
-    select_simple_array_item_dialog,
+    select_pointer,
     find_object_dialog,
 )
 from .table_tree import (
@@ -529,10 +529,9 @@ class BehaviorEditor(GraphEditor):
     ) -> str:
         attribute = path.split("/")[-1]
 
-        def on_pointer_selected(sender, idx: int, candidates: list[HkbRecord]):
-            new_value = candidates[idx].object_id
+        def on_pointer_selected(sender, target_id: str, user_data: Any):
             self.on_update_pointer(
-                sender, source_record, pointer, pointer.get_value(), new_value
+                sender, source_record, pointer, pointer.get_value(), target_id
             )
 
             # If the binding set pointer changed we should regenerate all attribute widgets
@@ -544,19 +543,8 @@ class BehaviorEditor(GraphEditor):
                 self._update_attributes(self.selected_node)
 
         def open_pointer_dialog():
-            target_type_name = self.beh.type_registry.get_name(pointer.subtype)
-            candidates = list(self.beh.find_objects_by_type(pointer.subtype, include_derived=True))
-            items = [
-                (c.object_id, c.get_field("name", "", resolve=True), c.type_name)
-                for c in candidates
-            ]
-
-            select_simple_array_item_dialog(
-                items,
-                ["ID", "Name", "Type"],
-                on_pointer_selected,
-                title=f"Select {target_type_name}",
-                user_data=candidates,
+            select_pointer(
+                self.beh, pointer.subtype, on_pointer_selected, include_derived=True
             )
 
         with dpg.group(horizontal=True, filter_key=attribute, tag=tag) as group:
@@ -888,6 +876,7 @@ class BehaviorEditor(GraphEditor):
                 ):
                     # If a new binding set was created the graph will change
                     # binding_var, binding_set_id = data
+                    # TODO graph needs to be rebuilt
                     self._regenerate_canvas()
                     self._clear_attributes()
                     self._update_attributes(self.selected_node)
