@@ -157,22 +157,26 @@ class GraphEditor:
         self.logger.info("Saved custom layout")
 
     def _restore_default_layout(self):
-        # NOTE not really restoring rather than removing the custom layout
-        try:
-            shutil.move(get_custom_layout_path(), get_custom_layout_path() + ".old")
+        default_layout = get_default_layout_path()
+        user_layout = get_custom_layout_path()
 
-            with dpg.window(
-                label="Layout Restored",
-                modal=True,
-                autosize=True,
-                min_size=(100, 50),
-                on_close=lambda: dpg.delete_item(wnd),
-            ) as wnd:
-                dpg.add_text("Layout restored - restart to apply!")
-                dpg.add_separator()
-                dpg.add_button(label="Okay", callback=lambda: dpg.delete_item(wnd))
-        except FileNotFoundError:
-            pass
+        if path.isfile(user_layout):
+            shutil.move(get_custom_layout_path(), get_custom_layout_path() + ".old")
+        
+        # Replace the user layout with the default
+        shutil.move(default_layout, user_layout)
+
+        with dpg.window(
+            label="Layout Restored",
+            modal=True,
+            autosize=True,
+            min_size=(100, 50),
+            no_saved_settings=True,
+            on_close=lambda: dpg.delete_item(wnd),
+        ) as wnd:
+            dpg.add_text("Layout restored - restart to apply!")
+            dpg.add_separator()
+            dpg.add_button(label="Okay", callback=lambda: dpg.delete_item(wnd))
 
     def _create_file_menu(self):
         with dpg.menu(label="File"):

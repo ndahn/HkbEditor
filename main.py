@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 import logging
 from dearpygui import dearpygui as dpg
 import pyperclip
@@ -22,17 +23,18 @@ def main():
 
     dpg.create_context()
 
-    layout = get_custom_layout_path()
-    if not os.path.isfile(layout):
-        layout = get_default_layout_path()
+    # default layout should never be touched, it only serves as a template
+    default_layout = get_default_layout_path()
+    user_layout = get_custom_layout_path()
 
-    if not os.path.isfile(layout):
-        layout = None
+    if not os.path.isfile(default_layout):
         _logger.error("Layout not found")
     else:
-        _logger.info("Loading layout %s", layout)
+        if not os.path.isfile(user_layout):
+            shutil.copy(default_layout, user_layout)
+            _logger.info("Copied default layout to user layout")
 
-    dpg.configure_app(docking=True, docking_space=True, init_file=layout)
+    dpg.configure_app(docking=True, docking_space=True, init_file=user_layout)
     dpg.create_viewport(title="HkbEditor")
 
     setup_styles()
