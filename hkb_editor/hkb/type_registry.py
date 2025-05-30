@@ -21,6 +21,7 @@ class TypeRegistry:
             fmt = self._collect_typeinfo(root, type_id, "format", "value")
             if not fmt:
                 _logger.warning("Could not resolve format of type %s", type_id)
+                fmt = 0
             else:
                 fmt = int(fmt[0])
 
