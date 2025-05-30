@@ -4,7 +4,7 @@ I'll write a proper *ReadMe* later. For now this is the absolute basics you need
 - is largely untested
 - removes XML comments on save (to be fixed)
 
-Most things like graph nodes, attributes, etc. have useful menus on right click. You can move around the graph with right mouse button + drag. Zoom, reveal all, etc. somewhat works, but don't be surprised if something looks messed up. Reopening the statemachine will usually fix this.
+Most things like graph nodes, attributes, etc. have useful menus on right click. You can move around the graph with middle mouse button + drag (potentially weird on laptops?). Zoom, reveal all, etc. somewhat works, but don't be surprised if something looks messed up. Reopening the statemachine will usually fix this.
 
 ![image](https://github.com/user-attachments/assets/c9a1fe5a-63c1-44a9-a770-5608277b4c12)
 
