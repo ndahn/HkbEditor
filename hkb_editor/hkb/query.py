@@ -111,7 +111,8 @@ class QueryTransformer(Transformer):
             actual = getattr(self.record, path)
         except AttributeError:
             try:
-                actual = self.record.get_path_value(path, resolve=True)
+                # Still need to match against a string!
+                actual = str(self.record.get_path_value(path, resolve=True))
             except KeyError:
                 return False
 

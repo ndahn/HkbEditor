@@ -20,11 +20,12 @@ _logger = getLogger(__name__)
 
 def open_new_cmsg_dialog(
     behavior: HavokBehavior,
-    active_statemachine_id: str = None,
-    tag: str = 0,
     callback: Callable[
         [str, tuple[HkbRecord, HkbRecord, HkbRecord, HkbRecord], Any], None
-    ] = None,
+    ],
+    active_statemachine_id: str = None,
+    *,
+    tag: str = 0,
     user_data: Any = None,
 ) -> str:
     # To create a new CMSG we need at least the following:
@@ -218,12 +219,7 @@ def open_new_cmsg_dialog(
 
         # TODO tell user where to place generated event(s)
 
-        if callback:
-            callback(dialog, (cmsg_id, clipgen_id, stateinfo_id), user_data)
-
-        dpg.delete_item(dialog)
-
-    def on_cancel():
+        callback(dialog, (cmsg_id, clipgen_id, stateinfo_id), user_data)
         dpg.delete_item(dialog)
 
     # Dialog content
@@ -232,7 +228,7 @@ def open_new_cmsg_dialog(
         width=400,
         height=600,
         autosize=True,
-        on_close=on_cancel,
+        on_close=lambda: dpg.delete_item(dialog),
         tag=tag,
     ) as dialog:
         # Statemachine
@@ -378,7 +374,12 @@ def open_new_cmsg_dialog(
             dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")
             dpg.add_button(
                 label="Cancel",
-                callback=on_cancel,
+                callback=lambda: dpg.delete_item(dialog),
+            )
+            dpg.add_checkbox(
+                label="Pin created objects", 
+                default_value=True,
+                tag=f"{tag}_pin_objects",
             )
 
     dpg.split_frame()

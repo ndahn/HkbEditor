@@ -45,6 +45,7 @@ from .workflows.file_dialog import open_file_dialog
 from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager
 from .workflows.create_cmsg import open_new_cmsg_dialog
+from .workflows.register_clip import open_register_clip_dialog
 from .helpers import make_copy_menu
 from . import style
 
@@ -165,10 +166,19 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(
                 label="Find Object...", callback=lambda: self.open_search_dialog()
             )
-            dpg.add_separator()
             # TODO enable
-            dpg.add_menu_item(label="Register Clip...", enabled=False)
-            dpg.add_menu_item(label="Create CMSG...", callback=self.create_cmsg)
+            dpg.add_separator()
+            dpg.add_menu_item(
+                label="Create Object...",
+                enabled=False,
+                callback=self.create_object_dialog,
+            )
+            dpg.add_menu_item(
+                label="Register Clip...", callback=self.open_register_clip_dialog
+            )
+            dpg.add_menu_item(
+                label="Create CMSG...", callback=self.open_create_cmsg_dialog
+            )
 
         self._create_settings_menu()
 
@@ -403,8 +413,10 @@ class BehaviorEditor(GraphEditor):
         old_value: str,
         new_value: str,
     ) -> None:
+        self.add_pinned_object(old_value)
+        self.logger.info("Pinned previous object %s", old_value)
         self.on_attribute_update(sender, new_value, pointer)
-        
+
         if new_value not in self.nodes:
             # Edges have changed, previous node may not be connected anymore, new
             # node may not be part of the current statemachine graph yet, ...
@@ -829,15 +841,18 @@ class BehaviorEditor(GraphEditor):
 
             if isinstance(value, HkbPointer):
 
-                def on_new_object(sender, object: HkbRecord, user_data):
+                def create_object_for_pointer():
+                    obj = HkbRecord.new(
+                        self.beh, value.subtype, object_id=self.beh.new_id()
+                    )
                     with undo_manager.combine():
-                        self.beh.add_object(object)
+                        self.beh.add_object(obj)
                         self.on_update_pointer(
                             widget,
                             source_record,
                             value,
                             value.get_value(),
-                            object.object_id,
+                            obj.object_id,
                         )
 
                 def go_to_pointer():
@@ -851,10 +866,10 @@ class BehaviorEditor(GraphEditor):
                     self.look_at(node.x + node.width / 2, node.y + node.width / 2)
 
                 dpg.add_separator()
+
                 dpg.add_selectable(
                     label="New object",
-                    callback=lambda s, a, u: self.open_create_object_dialog(*u),
-                    user_data=(value.subtype, on_new_object, None),
+                    callback=create_object_for_pointer,
                 )
                 dpg.add_selectable(label="Go to", callback=go_to_pointer)
 
@@ -998,11 +1013,32 @@ class BehaviorEditor(GraphEditor):
         if obj.type_id == sm_type:
             return obj
 
-        return next(sm for sm in self.beh.find_parents_by_type(for_object_id, sm_type))
+        return next((sm for sm in self.beh.find_parents_by_type(for_object_id, sm_type)), None)
+
+    # Not used right now, but might be useful at some point
+    def get_active_cmsg(self) -> HkbRecord:
+        if self.selected_node:
+            candidates = [self.selected_node.id]
+            cmsg_type = self.beh.type_registry.find_first_type_by_name("CustomManualSelectorGenerator")
+
+            while candidates:
+                oid = candidates.pop()
+                obj = self.beh.objects[oid]
+                if obj.type_id == cmsg_type:
+                    return obj
+
+                candidates.extend(self.graph.predecessors(oid))
+
+        return None
 
     def jump_to_object(self, object_id: str):
         # Open the associated state machine
         root = self.get_active_statemachine(object_id)
+
+        if not root:
+            self.logger.info("Object is not part of any StateMachine")
+            return
+
         self._on_root_selected("", True, root.object_id)
 
         # Reveal the node in the state machine graph
@@ -1167,8 +1203,7 @@ class BehaviorEditor(GraphEditor):
 
     def load_bone_names(self) -> None:
         file_path = open_file_dialog(
-            title="Select Skeleton", 
-            filetypes={"Skeleton files": "*.xml"}
+            title="Select Skeleton", filetypes={"Skeleton files": "*.xml"}
         )
 
         if file_path:
@@ -1202,20 +1237,40 @@ class BehaviorEditor(GraphEditor):
 
         dialog = find_object_dialog(self.beh, jump)
 
-    def register_clip(self):
-        # This is basically what ERClipGenerator does
-        # TODO open dialog, find CMSG for animation ID, add clip to CMSG generators
-        pass
+    def open_register_clip_dialog(self):
+        def on_clip_registered(sender: str, ids: tuple[str, str], user_data: Any):
+            clip_id, cmsg_id = ids
+            self.jump_to_object(clip_id)
 
-    def create_cmsg(self):
-        # This is basically what Wind's ERBehInjector does
+            # This is a bit ugly, but so is adding more stuff to ids
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                self.add_pinned_object(clip_id)
+                self.add_pinned_object(cmsg_id)
+
+        open_register_clip_dialog(
+            self.beh,
+            on_clip_registered,
+        )
+
+    def open_create_cmsg_dialog(self):
         def on_cmsg_created(sender: str, ids: tuple[str, str, str], user_data: Any):
-            cmsg_id, _, _ = ids
+            cmsg_id, clipgen_id, stateinfo_id = ids
             self.jump_to_object(cmsg_id)
+
+            # This is a bit ugly, but so is adding more stuff to ids
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                self.add_pinned_object(cmsg_id)
+                self.add_pinned_object(clipgen_id)
+                self.add_pinned_object(stateinfo_id)
 
         active_sm = self.get_active_statemachine()
         open_new_cmsg_dialog(
             self.beh,
-            active_sm.object_id if active_sm else None,
-            callback=on_cmsg_created,
+            on_cmsg_created,
+            active_statemachine_id=active_sm.object_id if active_sm else None,
         )
+
+    def create_object_dialog(self):
+        pass
