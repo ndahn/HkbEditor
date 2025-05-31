@@ -29,7 +29,7 @@ def is_row_index_visible(table, row_level: int, row_idx: int = -1) -> bool:
         if not is_foldable_row(parent):
             return True
 
-        _, parent_level, parent_node = dpg.get_item_user_data(parent)
+        _, parent_level, parent_node, _ = dpg.get_item_user_data(parent)
         if parent_node is not None and parent_level < row_level:
             return dpg.get_value(parent_node)
 
@@ -40,7 +40,7 @@ def is_row_visible(table: str, row: str | int) -> bool:
     if not is_foldable_row(row):
         return True
 
-    _, row_level, _ = dpg.get_item_user_data(row)
+    _, row_level, _, _ = dpg.get_item_user_data(row)
 
     rows = dpg.get_item_children(table, slot=1)
     row_idx = rows.index(row)
@@ -51,10 +51,14 @@ def get_row_node_item(row: str):
     return dpg.get_item_user_data(row)[2]
 
 
+def get_row_selectable_item(row: str):
+    return dpg.get_item_user_data(row)[3]
+
+
 def get_foldable_child_rows(table: str, row: int | str) -> Generator[str, None, None]:
     if row in (None, "", 0):
-        return 
-        
+        return
+
     if isinstance(row, str):
         row = dpg.get_alias_id(row)
 
@@ -62,7 +66,7 @@ def get_foldable_child_rows(table: str, row: int | str) -> Generator[str, None, 
     row_idx = rows.index(row)
 
     if row_idx >= 0:
-        rows = rows[row_idx + 1:]
+        rows = rows[row_idx + 1 :]
 
     for child_row in rows:
         if not is_foldable_row(child_row):
@@ -97,7 +101,7 @@ def get_next_foldable_row_sibling(table: str, row: str) -> int:
     row_idx = rows.index(row)
 
     if row_idx > 0:
-        rows = rows[row_idx + 1:]
+        rows = rows[row_idx + 1 :]
 
     for child_row in rows:
         if get_row_level(child_row) <= row_level:
@@ -112,13 +116,16 @@ def get_row_indent(table: str, row: str) -> int:
     if not parent:
         return 0
 
-    _, row_level, _ = dpg.get_item_user_data(parent)
+    _, row_level, _, _ = dpg.get_item_user_data(parent)
     return row_level * INDENT_STEP
 
 
 @contextmanager
 def apply_row_indent(
-    table: str, indent_level: int, parent_row: str, until: int | str = 0,
+    table: str,
+    indent_level: int,
+    parent_row: str,
+    until: int | str = 0,
 ) -> Generator[str, None, None]:
     try:
         yield
@@ -135,21 +142,29 @@ def apply_row_indent(
             child_row_content = dpg.get_item_children(child_row, slot=1)
             if child_row_content:
                 dpg.set_item_indent(child_row_content[0], indent_level * INDENT_STEP)
-            
+
             if is_foldable_row(child_row):
                 data = list(dpg.get_item_user_data(child_row))
                 data[1] = indent_level
                 dpg.set_item_user_data(child_row, tuple(data))
 
 
-def on_row_clicked(sender, value, user_data):
+def set_foldable_row_status(row: str, expanded: bool) -> None:
+    selectable = get_row_selectable_item(row)
+    # Will be toggled by the click function
+    dpg.set_value(selectable, not expanded)
+    # We basically simulate a click on the selectable
+    _on_row_clicked(selectable, expanded, dpg.get_item_user_data(selectable))
+
+
+def _on_row_clicked(sender, value, user_data):
     # Make sure it happens quickly and without flickering
     with dpg.mutex():
         # We don't want to highlight the selectable as "selected"
         dpg.set_value(sender, False)
 
         table, row, callback, cb_user_data = user_data
-        _, root_level, node = dpg.get_item_user_data(row)
+        _, root_level, node, _ = dpg.get_item_user_data(row)
         is_leaf = node is None
         is_expanded = not dpg.get_value(node)
 
@@ -164,7 +179,7 @@ def on_row_clicked(sender, value, user_data):
         hide_level = 10000 if is_expanded else root_level
 
         for child_row in get_foldable_child_rows(table, row):
-            _, child_level, child_node = dpg.get_item_user_data(child_row)
+            _, child_level, child_node, _ = dpg.get_item_user_data(child_row)
 
             if child_level <= root_level:
                 break
@@ -203,13 +218,13 @@ def table_tree_node(
         parent=table,
         tag=tag,
         before=before,
-        user_data=(_foldable_row_sentinel, cur_level, tree_node),
+        user_data=(_foldable_row_sentinel, cur_level, tree_node, selectable),
         show=show,
     ) as row:
         with dpg.group(horizontal=True, horizontal_spacing=0):
             dpg.add_selectable(
                 span_columns=True,
-                callback=on_row_clicked,
+                callback=_on_row_clicked,
                 user_data=(table, row, callback, user_data),
                 tag=selectable,
             )
@@ -231,7 +246,9 @@ def table_tree_node(
 
 @contextmanager
 def table_tree_leaf(
-    table: str = None, tag: str = 0, before: str = 0,
+    table: str = None,
+    tag: str = 0,
+    before: str = 0,
 ) -> Generator[str, None, None]:
     if not table:
         table = dpg.top_container_stack()
@@ -247,7 +264,7 @@ def table_tree_leaf(
             parent=table,
             tag=tag,
             before=before,
-            user_data=(_foldable_row_sentinel, cur_level, None),
+            user_data=(_foldable_row_sentinel, cur_level, None, None),
             show=show,
         ) as row:
             yield row
@@ -263,7 +280,7 @@ def add_lazy_table_tree_node(
     *,
     table: str = None,
     tag: str = 0,
-    before: str = 0
+    before: str = 0,
 ) -> str:
     if not table:
         table = dpg.top_container_stack()
@@ -271,28 +288,19 @@ def add_lazy_table_tree_node(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-
     def fold_unfold_attributes(
         tree_node_row: str,
         expanded: bool,
         user_data: Any,
     ):
-        anchor = get_next_foldable_row_sibling(
-            table, tree_node_row
-        )
+        anchor = get_next_foldable_row_sibling(table, tree_node_row)
         indent_level = get_row_level(tree_node_row) + 1
 
         if expanded:
-            with apply_row_indent(
-                table, indent_level, tree_node_row, until=anchor
-            ):
+            with apply_row_indent(table, indent_level, tree_node_row, until=anchor):
                 content_callback(anchor)
         else:
-            child_rows = list(
-                get_foldable_child_rows(
-                    table, tree_node_row
-                )
-            )
+            child_rows = list(get_foldable_child_rows(table, tree_node_row))
 
             until = anchor
             if isinstance(until, str):

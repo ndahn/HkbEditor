@@ -31,6 +31,9 @@ class HkbVariable:
     vmin: int
     vmax: int
 
+    def astuple(self) -> tuple[str, int, int, int]:
+        return tuple(self.name, self.vtype, self.vmin, self.vmax)
+
 
 class HavokBehavior(Tagfile):
 
@@ -113,7 +116,6 @@ class HavokBehavior(Tagfile):
         del self._events[idx]
 
     # HKS variables
-    # TODO not so simple after all, add type and bounds to dialog
     def create_variable(
         self,
         variable_name: str,
@@ -126,7 +128,7 @@ class HavokBehavior(Tagfile):
             idx, HkbString.new(self, self._variables.element_type_id, variable_name)
         )
 
-        # TODO these must have matching entries as well
+        # These must have matching entries as well
         self._variable_infos.insert(
             idx,
             HkbRecord.new(

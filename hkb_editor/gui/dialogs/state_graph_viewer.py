@@ -36,15 +36,18 @@ def open_state_graph_viewer(
         for sname, s in states.items():
             g.add_node(s["stateId"].get_value(), name=sname)
 
-        prev_state = sm["startStateId"].get_value()
+        for idx, event in enumerate(behavior.get_events()):
+            if "_to_" in event:
+                src, dst = event.split("_to_")
+                if src in states and dst in states:
+                    g.add_edge(src, dst, event=event, idx=idx)
+                else:
+                    if src in states or dst in states:
+                        # Can this even happen? Should we add an "external" node?
+                        print(f"Event {event} has only one edge connected in the current SM")
 
-        for t in transitions:
-            # toStateID is the state this refers to, NOT where the transition goes to!
-            to_state = t["toStateId"].get_value()
-            event_idx = t["eventId"].get_value()
-            event_name = behavior.get_event(event_idx)
-            g.add_edge(prev_state, to_state, event_name=event_name)
-
+        # TODO Planar or circular are probably best?
+        pos = nx.layout.planar_layout(g, scale=400, center=(0, 0))
 
     with dpg.window(
         label=title,

@@ -53,19 +53,18 @@ from . import style
 class BehaviorEditor(GraphEditor):
 
     def __init__(self, tag: str | int = 0):
-        super().__init__(tag)
+        # Setup the root logger first before calling super, which will instantiate 
+        # a new logger
+        class LogHandler(logging.Handler):
+            def emit(this, record):
+                self.notification(record.getMessage(), record.levelno)
 
+        logging.root.addHandler(LogHandler())
+
+        super().__init__(tag)
         self.beh: HavokBehavior = None
         self.alias_manager = AliasManager()
         self.pinned_objects_table: str = None
-
-        class LogHandler(logging.Handler):
-            editor = self
-
-            def emit(self, record):
-                LogHandler.editor.notification(record.getMessage(), record.levelno)
-
-        self.logger.addHandler(LogHandler())
         self.min_notification_severity = logging.INFO
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
@@ -107,7 +106,7 @@ class BehaviorEditor(GraphEditor):
         dpg.configure_item(note, pos=pos)
 
         def remove_notification():
-            time.sleep(2.0)
+            time.sleep(3.0)
             dpg.delete_item(note)
 
         Thread(target=remove_notification, daemon=True).start()
@@ -1036,7 +1035,7 @@ class BehaviorEditor(GraphEditor):
         root = self.get_active_statemachine(object_id)
 
         if not root:
-            self.logger.info("Object is not part of any StateMachine")
+            self.logger.info("Object %s is not part of any StateMachine", object_id)
             return
 
         self._on_root_selected("", True, root.object_id)
@@ -1052,10 +1051,7 @@ class BehaviorEditor(GraphEditor):
                     "A variable named '%s' already exists (%d)", new_value[0], idx
                 )
 
-            undo_manager.on_complex_action(
-                lambda i=idx: self.beh.delete_variable(i),
-                lambda i=idx, v=new_value: self.beh.create_variable(*v, idx=i),
-            )
+            undo_manager.on_create_variable(self.beh, new_value, idx)
             self.beh.create_variable(*new_value, idx)
 
         def on_update(
@@ -1063,27 +1059,13 @@ class BehaviorEditor(GraphEditor):
             old_value: tuple[str, int, int, int],
             new_value: tuple[str, int, int, int],
         ):
-            # Easier than updating each field individually
-            def local_update(idx: int, val: tuple):
-                self.beh.delete_variable(idx)
-                self.beh.create_variable(*val, idx=idx)
-
-            undo_manager.on_complex_action(
-                lambda i=idx, v=old_value: local_update(i, v),
-                lambda i=idx, v=new_value: local_update(i, v),
-            )
-            local_update(idx, new_value)
+            undo_manager.on_update_variable(self.beh, idx, old_value, new_value)
+            self.beh.delete_variable(idx)
+            self.beh.create_variable(*new_value, idx=idx)
 
         def on_delete(idx: int):
             # TODO list variable bindings affected by this
-            old_value = self.beh.get_variable(idx)
-
-            undo_manager.on_complex_action(
-                lambda i=idx: self.beh.delete_variable(i),
-                lambda i=idx, v=old_value: self.beh.create_variable(
-                    v.name, v.vtype, v.vmin, v.vmax, idx=i
-                ),
-            )
+            undo_manager.on_delete_variable(self.beh, idx)
             self.beh.delete_variable(idx)
 
         edit_simple_array_dialog(
@@ -1111,29 +1093,19 @@ class BehaviorEditor(GraphEditor):
                     "An event named '%s' already exists (%d)", new_value, idx
                 )
 
-            undo_manager.on_complex_action(
-                lambda i=idx: self.beh.delete_event(i),
-                lambda i=idx, v=new_value: self.beh.create_event(v, i),
-            )
+            undo_manager.on_create_event(self.beh, new_value, idx)
             self.beh.create_event(new_value, idx)
 
         def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
             old_value = old_value[0]
             new_value = new_value[0]
 
-            undo_manager.on_complex_action(
-                lambda i=idx, v=old_value: self.beh.rename_event(i, v),
-                lambda i=idx, v=new_value: self.beh.rename_event(i, v),
-            )
+            undo_manager.on_update_event(self.beh, idx, old_value, new_value)
             self.beh.rename_event(idx, new_value)
 
         def on_delete(idx: int):
             # TODO list transition infos affected by this
-            old_value = self.beh.get_event(idx)
-            undo_manager.on_complex_action(
-                lambda i=idx: self.beh.delete_event(i),
-                lambda i=idx, v=old_value: self.beh.create_event(v, i),
-            )
+            undo_manager.on_delete_event(self.beh, idx)
             self.beh.delete_event(idx)
 
         edit_simple_array_dialog(
@@ -1158,29 +1130,19 @@ class BehaviorEditor(GraphEditor):
                     "An animation named '%s' already exists (%d)", new_value, idx
                 )
 
-            undo_manager.on_complex_action(
-                lambda i=idx: self.beh.delete_animation(i),
-                lambda i=idx, v=new_value: self.beh.create_animation(v, i),
-            )
+            undo_manager.on_create_animation(self.beh, new_value, idx)
             self.beh.create_animation(new_value, idx)
 
         def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
             old_value = old_value[0]
             new_value = new_value[0]
 
-            undo_manager.on_complex_action(
-                lambda i=idx, v=old_value: self.beh.rename_animation(i, v),
-                lambda i=idx, v=new_value: self.beh.rename_animation(i, v),
-            )
+            undo_manager.on_update_animation(self.beh, idx, old_value, new_value)
             self.beh.rename_animation(idx, new_value)
 
         def on_delete(idx: int):
             # TODO list generators affected by this
-            old_value = self.beh.get_animation(idx)
-            undo_manager.on_complex_action(
-                lambda i=idx: self.beh.delete_animation(i),
-                lambda i=idx, v=old_value: self.beh.create_animation(v, i),
-            )
+            undo_manager.on_delete_animation(self.beh, idx)
             self.beh.delete_animation(idx)
 
         edit_simple_array_dialog(

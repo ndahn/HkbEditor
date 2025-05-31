@@ -7,3 +7,4 @@ from .select_simple_array_item import (
     select_animation_name,
 )
 from .find_object import find_object_dialog
+from .make_tuple import new_tuple_dialog

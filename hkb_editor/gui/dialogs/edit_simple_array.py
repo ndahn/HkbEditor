@@ -2,6 +2,7 @@ from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.gui.helpers import center_window, create_value_widget
+from .make_tuple import new_tuple_dialog
 
 
 def edit_simple_array_dialog(
@@ -22,44 +23,16 @@ def edit_simple_array_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-    def new_entry_dialog(sender, app_data, index: int):
-        ref = items[0]
-        new_val = [type(v)() for v in ref]
-
-        def assemble(sender: str, new_value: Any, user_data: tuple[int, int]):
-            _, val_idx = user_data
-
-            if choices and val_idx in choices:
-                choice_values = choices[val_idx]
-                new_value = choice_values.index(new_value)
-
-            new_val[val_idx] = new_value
-
-        def create_entry():
-            add_entry(sender, tuple(new_val), index)
-            dpg.delete_item(create_entry_popup)
-
-        with dpg.window(
-            modal=True,
-            min_size=(100, 30),
-            autosize=True,
-            label="New Entry",
-            on_close=lambda: dpg.delete_item(create_entry_popup),
-            tag=f"{tag}_create_entry_popup",
-        ) as create_entry_popup:
-            for idx, (col, ref_val) in enumerate(zip(columns, ref)):
-                create_value_widget(
-                    index, idx, type(ref_val)(), callback=assemble, label=col, choices=choices
-                )
-
-            with dpg.group(horizontal=True):
-                dpg.add_button(label="Okay", callback=create_entry)
-                dpg.add_button(
-                    label="Cancel", callback=lambda: dpg.delete_item(create_entry_popup)
-                )
+    def new_entry_dialog(sender, app_data, item_idx: int):
+        popup = new_tuple_dialog(
+            {col:type(v) for col, v in zip(columns, items[0])},
+            add_entry,
+            choices=choices,
+            user_data=item_idx,
+        )
 
         dpg.split_frame()
-        center_window(create_entry_popup, tag)
+        center_window(popup, dialog)
 
     def add_entry(sender, new_value: tuple, index: int):
         # May return True as a veto
@@ -111,10 +84,10 @@ def edit_simple_array_dialog(
 
                 for val_idx, val in enumerate(item):
                     create_value_widget(
-                        item_idx,
                         val_idx,
                         val,
                         callback=update_entry,
+                        user_data=(item_idx, val_idx),
                         choices=choices,
                         on_enter=True,
                         width=-1,
@@ -152,7 +125,7 @@ def edit_simple_array_dialog(
         height=400,
         label=title,
         on_close=cloe_dialog,
-        #autosize=True,
+        # autosize=True,
         tag=tag,
     ) as dialog:
         dpg.add_input_text(

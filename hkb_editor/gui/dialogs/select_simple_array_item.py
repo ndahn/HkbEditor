@@ -39,9 +39,6 @@ def select_simple_array_item_dialog(
         callback(dialog, selected, user_data)
         dpg.delete_item(dialog)
 
-    def on_cancel():
-        dpg.delete_item(dialog)
-
     with dpg.window(
         width=600,
         height=400,
@@ -103,7 +100,7 @@ def select_simple_array_item_dialog(
             )
             dpg.add_button(
                 label="Cancel",
-                callback=on_cancel,
+                callback=lambda: dpg.delete_item(dialog),
             )
 
 

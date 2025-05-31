@@ -170,10 +170,109 @@ class UndoManager:
     ) -> None:
         self._on_action(UpdateArrayItem(array, index, old_value, new_value))
 
-    def on_complex_action(
-        self, undo_func: Callable, redo_func: Callable
-    ) -> None:
+    def on_complex_action(self, undo_func: Callable, redo_func: Callable) -> None:
         self._on_action(CustomUndoAction(undo_func, redo_func))
+
+    def on_create_variable(
+        self,
+        behavior: HavokBehavior,
+        variable_info: tuple[str, int, int, int],
+        idx: int = -1,
+    ) -> None:
+        self.on_complex_action(
+            lambda i=idx: behavior.delete_variable(i),
+            lambda i=idx, v=variable_info: behavior.create_variable(*v, i),
+        )
+
+    def on_update_variable(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+        old_value: tuple[str, int, int, int],
+        new_value: tuple[str, int, int, int],
+    ) -> None:
+        # Easier than updating each field individually
+        def local_update(idx: int, val: tuple):
+            behavior.delete_variable(idx)
+            behavior.create_variable(*val, idx=idx)
+
+        self.on_complex_action(
+            lambda i=idx, v=old_value: local_update(i, v),
+            lambda i=idx, v=new_value: local_update(i, v),
+        )
+
+    def on_delete_variable(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+    ) -> None:
+        old_value = behavior.get_variable(idx).astuple()
+        undo_manager.on_complex_action(
+            lambda i=idx: behavior.delete_variable(i),
+            lambda i=idx, v=old_value: behavior.create_variable(*v, i),
+        )
+
+    def on_create_event(
+        self, behavior: HavokBehavior, event: str, idx: int = -1
+    ) -> None:
+        self.on_complex_action(
+            lambda i=idx: behavior.delete_event(i),
+            lambda i=idx, v=event: behavior.create_event(v, i),
+        )
+
+    def on_update_event(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+        old_value: str,
+        new_value: str,
+    ) -> None:
+        self.on_complex_action(
+            lambda i=idx, v=old_value: behavior.rename_event(i, v),
+            lambda i=idx, v=new_value: behavior.rename_event(i, v),
+        )
+
+    def on_delete_event(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+    ) -> None:
+        old_value = behavior.get_event(idx)
+        undo_manager.on_complex_action(
+            lambda i=idx: behavior.delete_event(i),
+            lambda i=idx, v=old_value: behavior.create_event(v, i),
+        )
+
+    def on_create_animation(
+        self, behavior: HavokBehavior, animation: str, idx: int = -1
+    ) -> None:
+        self.on_complex_action(
+            lambda i=idx: behavior.delete_animation(i),
+            lambda i=idx, v=animation: behavior.create_animation(v, i),
+        )
+
+    def on_update_animation(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+        old_value: str,
+        new_value: str,
+    ) -> None:
+        self.on_complex_action(
+            lambda i=idx, v=old_value: behavior.rename_animation(i, v),
+            lambda i=idx, v=new_value: behavior.rename_animation(i, v),
+        )
+
+    def on_delete_animation(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+    ) -> None:
+        old_value = behavior.get_animation(idx)
+        undo_manager.on_complex_action(
+            lambda i=idx: behavior.delete_animation(i),
+            lambda i=idx, v=old_value: behavior.create_animation(v, i),
+        )
 
     @contextmanager
     def combine(self):

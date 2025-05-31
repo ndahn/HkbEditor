@@ -338,6 +338,7 @@ class GraphEditor:
                 tag=f"{self.tag}_roots_filter",
                 callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                 user_data=f"{self.tag}_roots_table",
+                width=-1,
             )
             dpg.add_separator()
             # Tables are more flexible with item design and support filtering
@@ -375,6 +376,7 @@ class GraphEditor:
                 tag=f"{self.tag}_attribute_filter",
                 callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                 user_data=f"{self.tag}_attributes_table",
+                width=-1,
             )
             dpg.add_separator()
 

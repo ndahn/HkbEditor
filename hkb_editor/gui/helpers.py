@@ -25,28 +25,31 @@ def center_window(window: str, parent: str = None) -> None:
 
 
 def create_value_widget(
-    item_idx: int,
     val_idx: int,
     val: Any,
     *,
     choices: dict[int, str] = None,
     callback: Callable[[str, Any, Any], None] = None,
+    user_data: Any = None,
     on_enter: bool = False,
     **kwargs,
 ):
+    if user_data is None:
+        user_data = val_idx
+
     if choices and val_idx in choices:
         items = choices[val_idx]
         dpg.add_combo(
             items,
             callback=callback,
-            user_data=(item_idx, val_idx),
+            user_data=user_data,
             default_value=items[val if val is not None else 0],
             **kwargs,
         )
     elif val is None or isinstance(val, str):
         dpg.add_input_text(
             callback=callback,
-            user_data=(item_idx, val_idx),
+            user_data=user_data,
             default_value=val or "",
             on_enter=on_enter,
             **kwargs,
@@ -54,7 +57,7 @@ def create_value_widget(
     elif isinstance(val, int):
         dpg.add_input_int(
             callback=callback,
-            user_data=(item_idx, val_idx),
+            user_data=user_data,
             default_value=val,
             on_enter=on_enter,
             **kwargs,
@@ -62,7 +65,7 @@ def create_value_widget(
     elif isinstance(val, float):
         dpg.add_input_float(
             callback=callback,
-            user_data=(item_idx, val_idx),
+            user_data=user_data,
             default_value=val,
             on_enter=on_enter,
             **kwargs,
@@ -70,7 +73,7 @@ def create_value_widget(
     elif isinstance(val, bool):
         dpg.add_checkbox(
             callback=callback,
-            user_data=(item_idx, val_idx),
+            user_data=user_data,
             default_value=val,
             **kwargs,
         )

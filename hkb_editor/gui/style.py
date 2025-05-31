@@ -31,6 +31,13 @@ def pastel(color: tuple[int, int, int, int]):
 
 
 def setup_styles():
+    with dpg.theme() as global_theme:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_FrameBg, (46, 46, 69), category=dpg.mvThemeCat_Core)
+            dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 1, category=dpg.mvThemeCat_Core)
+
+    dpg.bind_theme(global_theme)
+
     global bound_attribute_theme
     global pointer_attribute_theme
     global notification_info_theme
