@@ -8,6 +8,9 @@ _foldable_row_sentinel = object()
 
 
 def is_foldable_row(row: str) -> bool:
+    if not dpg.does_item_exist(row):
+        return False
+    
     data = dpg.get_item_user_data(row)
     return isinstance(data, tuple) and data[0] == _foldable_row_sentinel
 
@@ -150,6 +153,9 @@ def apply_row_indent(
 
 
 def set_foldable_row_status(row: str, expanded: bool) -> None:
+    if not is_foldable_row(row):
+        return
+
     selectable = get_row_selectable_item(row)
     # Will be toggled by the click function
     dpg.set_value(selectable, not expanded)

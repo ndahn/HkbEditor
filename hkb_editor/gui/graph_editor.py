@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
-from . import style
 from .workflows.file_dialog import open_file_dialog, save_file_dialog
+from . import style
+from .helpers import draw_graph_node
 
 
 def get_default_layout_path():
@@ -842,41 +843,13 @@ class GraphEditor:
             return
 
         zoom_factor = self.layout.zoom_factor**self.zoom_level
-        margin = self.layout.text_margin
-        lines = self.get_node_frontpage(node.id)
-
-        if isinstance(lines[0], tuple):
-            lines, colors = zip(*lines)
-        else:
-            colors = [style.white] * len(lines)
-
-        max_len = max(len(s) for s in lines)
-        lines = [s.center(max_len) for s in lines]
-
-        text_h = 12
-        w = (max_len * 6.5 + margin * 2) * zoom_factor
-        h = (text_h * len(lines) + margin * 2) * zoom_factor
-        text_offset_y = text_h * zoom_factor
-
-        with dpg.draw_node(tag=tag, parent=f"{self.tag}_canvas_root"):
-            # Background
-            dpg.draw_rectangle(
-                (0.0, 0.0),
-                (w, h),
-                fill=style.dark_grey,
-                color=style.white,
-                thickness=1,
-                tag=f"{tag}_box",  # for highlighting
-            )
-
-            # Text
-            for i, text in enumerate(lines):
-                dpg.draw_text(
-                    (margin, margin + text_offset_y * i),
-                    text,
-                    size=12 * zoom_factor,
-                    color=colors[i],
-                )
+        w, h = draw_graph_node(
+            self.get_node_frontpage(node.id),
+            margin=self.layout.text_margin,
+            scale=zoom_factor,
+            tag=tag,
+            parent=f"{self.tag}_canvas_root",
+        )
 
         node.size = (w, h)
         node.pos = self._get_pos_for_node(node)

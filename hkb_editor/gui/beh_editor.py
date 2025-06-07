@@ -33,6 +33,7 @@ from .table_tree import (
     table_tree_leaf,
     add_lazy_table_tree_node,
     get_row_node_item,
+    set_foldable_row_status,
 )
 from .workflows.bind_attribute import (
     bindable_attribute,
@@ -46,6 +47,7 @@ from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager
 from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
+from .workflows.state_graph_viewer import open_state_graph_viewer
 from .helpers import make_copy_menu
 from . import style
 
@@ -165,7 +167,13 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(
                 label="Find Object...", callback=lambda: self.open_search_dialog()
             )
-            # TODO enable
+            dpg.add_separator()
+            # TODO not mature enough yet
+            dpg.add_menu_item(
+                label="StateInfo Graph...", 
+                enabled=False,
+                callback=lambda: self.open_stategraph_dialog()
+            )
             dpg.add_separator()
             dpg.add_menu_item(
                 label="Create Object...",
@@ -428,6 +436,29 @@ class BehaviorEditor(GraphEditor):
             # Changing a pointer will change the rendered graph
             self._regenerate_canvas()
 
+    def reveal_attribute(self, path: str) -> None:
+        if not self.selected_node:
+            return
+
+        subpath = ""
+
+        def reveal(part: str):
+            nonlocal subpath
+            subpath += part
+            row = f"{self.tag}_attribute_{subpath}"
+            set_foldable_row_status(row, True)
+
+        for part in path.split("/"):
+            if subpath:
+                subpath += "/"
+            
+            subparts = part.split(":")
+            reveal(subparts[0])
+
+            if len(subparts) > 1:
+                for idx in subparts[1:]:
+                    reveal(f":{idx}")
+
     def _add_attribute_row_contents(self, attribute: str, val: Any, node: Node) -> None:
         obj = self.beh.objects.get(node.id)
         self._create_attribute_widget(obj, val, attribute)
@@ -552,6 +583,7 @@ class BehaviorEditor(GraphEditor):
             if pointer.type_id == vbs_type_id:
                 self._clear_attributes()
                 self._update_attributes(self.selected_node)
+                self.reveal_attribute(path)
 
         def open_pointer_dialog():
             select_pointer(
@@ -644,6 +676,8 @@ class BehaviorEditor(GraphEditor):
             # TODO this will close the unfolded rows, we should have a "reveal_attribute" function
             self._clear_attributes()
             self._update_attributes(self.selected_node)
+            self.reveal_attribute(f"{path}:{idx}")
+
 
         with dpg.group(horizontal=True, tag=tag) as button_group:
             # Deleting from the end doesn't require index updates,
@@ -759,6 +793,7 @@ class BehaviorEditor(GraphEditor):
         self._regenerate_canvas()
         self._clear_attributes()
         self._update_attributes(self.selected_node)
+        # TODO reveal currently revealed attribute
 
     def redo(self) -> None:
         if not undo_manager.can_redo():
@@ -771,6 +806,7 @@ class BehaviorEditor(GraphEditor):
         self._regenerate_canvas()
         self._clear_attributes()
         self._update_attributes(self.selected_node)
+        # TODO reveal currently revealed attribute
 
     def _create_attribute_menu(
         self,
@@ -894,6 +930,7 @@ class BehaviorEditor(GraphEditor):
                     self._regenerate_canvas()
                     self._clear_attributes()
                     self._update_attributes(self.selected_node)
+                    self.reveal_attribute(path)
 
                 dpg.add_separator()
                 dpg.add_selectable(
@@ -1198,6 +1235,10 @@ class BehaviorEditor(GraphEditor):
                 dpg.delete_item(dialog)
 
         dialog = find_object_dialog(self.beh, jump)
+
+    def open_stategraph_dialog(self):
+        active_sm = self.get_active_statemachine()
+        open_state_graph_viewer(self.beh, active_sm.object_id if active_sm else None)
 
     def open_register_clip_dialog(self):
         def on_clip_registered(sender: str, ids: tuple[str, str], user_data: Any):
