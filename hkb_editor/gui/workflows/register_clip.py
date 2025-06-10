@@ -57,10 +57,7 @@ def open_register_clip_dialog(
 
         with undo_manager.combine():
             # Add objects with IDs to behavior
-            undo_manager.on_complex_action(
-                lambda: behavior.remove_object(clipgen_id),
-                lambda: behavior.add_object(clipgen),
-            )
+            undo_manager.on_create_object(behavior, clipgen)
             behavior.add_object(clipgen)
 
             generators: HkbArray = cmsg["generators"]

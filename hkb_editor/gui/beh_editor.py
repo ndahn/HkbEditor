@@ -420,8 +420,11 @@ class BehaviorEditor(GraphEditor):
         old_value: str,
         new_value: str,
     ) -> None:
-        self.add_pinned_object(old_value)
-        self.logger.info("Pinned previous object %s", old_value)
+        if old_value:
+            # Could be an entirely new pointer object with no previous value
+            self.add_pinned_object(old_value)
+            self.logger.info("Pinned previous object %s", old_value)
+        
         self.on_attribute_update(sender, new_value, pointer)
 
         if new_value not in self.nodes:
@@ -881,6 +884,7 @@ class BehaviorEditor(GraphEditor):
                         self.beh, value.subtype, object_id=self.beh.new_id()
                     )
                     with undo_manager.combine():
+                        undo_manager.on_create_object(self.beh, obj)
                         self.beh.add_object(obj)
                         self.on_update_pointer(
                             widget,

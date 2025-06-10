@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 from hkb_editor.hkb.hkb_types import XmlValueHandler, HkbArray, HkbRecord
 from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.tagfile import Tagfile
 
 
 class UndoAction:
@@ -172,6 +173,17 @@ class UndoManager:
 
     def on_complex_action(self, undo_func: Callable, redo_func: Callable) -> None:
         self._on_action(CustomUndoAction(undo_func, redo_func))
+
+    def on_create_object(
+        self,
+        tagfile: Tagfile,
+        new_object: HkbRecord,
+    ) -> None:
+        assert new_object.object_id, "Trying to add an object without an ID"
+        self.on_complex_action(
+            lambda obj=new_object: tagfile.remove_object(obj.object_id),
+            lambda obj=new_object: tagfile.add_object(obj),
+        )
 
     def on_create_variable(
         self,

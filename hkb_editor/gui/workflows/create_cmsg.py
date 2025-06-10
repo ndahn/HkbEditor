@@ -181,22 +181,13 @@ def open_new_cmsg_dialog(
 
         with undo_manager.combine():
             # Add objects with IDs to behavior
-            undo_manager.on_complex_action(
-                lambda: behavior.remove_object(cmsg.object_id),
-                lambda: behavior.add_object(cmsg),
-            )
+            undo_manager.on_create_object(behavior, cmsg)
             behavior.add_object(cmsg)
 
-            undo_manager.on_complex_action(
-                lambda: behavior.remove_object(clipgen.object_id),
-                lambda: behavior.add_object(clipgen),
-            )
+            undo_manager.on_create_object(behavior, clipgen)
             behavior.add_object(clipgen)
 
-            undo_manager.on_complex_action(
-                lambda: behavior.remove_object(stateinfo.object_id),
-                lambda: behavior.add_object(stateinfo),
-            )
+            undo_manager.on_create_object(behavior, stateinfo)
             behavior.add_object(stateinfo)
 
             # add stateinfo to statemachine/states array

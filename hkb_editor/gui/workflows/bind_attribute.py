@@ -120,10 +120,7 @@ def create_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> s
     binding_set = HkbRecord.new(behavior, bindings_type_id, None, binding_id)
 
     # Add the new binding set
-    undo_manager.on_complex_action(
-        lambda: behavior.remove_object(binding_set.object_id),
-        lambda: behavior.add_object(binding_set),
-    )
+    undo_manager.on_create_object(behavior, binding_set)
     behavior.add_object(binding_set)
 
     # Assign pointer to source record
