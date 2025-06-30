@@ -140,16 +140,16 @@ def query_objects(
     query_str: str, tagfile: "Tagfile", subset: Iterable["HkbRecord"] = None
 ) -> Generator["HkbRecord", None, None]:
     try:
-        tree = parser.parse(query_str)
-
         if not subset:
             subset = tagfile.objects.values()
 
         if not query_str or query_str == "*":
-            return list(subset)
+            yield from subset
+            return
 
+        tree = parser.parse(query_str)
         for obj in subset:
             if QueryTransformer(obj).transform(tree):
                 yield obj
     except LarkError as e:
-        raise ValueError from e
+        raise ValueError(f"Query failed for '{query_str}'") from e

@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 import webbrowser
 from dearpygui import dearpygui as dpg
 
@@ -10,17 +10,19 @@ from hkb_editor.gui import style
 
 
 def find_dialog(
-    item_getter: Callable[[str], list[Any]],
+    item_getter: Callable[[str], Iterable[Any]],
     columns: list[str],
     item_to_row: Callable[[Any], tuple[str, ...] | str] = str,
     *,
     sort_key: Callable = None,
-    make_context_menu: Callable[[Any], None] = None,
+    context_menu_func: Callable[[Any], None] = None,
     okay_callback: Callable[[Any], None] = None,
     item_limit: int = None,
     initial_filter: str = "",
     show_index: bool = False,
     title: str = "Find...",
+    filter_help: str = None,
+    on_filter_help_click: Callable[[], None] = None,
     tag: str = 0,
     user_data: Any = None,
 ) -> str:
@@ -30,25 +32,22 @@ def find_dialog(
     selected_item = None
 
     if item_limit is None:
-        item_limit = 100000
+        item_limit = 2000 / len(columns)
 
     def on_filter_update(sender, filt, user_data):
         dpg.delete_item(table, children_only=True, slot=1)
 
         # Get matching items and update total count. May take a while depending on the filter func
-        dpg.show_item(f"{tag}_loading")
-        dpg.hide_item(f"{tag}_total")
-
-        matches = item_getter(filt)
-        dpg.set_value(f"{tag}_total", f"({len(matches)} candidates)")
-
-        dpg.show_item(f"{tag}_total")
-        dpg.hide_item(f"{tag}_loading")
+        # TODO would be nice to have a nicer animation here, 
+        # but the loading indicator has a fixed size
+        dpg.set_value(f"{tag}_total", "(Searching...)")
+        matches = list(item_getter(filt))
 
         if len(matches) > item_limit:
+            dpg.set_value(f"{tag}_total", f"({len(matches)} candidates, refine search!)")
             return
 
-        import time
+        dpg.set_value(f"{tag}_total", f"({len(matches)} candidates)")
 
         for idx, item in enumerate(sorted(matches, key=sort_key)):
             cells = item_to_row(item)
@@ -58,7 +57,6 @@ def find_dialog(
             if show_index:
                 cells = (str(idx),) + cells
 
-            now = time.time()
             with dpg.table_row(parent=table, user_data=item):
                 dpg.add_selectable(
                     label=cells[0],
@@ -67,22 +65,18 @@ def find_dialog(
                     user_data=item,
                     tag=f"{tag}_item_row_{idx}",
                 )
-                if make_context_menu:
+                if context_menu_func:
                     dpg.bind_item_handler_registry(dpg.last_item(), right_click_handler)
 
                 for c in cells[1:]:
                     dpg.add_text(c)
 
-            print(time.time() - now)
-
     def on_select(sender, is_selected: bool, item: Any):
-        print("###", is_selected, item)
         nonlocal selected_item
         if selected_item == item:
             return
 
         selected_item = item
-        print("###", item)
 
         # Deselect all other selectables
         if is_selected:
@@ -91,18 +85,17 @@ def find_dialog(
                     dpg.set_value(dpg.get_item_children(row, slot=1)[0], False)
 
     def on_okay():
-        print("### okay")
         if selected_item is None:
             return
 
         okay_callback(dialog, selected_item, user_data)
         dpg.delete_item(dialog)
 
-    if make_context_menu:
+    if context_menu_func:
 
         def open_context_menu():
             if selected_item is not None:
-                make_context_menu(selected_item)
+                context_menu_func(selected_item)
 
         with dpg.item_handler_registry() as right_click_handler:
             dpg.add_item_clicked_handler(
@@ -111,7 +104,7 @@ def find_dialog(
 
     def on_window_close():
         dpg.delete_item(dialog)
-        if make_context_menu:
+        if context_menu_func:
             dpg.delete_item(right_click_handler)
 
     # Window content
@@ -133,24 +126,24 @@ def find_dialog(
             )
 
             # A helpful tooltip full of help
-            # TODO adjust to search function
-            dpg.add_button(label="?", callback=lambda: webbrowser.open(lucene_url))
-            with dpg.tooltip(dpg.last_item()):
-                for line in lucene_help_text.split("\n"):
-                    bullet = False
-                    if line.startswith("- "):
-                        line = line[2:]
-                        bullet = True
+            if filter_help:
+                dpg.add_button(label="?", callback=on_filter_help_click)
+                with dpg.tooltip(dpg.last_item()):
+                    for line in filter_help.split("\n"):
+                        bullet = False
+                        if line.startswith("- "):
+                            line = line[2:]
+                            bullet = True
 
-                    dpg.add_text(line, bullet=bullet)
+                        dpg.add_text(line, bullet=bullet)
 
-                dpg.add_text(
-                    "(Click the '?' to open the official documentation)",
-                    color=style.blue,
-                )
+                    if on_filter_help_click:
+                        dpg.add_text(
+                            "(Click the '?' for more information)",
+                            color=style.blue,
+                        )
 
-            num_total = len(item_getter("*"))
-            dpg.add_text(f"({num_total} total)", tag=f"{tag}_total")
+            dpg.add_text(f"(X total)", tag=f"{tag}_total")
             dpg.add_loading_indicator(circle_count=1, show=False, tag=f"{tag}_loading")
 
         dpg.add_separator()
@@ -229,9 +222,11 @@ def search_objects_dialog(
         ["ID", "Name", "Type"],
         item_to_row,
         sort_key=lambda o: o.object_id,
-        context_menu=make_context_menu,
+        context_menu_func=make_context_menu,
         okay_callback=None,
         initial_filter=initial_filter,
+        filter_help=lucene_help_text,
+        on_filter_help_click=lambda: webbrowser.open(lucene_url),
         tag=tag,
         user_data=user_data,
     )
@@ -261,9 +256,9 @@ def select_object(
     else:
         candidates = behavior.objects.values()
 
-    def find_matches(filt: str):
-        return query_objects(filt, behavior, candidates)
-
+    def find_matches(filt: str) -> list[HkbRecord]:
+        return list(query_objects(filt, behavior, candidates))
+        
     def item_to_row(item: HkbRecord):
         name = item.get_field("name", "", resolve=True)
         type_name = behavior.type_registry.get_name(item.type_id)
@@ -281,6 +276,8 @@ def select_object(
         okay_callback=on_pointer_selected,
         initial_filter=initial_filter,
         title=title or "Select object",
+        filter_help=lucene_help_text,
+        on_filter_help_click=lambda: webbrowser.open(lucene_url),
         tag=tag,
         user_data=user_data,
     )
@@ -303,8 +300,8 @@ def select_variable(
     ]
 
     def find_matches(filt: str) -> list[HkbVariable]:
-        # TODO lucene support
-        return variables
+        # TODO search could be more fancy for variables
+        return [(idx, var) for idx, var in variables if filt in var.name]
 
     def item_to_row(item: tuple[int, HkbVariable]) -> tuple[str, ...]:
         return (item[0], *item[1].astuple())
@@ -340,8 +337,7 @@ def select_event(
     events = [(idx, evt) for idx, evt in enumerate(behavior.get_events())]
 
     def find_matches(filt: str) -> list[str]:
-        # TODO lucene support
-        return events
+        return [(idx, var) for idx, var in events if filt in var]
 
     def item_to_row(item: tuple[int, str]) -> tuple[str, ...]:
         return item
@@ -381,8 +377,7 @@ def select_animation_name(
     ]
 
     def find_matches(filt: str) -> list[str]:
-        # TODO lucene support
-        return animations
+        return [(idx, var) for idx, var in animations if filt in var]
 
     def item_to_row(item: tuple[int, str]) -> tuple[str, ...]:
         return item
