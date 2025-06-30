@@ -6,11 +6,12 @@ import networkx as nx
 @dataclass
 class Node:
     id: str
+    level: int = 0
     pos: tuple[float, float] = None
     size: tuple[float, float] = None
     visible: bool = False
     unfolded: bool = False
-    layout_data: dict[str, Any] = None
+    user_data: Any = None
 
     @property
     def x(self) -> float:
@@ -59,7 +60,7 @@ class GraphLayout:
     def get_pos_for_node(
         self, graph: nx.DiGraph, node: Node, nodemap: dict[str, Node]
     ) -> tuple[float, float]:
-        level = node.layout_data["level"]
+        level = node.level
 
         if level == 0:
             px, py = self.node0_margin
@@ -68,7 +69,7 @@ class GraphLayout:
 
             for n in nodemap.values():
                 if n.visible:
-                    nl = n.layout_data["level"]
+                    nl = n.level
 
                     if nl == level:
                         # Move down

@@ -82,32 +82,34 @@ def create_value_widget(
         print(f"WARNING cannot handle value {val} with unknown type")
 
 
-def make_copy_menu(getter: HkbRecord | Callable[[], HkbRecord]) -> None:
-    if isinstance(getter, HkbRecord):
-        getter = lambda: getter()
+def make_copy_menu(record_or_getter: HkbRecord | Callable[[], HkbRecord]) -> None:
+    if isinstance(record_or_getter, HkbRecord):
+        getter_func = lambda: record_or_getter
+    else:
+        getter_func = record_or_getter
 
     with dpg.menu(label="Copy"):
         dpg.add_selectable(
             label="ID",
-            callback=lambda: pyperclip.copy(getter().object_id),
+            callback=lambda: pyperclip.copy(getter_func().object_id),
         )
         dpg.add_selectable(
             label="Name",
             callback=lambda: pyperclip.copy(
-                getter().get_field("name", "", resolve=True)
+                getter_func().get_field("name", "", resolve=True)
             ),
         )
         dpg.add_selectable(
             label="Type Name",
-            callback=lambda: pyperclip.copy(getter().type_name),
+            callback=lambda: pyperclip.copy(getter_func().type_name),
         )
         dpg.add_selectable(
             label="Type ID",
-            callback=lambda: pyperclip.copy(getter().type_id),
+            callback=lambda: pyperclip.copy(getter_func().type_id),
         )
         dpg.add_selectable(
             label="XML",
-            callback=lambda: pyperclip.copy(getter().xml()),
+            callback=lambda: pyperclip.copy(getter_func().xml()),
         )
 
 

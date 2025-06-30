@@ -54,7 +54,7 @@ from . import style
 
 class BehaviorEditor(GraphEditor):
     def __init__(self, tag: str | int = 0):
-        # Setup the root logger first before calling super, which will instantiate 
+        # Setup the root logger first before calling super, which will instantiate
         # a new logger
         class LogHandler(logging.Handler):
             def emit(this, record):
@@ -131,8 +131,8 @@ class BehaviorEditor(GraphEditor):
             dpg.add_text("contemplate your life choices...")
 
         # Already centered, this will make it worse somehow
-        #dpg.split_frame(delay=64)
-        #center_window(loading_screen)
+        # dpg.split_frame(delay=64)
+        # center_window(loading_screen)
 
         undo_manager.clear()
         self.alias_manager.clear()
@@ -192,9 +192,9 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
             # TODO not mature enough yet
             dpg.add_menu_item(
-                label="StateInfo Graph...", 
+                label="StateInfo Graph...",
                 enabled=True,
-                callback=lambda: self.open_stategraph_dialog()
+                callback=lambda: self.open_stategraph_dialog(),
             )
             dpg.add_separator()
             dpg.add_menu_item(
@@ -314,27 +314,28 @@ class BehaviorEditor(GraphEditor):
 
         popup = f"{self.tag}_pin_menu"
 
-        if not dpg.does_item_exist(popup):
-            dpg.popup
-            with dpg.window(
-                popup=True,
-                min_size=(100, 20),
-                no_title_bar=True,
-                no_resize=True,
-                no_move=True,
-                no_saved_settings=True,
-                autosize=True,
-                show=False,
-                tag=popup,
-            ):
-                dpg.add_selectable(
-                    label="Unpin", callback=lambda: self.remove_pinned_object(object_id)
-                )
-                dpg.add_selectable(
-                    label="Jump To", callback=lambda: self.jump_to_object(object_id)
-                )
-                dpg.add_selectable(label="Show Attributes", callback=show_attributes)
-                make_copy_menu(pinned_obj)
+        if dpg.does_item_exist(popup):
+            dpg.delete_item(popup)
+            
+        with dpg.window(
+            popup=True,
+            min_size=(100, 20),
+            no_title_bar=True,
+            no_resize=True,
+            no_move=True,
+            no_saved_settings=True,
+            autosize=True,
+            show=False,
+            tag=popup,
+        ):
+            dpg.add_selectable(
+                label="Unpin", callback=lambda: self.remove_pinned_object(object_id)
+            )
+            dpg.add_selectable(
+                label="Jump To", callback=lambda: self.jump_to_object(object_id)
+            )
+            dpg.add_selectable(label="Show Attributes", callback=show_attributes)
+            make_copy_menu(pinned_obj)
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
         dpg.show_item(popup)
@@ -396,7 +397,7 @@ class BehaviorEditor(GraphEditor):
         def on_item_selected(sender, app_data, selected_item: str):
             dpg.set_value(sender, False)
             dpg.delete_item(f"{self.tag}_{node.id}_menu")
-            
+
             if selected_item == "Copy ID":
                 self._copy_to_clipboard(node.id)
             elif selected_item == "Copy Name":
@@ -438,7 +439,7 @@ class BehaviorEditor(GraphEditor):
             # Could be an entirely new pointer object with no previous value
             self.add_pinned_object(old_value)
             self.logger.info("Pinned previous object %s", old_value)
-        
+
         self.on_attribute_update(sender, new_value, pointer)
 
         if new_value not in self.canvas.nodes:
@@ -468,7 +469,7 @@ class BehaviorEditor(GraphEditor):
         for part in path.split("/"):
             if subpath:
                 subpath += "/"
-            
+
             subparts = part.split(":")
             reveal(subparts[0])
 
@@ -694,7 +695,6 @@ class BehaviorEditor(GraphEditor):
             self._clear_attributes()
             self._update_attributes(self.selected_node)
             self.reveal_attribute(f"{path}:{idx}")
-
 
         with dpg.group(horizontal=True, tag=tag) as button_group:
             # Deleting from the end doesn't require index updates,
@@ -1065,13 +1065,17 @@ class BehaviorEditor(GraphEditor):
         if obj.type_id == sm_type:
             return obj
 
-        return next((sm for sm in self.beh.find_parents_by_type(for_object_id, sm_type)), None)
+        return next(
+            (sm for sm in self.beh.find_parents_by_type(for_object_id, sm_type)), None
+        )
 
     # Not used right now, but might be useful at some point
     def get_active_cmsg(self) -> HkbRecord:
         if self.selected_node:
             candidates = [self.selected_node.id]
-            cmsg_type = self.beh.type_registry.find_first_type_by_name("CustomManualSelectorGenerator")
+            cmsg_type = self.beh.type_registry.find_first_type_by_name(
+                "CustomManualSelectorGenerator"
+            )
 
             while candidates:
                 oid = candidates.pop()
@@ -1255,7 +1259,11 @@ class BehaviorEditor(GraphEditor):
 
     def open_stategraph_dialog(self):
         active_sm = self.get_active_statemachine()
-        open_state_graph_viewer(self.beh, active_sm.object_id if active_sm else None)
+        open_state_graph_viewer(
+            self.beh,
+            active_sm.object_id if active_sm else None,
+            jump_callback=lambda s, a, u: self.jump_to_object(a.object_id),
+        )
 
     def open_register_clip_dialog(self):
         def on_clip_registered(sender: str, ids: tuple[str, str], user_data: Any):

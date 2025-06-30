@@ -198,21 +198,23 @@ def search_objects_dialog(
     def make_context_menu(item: HkbRecord):
         popup = f"{tag}_popup"
 
-        if not dpg.does_item_exist(popup):
-            with dpg.window(
-                popup=True,
-                min_size=(100, 20),
-                no_saved_settings=True,
-                autosize=True,
-                tag=popup,
-            ):
-                make_copy_menu(item)
-                if jump_callback:
-                    dpg.add_separator()
-                    dpg.add_selectable(
-                        label="Jump To",
-                        callback=lambda: jump_callback(tag, item.object_id, user_data),
-                    )
+        if dpg.does_item_exist(popup):
+            dpg.delete_item(popup)
+
+        with dpg.window(
+            popup=True,
+            min_size=(100, 20),
+            no_saved_settings=True,
+            autosize=True,
+            tag=popup,
+        ):
+            make_copy_menu(item)
+            if jump_callback:
+                dpg.add_separator()
+                dpg.add_selectable(
+                    label="Jump To",
+                    callback=lambda: jump_callback(tag, item.object_id, user_data),
+                )
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
         dpg.show_item(popup)
