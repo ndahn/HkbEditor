@@ -55,7 +55,7 @@ class GraphLayout:
     step_y: int = 20
     node0_margin: tuple[int, int] = (50, 50)
     text_margin: int = 5
-    zoom_factor: float = 1.5
+    zoom_factor: float = 1.3
 
     def get_pos_for_node(
         self, graph: nx.DiGraph, node: Node, nodemap: dict[str, Node]

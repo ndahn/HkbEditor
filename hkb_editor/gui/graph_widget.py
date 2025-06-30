@@ -166,7 +166,6 @@ class GraphWidget:
             return
 
         bbox = self.get_canvas_content_bbox()
-        print("###", bbox)
         center_x = bbox[0] + bbox[2] / 2
         center_y = bbox[1] + bbox[3] / 2
         canvas_w, canvas_h = dpg.get_item_rect_size(self.canvas)
@@ -214,7 +213,8 @@ class GraphWidget:
         pass
 
     # Canvas interactions
-    def _get_canvas_mouse_pos(self) -> tuple[float, float]:
+    def _get_graph_mouse_pos(self) -> tuple[float, float]:
+        # x+: right, y+: down
         if not dpg.is_item_hovered(self.canvas):
             return (0.0, 0.0)
 
@@ -226,7 +226,7 @@ class GraphWidget:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        mx, my = self._get_canvas_mouse_pos()
+        mx, my = self._get_graph_mouse_pos()
         node = self.get_node_at_pos(mx, my)
 
         if not node:
@@ -238,7 +238,7 @@ class GraphWidget:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        mx, my = self._get_canvas_mouse_pos()
+        mx, my = self._get_graph_mouse_pos()
         node = self.get_node_at_pos(mx, my)
 
         if node:
@@ -318,15 +318,15 @@ class GraphWidget:
 
         # Scrolling too fast can cause problems
         with dpg.mutex():
-            zoom_point = self._get_canvas_mouse_pos()
-            self.set_zoom(self.zoom_level + wheel_delta, zoom_point)
+            # Don't set the zoom point, it will just mess things up
+            self.set_zoom(self.zoom_level + wheel_delta)
 
     def _on_mouse_move(self) -> None:
         if not self.hover_enabled:
             return
 
         if dpg.is_item_hovered(self.canvas):
-            mx, my = self._get_canvas_mouse_pos()
+            mx, my = self._get_graph_mouse_pos()
             node = self.get_node_at_pos(mx, my)
         else:
             node = None
