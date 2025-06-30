@@ -300,7 +300,7 @@ class BehaviorEditor(GraphEditor):
         pinned_obj: HkbRecord = self.beh.retrieve_object(object_id)
 
         def show_attributes():
-            self._deselect_active_node()
+            self.canvas.deselect()
             self._clear_attributes()
 
             # update_attributes wants a Node, not a record, so we do it ourselves
@@ -375,7 +375,7 @@ class BehaviorEditor(GraphEditor):
     def get_node_frontpage_short(self, node_id: str) -> str:
         return self.beh.objects[node_id]["name"].get_value()
 
-    def get_node_menu_items(self, node: Node) -> list[str]:
+    def open_node_menu(self, node):
         obj = self.beh.objects.get(node.id)
         if not obj:
             return []
@@ -394,46 +394,38 @@ class BehaviorEditor(GraphEditor):
 
         actions.extend(["Copy XML", "-", "Pin Object"])
 
-        return actions
+        def on_item_selected(sender, app_data, selected_item: str):
+            dpg.set_value(sender, False)
+            dpg.delete_item(f"{self.tag}_{node.id}_menu")
+            
+            if selected_item == "Copy ID":
+                self._copy_to_clipboard(node.id)
+            elif selected_item == "Copy Name":
+                obj = self.beh.objects[node.id]
+                self._copy_to_clipboard(obj["name"])
+            elif selected_item == "Copy XML":
+                obj = self.beh.objects[node.id]
+                self._copy_to_clipboard(obj.xml())
+            elif selected_item == "Pin Object":
+                self.add_pinned_object(node.id)
+            else:
+                self.logger.warning("Not implemented yet")
 
-    def on_node_menu_item_selected(self, node: Node, selected_item: str) -> None:
-        # TODO redesign, just make normal menus and use _make_copy_menu
-        if selected_item == "Copy ID":
-            self._copy_to_clipboard(node.id)
-        elif selected_item == "Copy Name":
-            obj = self.beh.objects[node.id]
-            self._copy_to_clipboard(obj["name"])
-        elif selected_item == "Copy XML":
-            obj = self.beh.objects[node.id]
-            self._copy_to_clipboard(obj.xml())
-        elif selected_item == "Pin Object":
-            self.add_pinned_object(node.id)
-        else:
-            self.logger.warning("Not implemented yet")
+        with dpg.window(
+            popup=True,
+            min_size=(100, 20),
+            on_close=lambda: dpg.delete_item(wnd),
+        ) as wnd:
+            dpg.add_text(node.id, color=style.blue)
+            dpg.add_separator()
 
-    def get_canvas_menu_items(self) -> list[str]:
-        return [
-            "Reset View",
-            "Show All",
-            "Zoom In",
-            "Zoom Out",
-        ]
-
-    def on_canvas_menu_item_selected(self, selected_item: str) -> None:
-        if selected_item == "Reset View":
-            self.set_zoom(0, (0.0, 0.0))
-
-        elif selected_item == "Show All":
-            self.zoom_show_all(limits=False)
-
-        elif selected_item == "Zoom In":
-            self.set_zoom(self.zoom_level + 1)
-
-        elif selected_item == "Zoom Out":
-            self.set_zoom(self.zoom_level - 1)
-
-    def on_node_selected(self, node: Node) -> None:
-        pass
+            for item in actions:
+                if item == "-":
+                    dpg.add_separator()
+                else:
+                    dpg.add_selectable(
+                        label=item, callback=on_item_selected, user_data=item
+                    )
 
     def on_update_pointer(
         self,
@@ -450,17 +442,17 @@ class BehaviorEditor(GraphEditor):
         
         self.on_attribute_update(sender, new_value, pointer)
 
-        if new_value not in self.nodes:
+        if new_value not in self.canvas.nodes:
             # Edges have changed, previous node may not be connected anymore, new
             # node may not be part of the current statemachine graph yet, ...
             root_id = self.get_active_statemachine().object_id
             selected = self.selected_node
             self._on_root_selected(sender, True, root_id)
             if selected:
-                self._select_node(selected)
+                self.canvas.select(selected)
         else:
             # Changing a pointer will change the rendered graph
-            self._regenerate_canvas()
+            self.canvas.regenerate()
 
     def reveal_attribute(self, path: str) -> None:
         if not self.selected_node:
@@ -671,7 +663,7 @@ class BehaviorEditor(GraphEditor):
             # Records potentially contain pointers which will affect the graph
             Handler = get_value_handler(self.beh.type_registry, array.element_type_id)
             if Handler in (HkbRecord, HkbPointer):
-                self._regenerate_canvas()
+                self.canvas.regenerate()
 
             dpg.delete_item(f"{self.tag}_attribute_{path}:{idx}")
 
@@ -816,7 +808,7 @@ class BehaviorEditor(GraphEditor):
         undo_manager.undo()
 
         # TODO so expensive....
-        self._regenerate_canvas()
+        self.canvas.regenerate()
         self._clear_attributes()
         self._update_attributes(self.selected_node)
         # TODO reveal currently revealed attribute
@@ -829,7 +821,7 @@ class BehaviorEditor(GraphEditor):
         undo_manager.redo()
 
         # TODO so expensive....
-        self._regenerate_canvas()
+        self.canvas.regenerate()
         self._clear_attributes()
         self._update_attributes(self.selected_node)
         # TODO reveal currently revealed attribute
@@ -922,8 +914,8 @@ class BehaviorEditor(GraphEditor):
                     if not oid or oid == "object0":
                         return
 
-                    node = self.nodes[oid]
-                    self._select_node(node)
+                    node = self.canvas.nodes[oid]
+                    self.canvas.select(node)
                     # TODO not quite right yet, not sure why
                     self.look_at(node.x + node.width / 2, node.y + node.width / 2)
 
@@ -954,7 +946,7 @@ class BehaviorEditor(GraphEditor):
                     # If a new binding set was created the graph will change
                     # binding_var, binding_set_id = data
                     # TODO graph needs to be rebuilt
-                    self._regenerate_canvas()
+                    self.canvas.regenerate()
                     self._clear_attributes()
                     self._update_attributes(self.selected_node)
                     self.reveal_attribute(path)
@@ -1106,7 +1098,8 @@ class BehaviorEditor(GraphEditor):
 
         # Reveal the node in the state machine graph
         path = nx.shortest_path(self.graph, root.object_id, object_id)
-        self._show_node_path([self.nodes[n] for n in path])
+        self._clear_attributes()
+        self.canvas.show_node_path(path)
 
     def open_variable_editor(self):
         def on_add(idx: int, new_value: tuple[str, int, int, int]):
