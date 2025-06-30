@@ -50,6 +50,7 @@ class GraphWidget:
         self.graph = None
         self.root: str = None
         self.nodes: dict[str, Node] = {}
+        self.hovered_node: Node = None
         self.selected_node: Node = None
         self.canvas: str = None
         self.transform: tuple[float, float] = (0.0, 0.0)
@@ -186,6 +187,8 @@ class GraphWidget:
 
             dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
 
+            dpg.add_mouse_move_handler(callback=self._on_mouse_move)
+
     # Canvas interactions
     def _get_canvas_mouse_pos(self) -> tuple[float, float]:
         if not dpg.is_item_hovered(self.canvas):
@@ -293,6 +296,31 @@ class GraphWidget:
             zoom_point = self._get_canvas_mouse_pos()
             self.set_zoom(self.zoom_level + wheel_delta, zoom_point)
 
+    def _on_mouse_move(self) -> None:
+        if dpg.is_item_hovered(self.canvas):
+            mx, my = self._get_canvas_mouse_pos()
+            node = self.get_node_at_pos(mx, my)
+        else:
+            node = None
+        
+        if self.hovered_node:
+            self._set_node_hovered(self.hovered_node, False)
+            for n in nx.all_neighbors(self.graph, self.hovered_node.id):
+                neighbor = self.nodes[n]
+                if neighbor.visible:
+                    self._set_node_hovered(n, False)
+                    # TODO edges
+
+        if node:
+            self._set_node_hovered(node, True)
+            for n in nx.all_neighbors(self.graph, node.id):
+                neighbor = self.nodes[n]
+                if neighbor.visible:
+                    self._set_node_hovered(n, True)
+                    # TODO edges
+
+        self.hovered_node = node
+
     # Canvas content management
     def clear(self):
         dpg.delete_item(f"{self.tag}_root", children_only=True)
@@ -375,7 +403,7 @@ class GraphWidget:
         if self.single_branch_mode:
             if node != self.selected_node:
                 if self.selected_node:
-                    self._set_highlight(self.selected_node, False)
+                    self._set_node_highlight(self.selected_node, False)
                 self.isolate_branch(node)
         else:
             if node == self.selected_node:
@@ -383,12 +411,12 @@ class GraphWidget:
                 return
             else:
                 if self.selected_node:
-                    self._set_highlight(self.selected_node, False)
+                    self._set_node_highlight(self.selected_node, False)
                 self._unfold_node(node)
 
         self.selected_node = node
         self._unfold_node(node)
-        self._set_highlight(node, True)
+        self._set_node_highlight(node, True)
         
         if self.on_node_selected:
             self.on_node_selected(node)
@@ -397,16 +425,38 @@ class GraphWidget:
         if self.selected_node is None:
             return
 
-        self._set_highlight(self.selected_node, False)
+        self._set_node_highlight(self.selected_node, False)
         self._fold_node(self.selected_node)
         self.selected_node = None
 
         if self.on_node_selected:
             self.on_node_selected(None)
 
-    def _set_highlight(self, node: Node, highlighted: bool) -> None:
+    def _set_node_highlight(self, node: Node | str, highlighted: bool) -> None:
+        if isinstance(node, Node):
+            node = node.id
+
         color = style.blue if highlighted else style.white
-        dpg.configure_item(f"{self.tag}_node_{node.id}_box", color=color)
+        dpg.configure_item(f"{self.tag}_node_{node}_box", color=color)
+
+    def _set_edge_highlight(self, node_a: Node | str, node_b: Node | str, highlighted: bool) -> None:
+        if isinstance(node_a, Node):
+            node_a = node_a.id
+
+        if isinstance(node_b, Node):
+            node_b = node_b.id
+
+        thickness = 2 if highlighted else 1
+        dpg.configure_item(f"{self.tag}_edge_{node_a}_TO_{node_b}", thickness=thickness)
+
+        # TODO highlight edge label if it exists, redraw it to place it on top
+
+    def _set_node_hovered(self, node: Node | str, hovered: bool) -> None:
+        if isinstance(node, Node):
+            node = node.id
+
+        thickness = 2 if hovered else 1
+        dpg.configure_item(f"{self.tag}_node_{node}_box", thickness=thickness)
 
     def _unfold_node(self, node: Node) -> None:
         self._draw_node(node)
