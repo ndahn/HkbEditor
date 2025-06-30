@@ -7,7 +7,7 @@ from logging import getLogger
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
-from .graph_widget import GraphWidget, Layout, Node
+from .graph_widget import GraphWidget, GraphLayout, Node
 from .workflows.file_dialog import open_file_dialog, save_file_dialog
 from . import style
 
@@ -53,9 +53,9 @@ class GraphEditor:
         pass
 
     def get_node_frontpage(
-        self, node_id: str
+        self, node: Node
     ) -> list[str] | list[tuple[str, tuple[int, int, int, int]]]:
-        return [f"<{node_id}>"]
+        return [f"<{node.id}>"]
 
     def get_node_frontpage_short(self, node_id: str) -> str:
         return node_id
@@ -287,7 +287,7 @@ class GraphEditor:
         ):
             self.canvas = GraphWidget(
                 None, 
-                Layout(),
+                GraphLayout(),
                 on_node_selected=self.on_node_selected,
                 node_menu_func=self.open_node_menu,
                 get_node_frontpage=self.get_node_frontpage,

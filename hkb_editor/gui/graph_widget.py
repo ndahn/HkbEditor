@@ -1,83 +1,34 @@
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from dearpygui import dearpygui as dpg
 import networkx as nx
 import math
 from dataclasses import dataclass
 
+from .graph_layout import GraphLayout, Node
 from . import style
 from .helpers import estimate_drawn_text_size
-
-
-@dataclass
-class Layout:
-    gap_x: int = 30
-    step_y: int = 20
-    node0_margin: tuple[int, int] = (50, 50)
-    text_margin: int = 5
-    zoom_factor: float = 1.5
-
-
-@dataclass
-class Node:
-    id: str
-    pos: tuple[float, float] = None
-    size: tuple[float, float] = None
-    visible: bool = False
-    unfolded: bool = False
-    layout_data: dict[str, Any] = None
-
-    @property
-    def x(self) -> float:
-        return self.pos[0]
-
-    @property
-    def y(self) -> float:
-        return self.pos[1]
-
-    @property
-    def width(self) -> float:
-        return self.size[0]
-
-    @property
-    def height(self) -> float:
-        return self.size[1]
-
-    @property
-    def bbox(self) -> tuple[float, float, float, float]:
-        return (
-            self.pos[0],
-            self.pos[1],
-            self.pos[0] + self.size[0],
-            self.pos[1] + self.size[1],
-        )
-
-    def contains(self, px: float, py: float) -> bool:
-        bbox = self.bbox
-        return bbox[0] <= px < bbox[2] and bbox[1] <= py < bbox[3]
-
-    def __str__(self):
-        return self.id
-
-    def __hash__(self):
-        return hash(self.id)
 
 
 class GraphWidget:
     def __init__(
         self,
         graph: nx.DiGraph = None,
-        layout: Layout = None,
+        layout: GraphLayout = None,
         *,
         on_node_selected: Callable[[Node], None] = None,
         node_menu_func: Callable[[Node], None] = None,
-        get_node_frontpage: Callable[[str], str | list[tuple[str, tuple[int, int, int, int]]]] = None,
+        get_node_frontpage: Callable[[str], str | list[str] | list[tuple[str, tuple[int, int, int, int]]]] = None,
+        get_edge_label: Callable[[Node, Node], str] = None,
+        draw_edges: bool = True,
+        edge_style: Literal["manhattan", "straight"] = "manhattan",
+        select_enabled: bool = True,
         single_branch_mode: bool = True,
         width: int = 800,
         height: int = 800,
         tag: str = None,
     ):
         if not layout:
-            layout = Layout()
+            layout = GraphLayout()
 
         if not get_node_frontpage:
             get_node_frontpage = lambda s: s
@@ -89,6 +40,10 @@ class GraphWidget:
         self.on_node_selected = on_node_selected
         self.node_menu_func = node_menu_func
         self.get_node_frontpage = get_node_frontpage
+        self.get_edge_label = get_edge_label
+        self.draw_edges = draw_edges
+        self.edge_style = edge_style
+        self.select_enabled = select_enabled
         self.single_branch_mode = single_branch_mode
         self.tag = tag
 
@@ -367,7 +322,7 @@ class GraphWidget:
         for node in want_visible:
             for child_id in self.graph.successors(node.id):
                 child_node = self.nodes[child_id]
-                if child_node.visible:
+                if child_node.visible and self.draw_edges:
                     self._draw_edge(node, child_node)
 
         if selected:
@@ -411,6 +366,9 @@ class GraphWidget:
                 self._remove_from_canvas(n)
 
     def select(self, node: Node | str):
+        if not self.select_enabled:
+            return
+
         if isinstance(node, str):
             node = self.nodes[node]
 
@@ -456,16 +414,30 @@ class GraphWidget:
         for child_id in self.graph.successors(node.id):
             child_node = self.nodes[child_id]
             self._draw_node(child_node)
-            self._draw_edge(node, child_node)
+            if self.draw_edges:
+                self._draw_edge(node, child_node)
 
         node.unfolded = True
 
-    # TODO not used at the moment, layout is not clean
-    def _unfold_all(self, node: Node) -> None:
+    def reveal_connected(self, node: Node | str = None) -> None:
+        if not node:
+            node = self.root
+        
+        if isinstance(node, str):
+            node = self.nodes[node]
+
         for succ_id in nx.descendants(self.graph, node.id):
             succ = self.nodes[succ_id]
             succ.visible = True
             succ.unfolded = True
+
+        self.regenerate()
+
+    def reveal_all(self) -> None:
+        for n in self.graph.nodes:
+            node = self.nodes[n]
+            node.visible = True
+            node.unfolded = True
 
         self.regenerate()
 
@@ -486,38 +458,6 @@ class GraphWidget:
 
         node.unfolded = False
 
-    def _get_pos_for_node(self, node: Node) -> tuple[float, float]:
-        level = node.layout_data["level"]
-
-        if level == 0:
-            px, py = self.layout.node0_margin
-        else:
-            px = py = 0.0
-
-            for n in self.nodes.values():
-                if n.visible:
-                    nl = n.layout_data["level"]
-
-                    if nl == level:
-                        # Move down
-                        py = max(py, n.y + n.height)
-
-                    elif nl == (level - 1):
-                        # Move to the right
-                        px = max(px, n.x + n.width)
-
-            px += self.layout.gap_x * self.zoom_factor
-
-            if py > 0.0:
-                py += self.layout.step_y * self.zoom_factor
-            else:
-                parent_id = next(
-                    n for n in self.graph.predecessors(node.id) if self.nodes[n].visible
-                )
-                py = self.nodes[parent_id].y
-
-        return px, py
-
     def _draw_node(self, node: Node) -> None:
         tag = f"{self.tag}_node_{node.id}"
 
@@ -529,11 +469,15 @@ class GraphWidget:
         margin = self.layout.text_margin
         text_h = 12
         text_offset_y = text_h * scale
-        lines = self.get_node_frontpage(node.id)
+        lines = self.get_node_frontpage(node)
+        colors = None
 
-        if isinstance(lines[0], tuple):
+        if isinstance(lines, str):
+            lines = [lines]
+        elif isinstance(lines[0], tuple):
             lines, colors = zip(*lines)
-        else:
+        
+        if not colors:
             colors = [style.white] * len(lines)
 
         max_len = max(len(s) for s in lines)
@@ -563,7 +507,7 @@ class GraphWidget:
                 )
 
         node.size = (w, h)
-        node.pos = self._get_pos_for_node(node)
+        node.pos = self.layout.get_pos_for_node(self.graph, node, self.nodes)
         node.visible = True
         dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
 
@@ -577,21 +521,37 @@ class GraphWidget:
         bx = node_b.x
         by = node_b.y + node_b.height / 2
 
-        # Manhatten line
-        # The right side of node_a depends on its width, whereas the left side of all nodes
-        # on the same level should be aligned, so this will give a more consistent look.
-        mid_x = bx - self.layout.gap_x / 2
+        if self.edge_style == "manhattan":
+            # The right side of node_a depends on its width, whereas the left side of all nodes
+            # on the same level should be aligned, so this will give a more consistent look.
+            mid_x = bx - self.layout.gap_x / 2
 
-        dpg.draw_polygon(
-            [
+            dpg.draw_polygon(
+                [
+                    (ax, ay),
+                    (mid_x, ay),
+                    (mid_x, by),
+                    (bx, by),
+                ],
+                tag=tag,
+                parent=f"{self.tag}_root",
+            )
+        elif self.edge_style == "straight":
+            dpg.draw_line(
                 (ax, ay),
-                (mid_x, ay),
-                (mid_x, by),
                 (bx, by),
-            ],
-            tag=tag,
-            parent=f"{self.tag}_root",
-        )
+                tag=tag,
+                parent=f"{self.tag}_root",
+            )
+
+        if self.get_edge_label:
+            label = self.get_edge_label(node_a, node_b)
+            if label:
+                # TODO render text to buffer and rotate to match edge
+                tw, th = estimate_drawn_text_size(len(label), font_size=11)
+                tx = (ax + bx) * 2 / 5 - tw / 2
+                ty = (ay + by) * 2 / 5 - th / 2
+                dpg.draw_text((tx, ty), label, size=11, parent=f"{self.tag}_root")
 
     def _remove_from_canvas(self, node: Node) -> None:
         if not node:

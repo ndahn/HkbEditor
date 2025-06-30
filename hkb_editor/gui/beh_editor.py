@@ -53,7 +53,6 @@ from . import style
 
 
 class BehaviorEditor(GraphEditor):
-
     def __init__(self, tag: str | int = 0):
         # Setup the root logger first before calling super, which will instantiate 
         # a new logger
@@ -194,7 +193,7 @@ class BehaviorEditor(GraphEditor):
             # TODO not mature enough yet
             dpg.add_menu_item(
                 label="StateInfo Graph...", 
-                enabled=False,
+                enabled=True,
                 callback=lambda: self.open_stategraph_dialog()
             )
             dpg.add_separator()
@@ -358,17 +357,17 @@ class BehaviorEditor(GraphEditor):
         obj: HkbRecord = self.beh.objects[node.id]
         return {k: v for k, v in obj.get_value().items()}
 
-    def get_node_frontpage(self, node_id: str) -> list[str]:
-        obj = self.beh.objects[node_id]
+    def get_node_frontpage(self, node: Node) -> list[str]:
+        obj = self.beh.objects[node.id]
         try:
             return [
                 (obj["name"].get_value(), style.yellow),
-                (node_id, style.blue),
+                (node.id, style.blue),
                 (self.beh.type_registry.get_name(obj.type_id), style.white),
             ]
         except AttributeError:
             return [
-                (node_id, style.blue),
+                (node.id, style.blue),
                 (self.beh.type_registry.get_name(obj.type_id), style.white),
             ]
 
@@ -1053,12 +1052,10 @@ class BehaviorEditor(GraphEditor):
     # Common use cases
     def get_active_statemachine(self, for_object_id: str = None) -> HkbRecord:
         if not for_object_id:
-            if self.selected_node:
+            if self.canvas.graph:
+                for_object_id = self.canvas.root
+            elif self.selected_node:
                 for_object_id = self.selected_node.id
-            elif self.graph.number_of_nodes() > 0:
-                for_object_id = next(
-                    n for n, in_deg in self.graph.in_degree() if in_deg == 0
-                )
 
         if not for_object_id:
             return None
@@ -1082,7 +1079,7 @@ class BehaviorEditor(GraphEditor):
                 if obj.type_id == cmsg_type:
                     return obj
 
-                candidates.extend(self.graph.predecessors(oid))
+                candidates.extend(self.canvas.graph.predecessors(oid))
 
         return None
 
@@ -1097,7 +1094,7 @@ class BehaviorEditor(GraphEditor):
         self._on_root_selected("", True, root.object_id)
 
         # Reveal the node in the state machine graph
-        path = nx.shortest_path(self.graph, root.object_id, object_id)
+        path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
         self._clear_attributes()
         self.canvas.show_node_path(path)
 
