@@ -8,7 +8,7 @@ from dearpygui import dearpygui as dpg
 import networkx as nx
 
 from .graph_widget import GraphWidget, GraphLayout, Node
-from .workflows.file_dialog import open_file_dialog, save_file_dialog
+from .dialogs import open_file_dialog, save_file_dialog
 from . import style
 
 

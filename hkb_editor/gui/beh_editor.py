@@ -21,14 +21,16 @@ from hkb_editor.hkb.hkb_types import (
     HkbBool,
     get_value_handler,
 )
+from hkb_editor.hkb.skeleton import load_boneweight_array
 from hkb_editor.hkb.hkb_enums import get_hkb_enum
 
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
+    open_file_dialog,
     edit_simple_array_dialog,
     select_object,
     search_objects_dialog,
-    open_state_graph_viewer
+    open_state_graph_viewer,
 )
 from .table_tree import (
     table_tree_leaf,
@@ -43,9 +45,8 @@ from .workflows.bind_attribute import (
     set_bindable_attribute_state,
     unbind_attribute,
 )
-from .workflows.file_dialog import open_file_dialog
 from .workflows.undo import undo_manager
-from .workflows.aliases import AliasManager
+from .workflows.aliases import AliasManager, AliasMap
 from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
 from .helpers import make_copy_menu, center_window
@@ -215,7 +216,7 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_menu_item(label="Load Bone Names...", callback=self.load_bone_names)
             dpg.add_menu_item(
-                label="Generate Mirror Map...",
+                label="Generate Bone Mirror Map...",
                 callback=self.open_bone_mirror_map_dialog,
                 enabled=False,
             )
@@ -1252,22 +1253,6 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
-    def open_array_aliases_editor(self):
-        # TODO open dialog, update alias manager
-        pass
-
-    def load_bone_names(self) -> None:
-        file_path = open_file_dialog(
-            title="Select Skeleton", filetypes={"Skeleton files": "*.xml"}
-        )
-
-        if file_path:
-            try:
-                self.logger.info("Loading bone names from %s", file_path)
-                self.alias_manager.load_bone_names(self.beh, file_path)
-            except ValueError as e:
-                self.logger.error("Loading bone names failed: %s", e, exc_info=True)
-
     def open_search_dialog(self, close_after_select: bool = False):
         tag = f"{self.tag}_search_dialog"
         if dpg.does_item_exist(tag):
@@ -1350,6 +1335,32 @@ class BehaviorEditor(GraphEditor):
             return
 
         # TODO
+
+    def load_bone_names(self) -> None:
+        file_path = open_file_dialog(
+            title="Select Skeleton", filetypes={"Skeleton files": "*.xml"}
+        )
+
+        if file_path:
+            try:
+                self.logger.info("Loading bone names from %s", file_path)
+
+                boneweight_array = load_boneweight_array(self.beh, file_path)
+                boneweights_type_id = self.beh.type_registry.find_first_type_by_name(
+                    "hkbBoneWeightArray"
+                )
+                basepath = "boneWeights"
+                aliases = AliasMap()
+
+                for idx, bone in enumerate(boneweight_array):
+                    aliases.add(
+                        bone["name"], f"{basepath}:{idx}", boneweights_type_id, None
+                    )
+
+                # Insert left so that these aliases take priority
+                self.alias_manager.aliases.insert(0, aliases)
+            except ValueError as e:
+                self.logger.error("Loading bone names failed: %s", e, exc_info=True)
 
     def open_bone_mirror_map_dialog(self):
         # TODO
