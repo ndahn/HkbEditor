@@ -153,7 +153,7 @@ def open_state_graph_viewer(
 
     with dpg.window(
         label=title,
-        width=800,
+        width=850,
         height=600,
         no_scroll_with_mouse=True,
         no_scrollbar=True,
@@ -187,7 +187,7 @@ def open_state_graph_viewer(
                     height=1000,
                 )
 
-            with dpg.group(width=200):
+            with dpg.group(width=150):
                 dpg.add_combo(
                     sm_items,
                     default_value=default_sm,

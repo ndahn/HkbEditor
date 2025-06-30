@@ -28,6 +28,7 @@ from .dialogs import (
     edit_simple_array_dialog,
     select_object,
     search_objects_dialog,
+    open_state_graph_viewer
 )
 from .table_tree import (
     table_tree_leaf,
@@ -47,7 +48,6 @@ from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager
 from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
-from .workflows.state_graph_viewer import open_state_graph_viewer
 from .helpers import make_copy_menu, center_window
 from . import style
 
@@ -174,41 +174,50 @@ class BehaviorEditor(GraphEditor):
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
             dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
             dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
+
             dpg.add_separator()
-            dpg.add_menu_item(label="Load Skeleton...", callback=self.load_bone_names)
-            # TODO enable
-            dpg.add_menu_item(label="Attribute Aliases...", enabled=False)
-            dpg.add_separator()
+
             dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
             dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
             dpg.add_menu_item(
                 label="Animations...", callback=self.open_animation_names_editor
             )
 
+            dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="StateInfo Graph...",
+                callback=lambda: self.open_stategraph_dialog(),
+            )
+
+            dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="Find Object...", callback=lambda: self.open_search_dialog()
+            )
+
         with dpg.menu(
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
             dpg.add_menu_item(
-                label="Find Object...", callback=lambda: self.open_search_dialog()
-            )
-            dpg.add_separator()
-            # TODO not mature enough yet
-            dpg.add_menu_item(
-                label="StateInfo Graph...",
-                enabled=True,
-                callback=lambda: self.open_stategraph_dialog(),
-            )
-            dpg.add_separator()
-            dpg.add_menu_item(
-                label="Create Object...",
-                enabled=False,
-                callback=self.create_object_dialog,
+                label="Create CMSG...", callback=self.open_create_cmsg_dialog
             )
             dpg.add_menu_item(
                 label="Register Clip...", callback=self.open_register_clip_dialog
             )
             dpg.add_menu_item(
-                label="Create CMSG...", callback=self.open_create_cmsg_dialog
+                label="Create Object...",
+                enabled=False,
+                callback=self.create_object_dialog,
+            )
+
+            dpg.add_separator()
+
+            dpg.add_menu_item(label="Load Bone Names...", callback=self.load_bone_names)
+            dpg.add_menu_item(
+                label="Generate Mirror Map...",
+                callback=self.open_bone_mirror_map_dialog,
+                enabled=False,
             )
 
         self._create_settings_menu()
@@ -1287,28 +1296,6 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
-    def open_register_clip_dialog(self):
-        tag = f"{self.tag}_register_clip_dialog"
-        if dpg.does_item_exist(tag):
-            dpg.focus_item(tag)
-            return
-
-        def on_clip_registered(sender: str, ids: tuple[str, str], user_data: Any):
-            clip_id, cmsg_id = ids
-            self.jump_to_object(clip_id)
-
-            # This is a bit ugly, but so is adding more stuff to ids
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
-                self.add_pinned_object(clip_id)
-                self.add_pinned_object(cmsg_id)
-
-        open_register_clip_dialog(
-            self.beh,
-            on_clip_registered,
-            tag=tag,
-        )
-
     def open_create_cmsg_dialog(self):
         tag = f"{self.tag}_create_cmsg_dialog"
         if dpg.does_item_exist(tag):
@@ -1334,6 +1321,28 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
+    def open_register_clip_dialog(self):
+        tag = f"{self.tag}_register_clip_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
+        def on_clip_registered(sender: str, ids: tuple[str, str], user_data: Any):
+            clip_id, cmsg_id = ids
+            self.jump_to_object(clip_id)
+
+            # This is a bit ugly, but so is adding more stuff to ids
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                self.add_pinned_object(clip_id)
+                self.add_pinned_object(cmsg_id)
+
+        open_register_clip_dialog(
+            self.beh,
+            on_clip_registered,
+            tag=tag,
+        )
+
     def create_object_dialog(self):
         tag = f"{self.tag}_create_object_dialog"
         if dpg.does_item_exist(tag):
@@ -1341,3 +1350,7 @@ class BehaviorEditor(GraphEditor):
             return
 
         # TODO
+
+    def open_bone_mirror_map_dialog(self):
+        # TODO
+        pass

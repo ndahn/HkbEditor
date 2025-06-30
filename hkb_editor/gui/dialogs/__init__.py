@@ -8,3 +8,4 @@ from .find_object import (
     select_animation_name,
 )
 from .make_tuple import new_tuple_dialog
+from .state_graph_viewer import open_state_graph_viewer
