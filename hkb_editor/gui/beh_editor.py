@@ -79,6 +79,7 @@ class BehaviorEditor(GraphEditor):
                 min_size=(20, 20),
                 no_title_bar=True,
                 no_focus_on_appearing=True,
+                no_saved_settings=True,
                 no_close=True,
                 no_collapse=True,
                 no_move=True,
@@ -150,6 +151,7 @@ class BehaviorEditor(GraphEditor):
         with dpg.window(
             label="Exit?",
             modal=True,
+            no_saved_settings=True,
             on_close=lambda: dpg.delete_item(wnd),
         ) as wnd:
             if self.last_save == 0.0:
@@ -180,7 +182,7 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(label="Variables...", callback=self.open_variable_editor)
             dpg.add_menu_item(label="Events...", callback=self.open_event_editor)
             dpg.add_menu_item(
-                label="Animations...", callback=self.open_animation_editor
+                label="Animations...", callback=self.open_animation_names_editor
             )
 
         with dpg.menu(
@@ -316,7 +318,8 @@ class BehaviorEditor(GraphEditor):
 
         if dpg.does_item_exist(popup):
             dpg.delete_item(popup)
-            
+
+        # Pin context menu
         with dpg.window(
             popup=True,
             min_size=(100, 20),
@@ -411,9 +414,11 @@ class BehaviorEditor(GraphEditor):
             else:
                 self.logger.warning("Not implemented yet")
 
+        # Node menu
         with dpg.window(
             popup=True,
             min_size=(100, 20),
+            no_saved_settings=True,
             on_close=lambda: dpg.delete_item(wnd),
         ) as wnd:
             dpg.add_text(node.id, color=style.blue)
@@ -1103,6 +1108,11 @@ class BehaviorEditor(GraphEditor):
         self.canvas.show_node_path(path)
 
     def open_variable_editor(self):
+        tag = f"{self.tag}_edit_variables_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
         def on_add(idx: int, new_value: tuple[str, int, int, int]):
             if self.beh.find_variable(new_value[0], None):
                 self.logger.warning(
@@ -1127,7 +1137,10 @@ class BehaviorEditor(GraphEditor):
             self.beh.delete_variable(idx)
 
         edit_simple_array_dialog(
-            [(v.name, v.vtype.value, v.vmin, v.vmax) for v in self.beh.get_variables()],
+            [
+                (v.name, v.vtype.value, v.vmin, v.vmax)
+                for v in self.beh.get_variables(full_info=True)
+            ],
             ["Name", "Type", "Min", "Max"],
             title="Edit Variables",
             help=[
@@ -1141,9 +1154,15 @@ class BehaviorEditor(GraphEditor):
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
+            tag=tag,
         )
 
     def open_event_editor(self):
+        tag = f"{self.tag}_edit_events_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
         def on_add(idx: int, new_value: tuple[str]):
             new_value = new_value[0]
             if self.beh.find_event(new_value, None):
@@ -1178,9 +1197,15 @@ class BehaviorEditor(GraphEditor):
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
+            tag=tag,
         )
 
-    def open_animation_editor(self):
+    def open_animation_names_editor(self):
+        tag = f"{self.tag}_edit_animation_names_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
         def on_add(idx: int, new_value: tuple[str]):
             new_value = new_value[0]
             if self.beh.find_animation(new_value, None):
@@ -1215,6 +1240,7 @@ class BehaviorEditor(GraphEditor):
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
+            tag=tag,
         )
 
     def open_array_aliases_editor(self):
@@ -1233,39 +1259,40 @@ class BehaviorEditor(GraphEditor):
             except ValueError as e:
                 self.logger.error("Loading bone names failed: %s", e, exc_info=True)
 
-    def open_create_object_dialog(
-        self,
-        type_id: str,
-        callback: Callable[[str, int, Any], None],
-        user_data: Any = None,
-    ) -> None:
-        # TODO create a proper dialog here
-        obj = HkbRecord.new(self.beh, type_id, object_id=self.beh.new_id())
-
-        if "name" in obj.fields:
-            obj["name"] = "<new object>"
-
-        if callback:
-            callback(None, obj, user_data)
-
     def open_search_dialog(self, close_after_select: bool = False):
+        tag = f"{self.tag}_search_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
         def jump(sender: str, object_id: str, user_data: Any):
             self.jump_to_object(object_id)
 
             if close_after_select:
                 dpg.delete_item(dialog)
 
-        dialog = search_objects_dialog(self.beh, jump)
+        dialog = search_objects_dialog(self.beh, jump, tag=tag)
 
     def open_stategraph_dialog(self):
+        tag = f"{self.tag}_state_graph_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
         active_sm = self.get_active_statemachine()
         open_state_graph_viewer(
             self.beh,
             active_sm.object_id if active_sm else None,
             jump_callback=lambda s, a, u: self.jump_to_object(a.object_id),
+            tag=tag,
         )
 
     def open_register_clip_dialog(self):
+        tag = f"{self.tag}_register_clip_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
         def on_clip_registered(sender: str, ids: tuple[str, str], user_data: Any):
             clip_id, cmsg_id = ids
             self.jump_to_object(clip_id)
@@ -1279,9 +1306,15 @@ class BehaviorEditor(GraphEditor):
         open_register_clip_dialog(
             self.beh,
             on_clip_registered,
+            tag=tag,
         )
 
     def open_create_cmsg_dialog(self):
+        tag = f"{self.tag}_create_cmsg_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
         def on_cmsg_created(sender: str, ids: tuple[str, str, str], user_data: Any):
             cmsg_id, clipgen_id, stateinfo_id = ids
             self.jump_to_object(cmsg_id)
@@ -1298,7 +1331,13 @@ class BehaviorEditor(GraphEditor):
             self.beh,
             on_cmsg_created,
             active_statemachine_id=active_sm.object_id if active_sm else None,
+            tag=tag,
         )
 
     def create_object_dialog(self):
-        pass
+        tag = f"{self.tag}_create_object_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
+        # TODO

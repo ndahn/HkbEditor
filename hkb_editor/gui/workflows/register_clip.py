@@ -74,6 +74,7 @@ def open_register_clip_dialog(
         height=600,
         autosize=True,
         on_close=lambda: dpg.delete_item(dialog),
+        no_saved_settings=True,
         tag=tag,
     ) as dialog:
         # ClipGenerator name

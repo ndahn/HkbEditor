@@ -34,6 +34,7 @@ def new_tuple_dialog(
         min_size=(100, 30),
         autosize=True,
         label=title,
+        no_saved_settings=True,
         on_close=lambda: dpg.delete_item(dialog),
         tag=tag,
     ) as dialog:

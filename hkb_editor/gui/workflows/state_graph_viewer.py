@@ -114,7 +114,7 @@ def open_state_graph_viewer(
                 return event
         return None
 
-    def make_context_menu(item: Node) -> None:
+    def open_context_menu(item: Node) -> None:
         popup = f"{tag}_popup"
 
         if dpg.does_item_exist(popup):
@@ -123,10 +123,10 @@ def open_state_graph_viewer(
         with dpg.window(
             popup=True,
             min_size=(100, 20),
-            no_saved_settings=True,
             autosize=True,
-            tag=popup,
+            no_saved_settings=True,
             on_close=lambda: dpg.delete_item(popup),
+            tag=popup,
         ):
             make_copy_menu(item)
             if jump_callback:
@@ -157,6 +157,7 @@ def open_state_graph_viewer(
         height=600,
         no_scroll_with_mouse=True,
         no_scrollbar=True,
+        no_saved_settings=True,
         horizontal_scrollbar=False,
         tag=tag,
         on_close=on_close,
@@ -176,7 +177,7 @@ def open_state_graph_viewer(
                     None,
                     graph_layout,
                     on_node_selected=None,
-                    node_menu_func=make_context_menu,
+                    node_menu_func=open_context_menu,
                     get_node_frontpage=get_node_frontpage,
                     get_edge_label=get_edge_label,
                     rainbow_edges=True,

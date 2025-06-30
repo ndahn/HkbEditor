@@ -67,12 +67,13 @@ class GraphWidget:
         self.zoom_level = 0
         self.zoom_min = -3
         self.zoom_max = 3
+        self.invert_zoom = False
 
         self._setup_content(width, height)
         self.set_graph(graph)
 
     def deinit(self):
-        dpg.delete_item(self.handler_registry)    
+        dpg.delete_item(self.handler_registry)
         dpg.delete_item(self.canvas)
 
     @property
@@ -165,6 +166,7 @@ class GraphWidget:
             return
 
         bbox = self.get_canvas_content_bbox()
+        print("###", bbox)
         center_x = bbox[0] + bbox[2] / 2
         center_y = bbox[1] + bbox[3] / 2
         canvas_w, canvas_h = dpg.get_item_rect_size(self.canvas)
@@ -272,7 +274,10 @@ class GraphWidget:
                 self.set_zoom(self.zoom_level - 1)
 
         with dpg.window(
-            popup=True, min_size=(100, 20), on_close=lambda: dpg.delete_item(wnd)
+            popup=True,
+            min_size=(100, 20),
+            no_saved_settings=True,
+            on_close=lambda: dpg.delete_item(wnd),
         ) as wnd:
             for item in actions:
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
@@ -305,7 +310,7 @@ class GraphWidget:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        if dpg.get_value(f"{self.tag}_settings_invert_zoom"):
+        if self.invert_zoom:
             wheel_delta = -wheel_delta
 
         # +/-1 only

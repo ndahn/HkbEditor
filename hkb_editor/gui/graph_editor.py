@@ -36,7 +36,7 @@ class GraphEditor:
         self.last_save: float = 0.0
         self.selected_roots: set[str] = set()
         self.selected_node: Node = None
-        
+
         self._setup_content()
 
     # These should be implemented by subclasses
@@ -84,7 +84,7 @@ class GraphEditor:
 
         if path.isfile(user_layout):
             shutil.move(get_custom_layout_path(), get_custom_layout_path() + ".old")
-        
+
         # Replace the user layout with the default
         shutil.move(default_layout, user_layout)
 
@@ -123,21 +123,34 @@ class GraphEditor:
                 label="Save layout as default", callback=self._save_app_layout
             )
             dpg.add_menu_item(
-                label="Restore factory layout", callback=self._restore_default_app_layout
+                label="Restore factory layout",
+                callback=self._restore_default_app_layout,
             )
 
             dpg.add_separator()
             dpg.add_menu_item(label="Exit", callback=self.exit_app)
 
     def _create_settings_menu(self):
+        def set_invert_zoom():
+            self.canvas.invert_zoom = dpg.get_value(f"{self.tag}_settings_invert_zoom")
+
+        def set_single_branch_mode():
+            self.canvas.single_branch_mode = dpg.get_value(
+                f"{self.tag}_settings_single_branch_mode"
+            )
+
         with dpg.menu(label="Settings", tag=f"{self.tag}_menu_settings"):
             dpg.add_menu_item(
-                label="Invert Zoom", check=True, tag=f"{self.tag}_settings_invert_zoom"
+                label="Invert Zoom",
+                check=True,
+                tag=f"{self.tag}_settings_invert_zoom",
+                callback=set_invert_zoom,
             )
             dpg.add_menu_item(
                 label="Single Branch Mode",
                 check=True,
                 default_value=True,
+                callback=set_single_branch_mode,
                 tag=f"{self.tag}_settings_single_branch_mode",
             )
 
@@ -286,13 +299,13 @@ class GraphEditor:
             tag=f"{self.tag}_canvas_window",
         ):
             self.canvas = GraphWidget(
-                None, 
+                None,
                 GraphLayout(),
                 on_node_selected=self.on_node_selected,
                 node_menu_func=self.open_node_menu,
                 get_node_frontpage=self.get_node_frontpage,
                 single_branch_mode=True,
-                tag=f"{self.tag}_canvas"
+                tag=f"{self.tag}_canvas",
             )
 
         # Attributes panel
@@ -314,9 +327,7 @@ class GraphEditor:
 
             # Child window is needed to fix table sizing
             with dpg.child_window(border=False):
-                dpg.add_text(
-                    "", tag=f"{self.tag}_attributes_title", color=style.blue
-                )
+                dpg.add_text("", tag=f"{self.tag}_attributes_title", color=style.blue)
                 with dpg.table(
                     delay_search=True,
                     no_host_extendX=True,

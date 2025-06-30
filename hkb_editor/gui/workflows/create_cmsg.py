@@ -220,6 +220,7 @@ def open_new_cmsg_dialog(
         height=600,
         autosize=True,
         on_close=lambda: dpg.delete_item(dialog),
+        no_saved_settings=True,
         tag=tag,
     ) as dialog:
         # Statemachine

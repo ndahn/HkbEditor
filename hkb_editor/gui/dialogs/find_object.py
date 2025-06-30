@@ -113,6 +113,7 @@ def find_dialog(
         height=400,
         label=title,
         on_close=on_window_close,
+        no_saved_settings=True,
         tag=tag,
     ) as dialog:
         # Way too many options, instead fill the table according to user input
