@@ -26,8 +26,8 @@ from hkb_editor.hkb.hkb_enums import get_hkb_enum
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
     edit_simple_array_dialog,
-    select_pointer,
-    find_object_dialog,
+    select_object,
+    search_objects_dialog,
 )
 from .table_tree import (
     table_tree_leaf,
@@ -48,7 +48,7 @@ from .workflows.aliases import AliasManager
 from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
 from .workflows.state_graph_viewer import open_state_graph_viewer
-from .helpers import make_copy_menu
+from .helpers import make_copy_menu, center_window
 from . import style
 
 
@@ -114,12 +114,35 @@ class BehaviorEditor(GraphEditor):
         Thread(target=remove_notification, daemon=True).start()
 
     def _do_load_from_file(self, file_path: str):
+        with dpg.window(
+            modal=True,
+            no_close=True,
+            no_move=True,
+            no_collapse=True,
+            no_title_bar=True,
+            no_resize=True,
+            no_scroll_with_mouse=True,
+            no_scrollbar=True,
+            no_saved_settings=True,
+        ) as loading_screen:
+            dpg.add_loading_indicator()
+            dpg.add_text(f"Loading {os.path.basename(file_path)}...")
+            dpg.add_separator()
+            dpg.add_text("Relax, get a coffee, breathe, maybe")
+            dpg.add_text("contemplate your life choices...")
+
+        # Already centered, this will make it worse somehow
+        #dpg.split_frame(delay=64)
+        #center_window(loading_screen)
+
         undo_manager.clear()
         self.alias_manager.clear()
         filename = os.path.basename(file_path)
         dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
         self.beh = HavokBehavior(file_path)
         self._set_menus_enabled(True)
+
+        dpg.delete_item(loading_screen)
 
     def _do_write_to_file(self, file_path):
         self.beh.save_to_file(file_path)
@@ -574,9 +597,9 @@ class BehaviorEditor(GraphEditor):
     ) -> str:
         attribute = path.split("/")[-1]
 
-        def on_pointer_selected(sender, target_id: str, user_data: Any):
+        def on_pointer_selected(sender, target: HkbRecord, user_data: Any):
             self.on_update_pointer(
-                sender, source_record, pointer, pointer.get_value(), target_id
+                sender, source_record, pointer, pointer.get_value(), target.object_id
             )
 
             # If the binding set pointer changed we should regenerate all attribute widgets
@@ -589,7 +612,7 @@ class BehaviorEditor(GraphEditor):
                 self.reveal_attribute(path)
 
         def open_pointer_dialog():
-            select_pointer(
+            select_object(
                 self.beh, pointer.subtype, on_pointer_selected, include_derived=True
             )
 
@@ -1238,7 +1261,7 @@ class BehaviorEditor(GraphEditor):
             if close_after_select:
                 dpg.delete_item(dialog)
 
-        dialog = find_object_dialog(self.beh, jump)
+        dialog = search_objects_dialog(self.beh, jump)
 
     def open_stategraph_dialog(self):
         active_sm = self.get_active_statemachine()

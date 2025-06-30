@@ -1,4 +1,4 @@
-from typing import Generator, TYPE_CHECKING
+from typing import Generator, Iterable, TYPE_CHECKING
 import fnmatch
 from lark import Lark, Transformer, LarkError
 from rapidfuzz import fuzz
@@ -94,10 +94,10 @@ class QueryTransformer(Transformer):
         token = str(args[0])
 
         return any(
-            self._match(path, token) 
+            self._match(path, token)
             for path in ("object_id", "type_id", "type_name", "name")
         )
-        
+
     # common matching function
     def _match(self, path: str, token: str) -> bool:
         if path.startswith('"') or path.startswith("'"):
@@ -136,11 +136,19 @@ class QueryTransformer(Transformer):
         return actual == token
 
 
-def query_objects(tagfile: "Tagfile", query_str: str) -> Generator["HkbRecord", None, None]:
+def query_objects(
+    query_str: str, tagfile: "Tagfile", subset: Iterable["HkbRecord"] = None
+) -> Generator["HkbRecord", None, None]:
     try:
         tree = parser.parse(query_str)
 
-        for obj in tagfile.objects.values():
+        if not subset:
+            subset = tagfile.objects.values()
+
+        if not query_str or query_str == "*":
+            return list(subset)
+
+        for obj in subset:
             if QueryTransformer(obj).transform(tree):
                 yield obj
     except LarkError as e:

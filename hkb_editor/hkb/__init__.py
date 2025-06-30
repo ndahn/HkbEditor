@@ -13,4 +13,5 @@ from .hkb_types import (
     get_value_handler,
     wrap_element,
 )
+from .cached_array import CachedArray
 from .hkb_enums import get_hkb_enum

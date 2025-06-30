@@ -7,6 +7,7 @@ import networkx as nx
 
 from .tagfile import Tagfile
 from .hkb_types import HkbRecord, HkbArray, HkbString
+from .cached_array import CachedArray
 
 
 _undefined = object()
@@ -32,7 +33,7 @@ class HkbVariable:
     vmax: int
 
     def astuple(self) -> tuple[str, int, int, int]:
-        return tuple(self.name, self.vtype, self.vmin, self.vmax)
+        return (self.name, self.vtype, self.vmin, self.vmax)
 
 
 class HavokBehavior(Tagfile):
@@ -46,9 +47,9 @@ class HavokBehavior(Tagfile):
         )
         strings_obj = next(self.find_objects_by_type(strings_type_id))
 
-        self._events: HkbArray = strings_obj["eventNames"]
-        self._variables: HkbArray = strings_obj["variableNames"]
-        self._animations: HkbArray = strings_obj["animationNames"]
+        self._events = CachedArray[str].wrap(strings_obj["eventNames"])
+        self._variables = CachedArray[str].wrap(strings_obj["variableNames"])
+        self._animations = CachedArray[str].wrap(strings_obj["animationNames"])
 
         graphdata_type_id = self.type_registry.find_first_type_by_name("hkbBehaviorGraphData")
         graphdata_obj = next(self.find_objects_by_type(graphdata_type_id))
@@ -85,9 +86,8 @@ class HavokBehavior(Tagfile):
         return g
 
     def create_event(self, event_name: str, idx: int = -1) -> int:
-        self._events.insert(
-            idx, HkbString.new(self, self._events.element_type_id, event_name)
-        )
+        self._events.insert(idx, event_name)
+
         # This one never has any meaningful data, but must still have an entry
         self._event_infos.insert(
             idx, HkbRecord.new(self, self._event_infos.element_type_id)
@@ -95,10 +95,10 @@ class HavokBehavior(Tagfile):
         return len(self._events) - 1
 
     def get_events(self) -> list[str]:
-        return [e.get_value() for e in self._events]
+        return self._events.get_value()
 
     def get_event(self, idx: int) -> str:
-        return self._events[idx].get_value()
+        return self._events[idx]
 
     def find_event(self, event: str, default: Any = _undefined) -> int:
         try:
@@ -109,7 +109,7 @@ class HavokBehavior(Tagfile):
             raise
 
     def rename_event(self, idx: int, new_name: str) -> None:
-        self._events[idx].set_value(new_name)
+        self._events[idx] = new_name
 
     def delete_event(self, idx: int = -1) -> None:
         del self._event_infos[idx]
@@ -124,9 +124,7 @@ class HavokBehavior(Tagfile):
         max_: int = 0,
         idx: int = -1,
     ) -> int:
-        self._variables.insert(
-            idx, HkbString.new(self, self._variables.element_type_id, variable_name)
-        )
+        self._variables.insert(idx, variable_name)
 
         # These must have matching entries as well
         self._variable_infos.insert(
@@ -153,11 +151,14 @@ class HavokBehavior(Tagfile):
 
         return len(self._variables) - 1
 
-    def get_variables(self) -> list[HkbVariable]:
-        return [self.get_variable(i) for i in range(len(self._variables))]
+    def get_variables(self, full_info: bool = False) -> list[str] | list[HkbVariable]:
+        if full_info:
+            return [self.get_variable(i) for i in range(len(self._variables))]
+        
+        return self._variables.get_value()
 
     def get_variable_name(self, idx: int) -> str:
-        return self._variables[idx].get_value()
+        return self._variables[idx]
 
     def get_variable(self, idx: int) -> HkbVariable:
         return HkbVariable(
@@ -192,7 +193,7 @@ class HavokBehavior(Tagfile):
 
     # animationNames array
     def get_full_animation_name(self, animation_name: str) -> str:
-        ref = self._animations[-1].get_value()
+        ref = self._animations[-1]
         parts = ref.split("\\")
 
         # Assume it's already a full name
@@ -206,27 +207,27 @@ class HavokBehavior(Tagfile):
 
         return "\\".join(parts)
 
+    def get_short_animation_name(self, full_anim_name: str) -> str:
+        return full_anim_name.rsplit("\\", maxsplit=1)[-1].rsplit(".", maxsplit=1)[0]
+
     def create_animation(self, animation_name: str, idx: int = -1) -> int:
         full_anim_name = self.get_full_animation_name(animation_name)
-        self._animations.insert(
-            idx,
-            HkbString.new(self, self._animations.element_type_id, full_anim_name)
-        )
+        self._animations.insert(idx, full_anim_name)
         return len(self._animations) - 1
 
     def get_animations(self, full_names: bool = False) -> list[str]:
         if full_names:
-            return [a.get_value() for a in self._animations]
+            return self._animations.get_value()
 
-        return [self.get_animation(i, False) for i in range(len(self._animations))]
+        return [self.get_short_animation_name(a) for a in self._animations]
 
     def get_animation(self, idx: int, full_name: bool = False) -> str:
-        anim: str = self._animations[idx].get_value()
+        anim: str = self._animations[idx]
         if full_name:
             return anim
 
         # Extract the aXXX_YYYYYY part (see get_full_animation_name)
-        return anim.rsplit("\\", maxsplit=1)[-1].rsplit(".", maxsplit=1)[0]
+        return self.get_short_animation_name(anim)
 
     def find_animation(self, animation_name: str, default: Any = _undefined) -> int:
         try:
@@ -239,7 +240,7 @@ class HavokBehavior(Tagfile):
 
     def rename_animation(self, idx: int, new_name: str) -> None:
         full_anim_name = self.get_full_animation_name(new_name)
-        self._animations[idx].set_value(full_anim_name)
+        self._animations[idx] = full_anim_name
 
     def delete_animation(self, idx: int = -1) -> None:
         del self._animations[idx]

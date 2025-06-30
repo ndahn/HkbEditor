@@ -104,7 +104,7 @@ class Tagfile:
         return None
 
     def query(self, query_str: str) -> Generator["HkbRecord", None, None]:
-        yield from query_objects(self, query_str)
+        yield from query_objects(query_str, self)
 
     def new_id(self, offset: int = 0) -> str:
         new_id = self._next_object_id + offset

@@ -182,7 +182,7 @@ class HkbArray(XmlValueHandler):
     def __init__(
         self,
         tagfile: Tagfile,
-        element: ET.Element,
+        element: ET._Element,
         type_id: str,
     ):
         if element.tag != "array":
@@ -205,8 +205,9 @@ class HkbArray(XmlValueHandler):
             self.element.remove(child)
 
     def get_value(self) -> list[XmlValueHandler]:
+        Handler = get_value_handler(self.tagfile, self.element_type_id)
         return [
-            wrap_element(self.tagfile, elem, self.element_type_id)
+            Handler(self.tagfile, elem, self.element_type_id)
             for elem in self.element
         ]
 
@@ -250,7 +251,7 @@ class HkbArray(XmlValueHandler):
         item = next(e for i, e in enumerate(self.element) if i == index)
         return wrap_element(self.tagfile, item, self.element_type_id)
 
-    def __setitem__(self, index: int, value: Any) -> None:
+    def __setitem__(self, index: int, value: XmlValueHandler | Any) -> None:
         if index < 0:
             index = len(self) + index
         
@@ -277,7 +278,7 @@ class HkbArray(XmlValueHandler):
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return Handler.new(self.tagfile, self.element_type_id, value)
 
-    def index(self, value: XmlValueHandler) -> int:
+    def index(self, value: XmlValueHandler | Any) -> int:
         if isinstance(value, XmlValueHandler):
             if value.type_id != self.element_type_id:
                 raise ValueError(
@@ -292,7 +293,7 @@ class HkbArray(XmlValueHandler):
 
         raise IndexError("Item not found")
 
-    def append(self, value: XmlValueHandler | Any):
+    def append(self, value: XmlValueHandler | Any) -> None:
         if not isinstance(value, XmlValueHandler):
             value = self._wrap_value(value)
         
@@ -304,7 +305,7 @@ class HkbArray(XmlValueHandler):
         self.element.append(value.element)
         self._count += 1
 
-    def insert(self, index: int, value: XmlValueHandler) -> None:
+    def insert(self, index: int, value: XmlValueHandler | Any) -> None:
         if index < 0:
             index = len(self) + index
         

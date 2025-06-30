@@ -76,7 +76,7 @@ def select_variable_to_bind(
                 on_bind(sender, [selected_idx, binding_id], user_data)
 
     select_variable(
-        behavior, on_variable_selected, selected=bound_var_idx, user_data=user_data
+        behavior, on_variable_selected, user_data=user_data
     )
 
 

@@ -10,7 +10,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.gui.dialogs import select_event, select_animation_name, select_pointer
+from hkb_editor.gui.dialogs import select_event, select_animation_name, select_object
 from hkb_editor.gui.helpers import center_window
 from hkb_editor.gui import style
 
@@ -340,8 +340,8 @@ def open_new_cmsg_dialog(
             # StateInfo transition pointer
             # TODO we probably need a table to get a clean layout
             with dpg.group(horizontal=True):
-                def on_pointer_selected(sender: str, target_id: str, user_data: Any):
-                    dpg.set_value(f"{tag}_stateinfo_transitions", target_id)
+                def on_pointer_selected(sender: str, target: HkbRecord, user_data: Any):
+                    dpg.set_value(f"{tag}_stateinfo_transitions", target.object_id)
 
                 dpg.add_input_text(
                     default_value="",
@@ -352,7 +352,7 @@ def open_new_cmsg_dialog(
                 dpg.add_button(
                     arrow=True,
                     direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: select_pointer(*u),
+                    callback=lambda s, a, u: select_object(*u),
                     user_data=(behavior, transition_type, on_pointer_selected)
                 )
                 dpg.add_text("StateInfo Transitions")
