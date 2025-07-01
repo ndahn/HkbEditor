@@ -387,7 +387,7 @@ class BehaviorEditor(GraphEditor):
 
     def get_node_attributes(self, node: Node) -> dict[str, Any]:
         obj: HkbRecord = self.beh.objects[node.id]
-        return {k: v for k, v in obj.get_value().items()}
+        return obj.get_value().items()
 
     def get_node_frontpage(self, node: Node) -> list[str]:
         obj = self.beh.objects[node.id]
@@ -630,7 +630,7 @@ class BehaviorEditor(GraphEditor):
                     )
                     dpg.add_text(label, color=label_color)
 
-        self._create_attribute_menu(widget, source_record, value, path)
+        self._create_attribute_menu(widget, source_record, value, path, is_simple)
 
     def _create_attribute_widget_pointer(
         self,
@@ -907,7 +907,7 @@ class BehaviorEditor(GraphEditor):
         source_record: HkbRecord,
         value: XmlValueHandler,
         path: str,
-        is_simple: bool = False,
+        is_simple: bool,
     ):
         # Should never happen, but development is funny ~
         if value is None:
