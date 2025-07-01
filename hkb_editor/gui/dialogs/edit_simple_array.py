@@ -2,6 +2,7 @@ from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.gui.helpers import center_window, create_value_widget
+from hkb_editor.gui import style
 from .make_tuple import new_tuple_dialog
 
 
@@ -156,6 +157,10 @@ def edit_simple_array_dialog(
         if help:
             dpg.add_separator()
             for line in help:
-                dpg.add_text(line)
+                color = style.white
+                if isinstance(line, tuple):
+                    line, color = line
+                
+                dpg.add_text(line, color=color)
 
     fill_table()

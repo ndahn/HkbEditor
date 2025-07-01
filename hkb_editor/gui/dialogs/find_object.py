@@ -132,13 +132,26 @@ def find_dialog(
             if filter_help:
                 dpg.add_button(label="?", callback=on_filter_help_click)
                 with dpg.tooltip(dpg.last_item()):
-                    for line in filter_help.split("\n"):
+                    if isinstance(filter_help, str):
+                        help_text = filter_help.split("\n")
+                    elif isinstance(filter_help, tuple):
+                        text, color = filter_help
+                        help_text = [(line, color) for line in text.split("\n")]
+                    else:
+                        # Assume it's some kind of iterable
+                        help_text = filter_help
+
+                    for line in help_text:
+                        color = style.white
+                        if isinstance(line, tuple):
+                            line, color = line
+
                         bullet = False
                         if line.startswith("- "):
                             line = line[2:]
                             bullet = True
 
-                        dpg.add_text(line, bullet=bullet)
+                        dpg.add_text(line, bullet=bullet, color=color)
 
                     if on_filter_help_click:
                         dpg.add_text(
@@ -233,7 +246,7 @@ def search_objects_dialog(
         context_menu_func=make_context_menu,
         okay_callback=None,
         initial_filter=initial_filter,
-        filter_help=lucene_help_text,
+        filter_help=(lucene_help_text, style.light_blue),
         on_filter_help_click=lambda: webbrowser.open(lucene_url),
         tag=tag,
         user_data=user_data,

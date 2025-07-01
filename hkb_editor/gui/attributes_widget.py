@@ -113,7 +113,7 @@ class AttributesWidget:
         if not undo_manager.can_undo():
             return
 
-        self.notification(f"Undo: {undo_manager.top()}")
+        self.logger.info(f"Undo: {undo_manager.top()}")
         undo_manager.undo()
 
         if self.on_graph_changed:
@@ -127,7 +127,7 @@ class AttributesWidget:
         if not undo_manager.can_redo():
             return
 
-        self.notification(f"Redo: {undo_manager.top()}")
+        self.logger.info(f"Redo: {undo_manager.top()}")
         undo_manager.redo()
 
         if self.on_graph_changed:

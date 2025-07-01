@@ -29,6 +29,9 @@ def open_bone_mirror_dialog(
             title="Select Skeleton File", filetypes={"Skeleton.xml": "*.xml"}
         )
 
+        if not path:
+            return
+
         nonlocal bones
         bones = load_skeleton_bones(path)
 
@@ -47,6 +50,9 @@ def open_bone_mirror_dialog(
         path = open_file_dialog(
             title="Select Character File", filetypes={"Character/cXXXX.xml": "*.xml"}
         )
+
+        if not path:
+            return
 
         nonlocal mirror_info
         character = Tagfile(path)

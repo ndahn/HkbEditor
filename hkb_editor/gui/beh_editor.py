@@ -577,9 +577,15 @@ class BehaviorEditor(GraphEditor):
             ["Name", "Type", "Min", "Max"],
             title="Edit Variables",
             help=[
-                "Warning:",
-                "Variables are referenced by their index in VariableBindingSets.",
-                "Deleting or inserting names may invalidate your behavior.",
+                ("Warning:", style.orange),
+                (
+                    "Variables are referenced by their index in VariableBindingSets.",
+                    style.light_blue,
+                ),
+                (
+                    "Deleting or inserting names may invalidate your behavior.",
+                    style.light_blue,
+                ),
             ],
             choices={
                 1: [v.name for v in VariableType],
@@ -623,9 +629,15 @@ class BehaviorEditor(GraphEditor):
             ["Name"],
             title="Edit Events",
             help=[
-                "Warning:",
-                "Events are referenced by their index in TransitionInfos.",
-                "Deleting or inserting events may invalidate your behavior.",
+                ("Warning:", style.orange),
+                (
+                    "Events are referenced by their index in TransitionInfos.",
+                    style.light_blue,
+                ),
+                (
+                    "Deleting or inserting events may invalidate your behavior.",
+                    style.light_blue,
+                ),
             ],
             on_add=on_add,
             on_update=on_update,
@@ -666,9 +678,15 @@ class BehaviorEditor(GraphEditor):
             ["Name"],
             title="Edit Animation Names",
             help=[
-                "Warning:",
-                "Animation names are referenced by their index in ClipGenerators.",
-                "Deleting or inserting names may invalidate your behavior.",
+                ("Warning:", style.orange),
+                (
+                    "Animation names are referenced by their index in ClipGenerators.",
+                    style.light_blue,
+                ),
+                (
+                    "Deleting or inserting names may invalidate your behavior.",
+                    style.light_blue,
+                ),
             ],
             on_add=on_add,
             on_update=on_update,
@@ -777,26 +795,28 @@ class BehaviorEditor(GraphEditor):
             title="Select Skeleton", filetypes={"Skeleton files": "*.xml"}
         )
 
-        if file_path:
-            try:
-                self.logger.info("Loading bone names from %s", file_path)
+        if not file_path:
+            return
 
-                bones = load_skeleton_bones(file_path)
-                self.loaded_skeleton_path = file_path
+        try:
+            self.logger.info("Loading bone names from %s", file_path)
 
-                boneweights_type_id = self.beh.type_registry.find_first_type_by_name(
-                    "hkbBoneWeightArray"
-                )
-                basepath = "boneWeights"
-                aliases = AliasMap()
+            bones = load_skeleton_bones(file_path)
+            self.loaded_skeleton_path = file_path
 
-                for idx, bone in enumerate(bones):
-                    aliases.add(bone, f"{basepath}:{idx}", boneweights_type_id, None)
+            boneweights_type_id = self.beh.type_registry.find_first_type_by_name(
+                "hkbBoneWeightArray"
+            )
+            basepath = "boneWeights"
+            aliases = AliasMap()
 
-                # Insert left so that these aliases take priority
-                self.alias_manager.aliases.insert(0, aliases)
-            except ValueError as e:
-                self.logger.error("Loading bone names failed: %s", e, exc_info=True)
+            for idx, bone in enumerate(bones):
+                aliases.add(bone, f"{basepath}:{idx}", boneweights_type_id, None)
+
+            # Insert left so that these aliases take priority
+            self.alias_manager.aliases.insert(0, aliases)
+        except ValueError as e:
+            self.logger.error("Loading bone names failed: %s", e, exc_info=True)
 
     def open_bone_mirror_map_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"

@@ -44,8 +44,8 @@ lucene_url = "https://lucene.apache.org/core/2_9_4/queryparsersyntax.html"
 lucene_help_text = """\
 Supports Lucene-style search queries (<field>:<value>). 
 
-- Fields are used verbatim, with the only excception that array indices may 
-    be replaced by a * wildcard.
+- Fields are used verbatim, with the only excception that array indices 
+   may be replaced by a * wildcard.
 - Values may be specified using fields, wildcards, fuzzy searches, ranges.
 - Terms may be combined using grouping, AND, OR, NOT. 
 
