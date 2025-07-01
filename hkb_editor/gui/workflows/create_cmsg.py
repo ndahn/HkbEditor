@@ -1,6 +1,4 @@
 from typing import Any, Callable
-import re
-from logging import getLogger
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
@@ -16,9 +14,6 @@ from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_event, select_animation_name, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
 from hkb_editor.gui import style
-
-
-_logger = getLogger(__name__)
 
 
 def open_new_cmsg_dialog(
@@ -415,3 +410,4 @@ Don't forget to place new events in eventinfo.txt!\
 
     dpg.split_frame()
     center_window(dialog)
+    return dialog

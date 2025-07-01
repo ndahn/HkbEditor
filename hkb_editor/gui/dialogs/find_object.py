@@ -179,7 +179,7 @@ def find_dialog(
                 )
 
     on_filter_update(f"{tag}_filter", initial_filter, None)
-    return tag
+    return dialog
 
 
 def search_objects_dialog(

@@ -1,5 +1,4 @@
 from typing import Any, Callable
-from logging import getLogger
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
@@ -180,3 +179,4 @@ def open_register_clip_dialog(
 
     dpg.split_frame()
     center_window(dialog)
+    return dialog

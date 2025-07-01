@@ -52,6 +52,7 @@ from .workflows.aliases import AliasManager, AliasMap
 from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
 from .workflows.bone_mirror import open_bone_mirror_dialog
+from .workflows.create_object import open_create_object_dialog
 from .helpers import make_copy_menu, create_flag_checkboxes
 from . import style
 
@@ -222,15 +223,13 @@ class BehaviorEditor(GraphEditor):
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
             dpg.add_menu_item(
-                label="Create CMSG...", callback=self.open_create_cmsg_dialog
+                label="Create Object...", callback=self.create_object_dialog,
             )
             dpg.add_menu_item(
                 label="Register Clip...", callback=self.open_register_clip_dialog
             )
             dpg.add_menu_item(
-                label="Create Object...",
-                enabled=False,
-                callback=self.create_object_dialog,
+                label="Create CMSG...", callback=self.open_create_cmsg_dialog
             )
 
             dpg.add_separator()
@@ -1395,7 +1394,17 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        # TODO
+        def on_object_created(sender: str, new_object: HkbRecord, user_data: Any):
+            # This is a bit ugly, but so is adding more stuff to new_object
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                self.add_pinned_object(new_object.object_id)
+
+        open_create_object_dialog(
+            self.beh,
+            on_object_created,
+            tag=tag,
+        )
 
     def load_bone_names(self) -> None:
         self.loaded_skeleton_path = None

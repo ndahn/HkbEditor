@@ -286,3 +286,5 @@ Note that the object ID and type IDs may differ between characters and games.\
 
     if bones and mirror_info:
         fill_table()
+
+    return window

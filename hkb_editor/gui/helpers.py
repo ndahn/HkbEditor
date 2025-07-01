@@ -13,7 +13,7 @@ def center_window(window: str, parent: str = None) -> None:
         dpos = dpg.get_item_pos(parent)
         dsize = dpg.get_item_rect_size(parent)
     else:
-        dpos = dpg.get_viewport_pos()
+        dpos = (0.0, 0.0)
         dsize = (dpg.get_viewport_width(), dpg.get_viewport_height())
 
     psize = dpg.get_item_rect_size(window)
