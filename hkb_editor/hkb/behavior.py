@@ -7,22 +7,11 @@ import networkx as nx
 
 from .tagfile import Tagfile
 from .hkb_types import HkbRecord, HkbArray, HkbString
+from .hkb_enums import hkbVariableInfo_VariableType as VariableType
 from .cached_array import CachedArray
 
 
 _undefined = object()
-
-
-class VariableType(IntEnum):
-    BOOL = 0
-    INT8 = 1
-    INT16 = 2
-    INT32 = 3
-    REAL = 4
-    POINTER = 5
-    STRING = 6  # NOTE just an assumption, no examples for this (ER, Sekiro)
-    VECTOR4 = 7
-    QUATERNION = 8
 
 
 @dataclass

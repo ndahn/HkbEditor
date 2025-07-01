@@ -37,12 +37,12 @@ class Tagfile:
             for k in self.objects.keys()
             if k.startswith("object")
         ]
-        self._next_object_id = max(objectid_values) + 1
+        self._next_object_id = max(objectid_values, default=0) + 1
 
         userdata_values = [
             int(v) for v in self._tree.xpath("//field[@name='userData']/integer/@value")
         ]
-        self._next_userdata_value = max(userdata_values + [-1]) + 1
+        self._next_userdata_value = max(userdata_values, default=-1) + 1
 
     def save_to_file(self, file_path: str) -> None:
         ET.indent(self._tree)

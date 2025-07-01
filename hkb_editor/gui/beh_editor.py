@@ -8,13 +8,14 @@ import time
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
-from hkb_editor.hkb.behavior import HavokBehavior, VariableType
+from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
     HkbRecord,
     HkbPointer,
 )
 from hkb_editor.hkb.skeleton import load_skeleton_bones
+from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 
 from .graph_editor import GraphEditor, Node
 from .attributes_widget import AttributesWidget
