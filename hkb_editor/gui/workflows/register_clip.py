@@ -10,9 +10,6 @@ from hkb_editor.gui.dialogs import select_animation_name
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
 
 
-_logger = getLogger(__name__)
-
-
 def open_register_clip_dialog(
     behavior: HavokBehavior,
     callback: Callable[[str, tuple[str, str], Any], None],
@@ -29,15 +26,26 @@ def open_register_clip_dialog(
     clipgen_type = behavior.type_registry.find_first_type_by_name("hkbClipGenerator")
     cmsg_candidates: list[HkbRecord] = []
 
+    def show_warning(msg: str) -> None:
+        dpg.set_value(f"{tag}_notification", msg)
+        dpg.show_item(f"{tag}_notification")
+
     def on_okay():
         clip_name = dpg.get_value(f"{tag}_name")
         animation_name = dpg.get_value(f"{tag}_animation")
         cmsg_name = dpg.get_value(f"{tag}_cmsg")
         playback_mode_name = dpg.get_value(f"{tag}_playback_mode")
 
-        # TODO add a notification text above the buttons
-        if not all([clip_name, animation_name, cmsg_name]):
-            _logger.error("Cannot create CMSG as some values were missing")
+        if not clip_name:
+            show_warning("Name not set")
+            return
+
+        if not animation_name:
+            show_warning("Animation not set")
+            return
+
+        if not cmsg_name:
+            show_warning("CMSG not set")
             return
 
         clipgen_id = behavior.new_id()
@@ -155,6 +163,9 @@ def open_register_clip_dialog(
 
         # Main form done, now just some buttons and such
         dpg.add_separator()
+
+        dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
+
         with dpg.group(horizontal=True):
             dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")
             dpg.add_button(

@@ -47,8 +47,14 @@ def open_new_cmsg_dialog(
 
     types = behavior.type_registry
 
+    def show_warning(msg: str) -> None:
+        dpg.set_value(f"{tag}_notification", msg)
+        dpg.show_item(f"{tag}_notification")
+
     # CMSG generation
     def on_okay():
+        dpg.hide_item(f"{tag}_notification")
+
         # No need to verify, okay should be disabled when values are invalid
         statemachine_val: str = dpg.get_value(f"{tag}_statemachine")
         base_name: str = dpg.get_value(f"{tag}_base_name")
@@ -61,13 +67,19 @@ def open_new_cmsg_dialog(
         )
         stateinfo_transitions_val: str = dpg.get_value(f"{tag}_stateinfo_transitions")
 
-        # TODO this could be nicer
-        if not all([base_name, animation_val, event_val]):
-            _logger.error("Cannot create CMSG as some values were missing")
+        if not base_name:
+            show_warning("Base name not set")
+            return
+
+        if not animation_val:
+            show_warning("Animation not set")
+            return
+
+        if not event_val:
+            show_warning("Event not set")
             return
 
         # Look up the types we need
-        _logger.debug("Resolving object types")
         cmsg_type = types.find_first_type_by_name("CustomManualSelectorGenerator")
         clipgen_type = types.find_first_type_by_name("hkbClipGenerator")
         stateinfo_type = types.find_first_type_by_name("hkbStateMachine::StateInfo")
@@ -76,7 +88,6 @@ def open_new_cmsg_dialog(
         )
 
         # Resolve values
-        _logger.debug("Resolving user values")
         statemachine_type = types.find_first_type_by_name("hkbStateMachine")
         statemachine_id = next(
             behavior.query(f"type_id:{statemachine_type} AND name:{statemachine_val}")
@@ -85,7 +96,7 @@ def open_new_cmsg_dialog(
 
         wildcard_transitions_ptr = statemachine.get_field("wildcardTransitions")
         if not wildcard_transitions_ptr.get_value():
-            _logger.error("Statemachine does not have a wildcard transitions object")
+            show_warning("Statemachine does not have a wildcard transitions object")
             return
 
         # stateId in StateInfo directly correlates to toStateId in the transitionInfoArray.
@@ -107,16 +118,14 @@ def open_new_cmsg_dialog(
         try:
             anim_idx = behavior.find_animation(animation_val)
         except IndexError:
-            _logger.debug("Creating new animation name %s", animation_val)
-            # TODO undo action
+            undo_manager.on_create_animation(behavior, animation_val)
             anim_idx = behavior.create_animation(animation_val)
 
         # Add event to the events array
         try:
             event_id = behavior.find_event(event_val)
         except IndexError:
-            _logger.debug("Creating new event %s", event_val)
-            # TODO undo action
+            undo_manager.on_create_event(behavior, event_val)
             event_id = behavior.create_event(event_val)
 
         playback_mode = PlaybackMode[playback_mode_val].value
@@ -380,8 +389,18 @@ def open_new_cmsg_dialog(
 
         dpg.add_spacer(height=3)
 
+        instructions="""\
+Don't forget to place new events in eventinfo.txt!\
+"""
+        with dpg.group():
+            for line in instructions.split("\n"):
+                dpg.add_text(line, color=style.light_blue)
+
         # Main form done, now just some buttons and such
         dpg.add_separator()
+
+        dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
+
         with dpg.group(horizontal=True):
             dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")
             dpg.add_button(

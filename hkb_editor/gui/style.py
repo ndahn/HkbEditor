@@ -16,6 +16,10 @@ white = (255, 255, 255, 255)
 dark_grey = (62, 62, 62, 255)
 black = (0, 0, 0, 255)
 
+light_blue = (112, 214, 255, 255)
+light_green = (112, 255, 162, 255)
+light_red = (255, 112, 119)
+
 
 class HighContrastColorGenerator:
     """Generates RGB colors with a certain distance apart so that subsequent colors are visually distinct."""
