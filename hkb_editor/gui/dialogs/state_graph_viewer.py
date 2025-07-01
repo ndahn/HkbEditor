@@ -120,6 +120,9 @@ def open_state_graph_viewer(
         if dpg.does_item_exist(popup):
             dpg.delete_item(popup)
 
+        # XXX Without this dpg sometimes has a segmentation fault!
+        dpg.split_frame()
+        
         with dpg.window(
             popup=True,
             min_size=(100, 20),

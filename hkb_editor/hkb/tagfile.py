@@ -113,6 +113,10 @@ class Tagfile:
 
     def new_id(self, offset: int = 0) -> str:
         new_id = self._next_object_id + offset
+        
+        while new_id in self.objects:
+            new_id += 1
+
         self._next_object_id = new_id + 1
         return f"object{new_id}"
 

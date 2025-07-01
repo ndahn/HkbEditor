@@ -205,7 +205,7 @@ class HkbArray(XmlValueHandler):
             self.element.remove(child)
 
     def get_value(self) -> list[XmlValueHandler]:
-        Handler = get_value_handler(self.tagfile, self.element_type_id)
+        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return [
             Handler(self.tagfile, elem, self.element_type_id)
             for elem in self.element

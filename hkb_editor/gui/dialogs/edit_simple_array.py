@@ -112,7 +112,7 @@ def edit_simple_array_dialog(
                             user_data=item_idx,
                         )
 
-    def cloe_dialog():
+    def close_dialog():
         if on_close:
             on_close(dialog, items, user_data)
 
@@ -124,7 +124,7 @@ def edit_simple_array_dialog(
         width=600,
         height=400,
         label=title,
-        on_close=cloe_dialog,
+        on_close=close_dialog,
         # autosize=True,
         no_saved_settings=True,
         tag=tag,

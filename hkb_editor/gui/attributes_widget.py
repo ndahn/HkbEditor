@@ -1,4 +1,3 @@
-
 from typing import Any, Type, Callable
 import logging
 from enum import IntFlag
@@ -47,7 +46,9 @@ class AttributesWidget:
         *,
         jump_callback: Callable[[str], None] = None,
         on_graph_changed: Callable[[], None] = None,
-        on_value_changed: Callable[[str, XmlValueHandler, tuple[Any, Any]], None] = None,
+        on_value_changed: Callable[
+            [str, XmlValueHandler, tuple[Any, Any]], None
+        ] = None,
         tag: str = None,
     ):
         if tag in (None, 0, ""):
@@ -60,22 +61,29 @@ class AttributesWidget:
         self.on_graph_changed = on_graph_changed
         self.on_value_changed = on_value_changed
         self.tag = tag
-        
+
         self.logger = logging.getLogger()
         self.attributes_table = None
 
         self._setup_content()
 
-    def set_record(self, tagfile: Tagfile, record: HkbRecord) -> None:
+    def set_record(self, record: HkbRecord) -> None:
         self.clear()
-        self.tagfile = tagfile
+        self.tagfile = record.tagfile
         self.record = record
 
         if record:
             self._update_attributes()
 
+    def set_title(self, title: str) -> None:
+        if not title:
+            dpg.hide_item(f"{self.tag}_attributes_title")
+        else:
+            dpg.set_value(f"{self.tag}_attributes_title", title)
+            dpg.show_item(f"{self.tag}_attributes_title")
+
     def clear(self) -> None:
-        dpg.set_value(f"{self.tag}_attributes_title", "Attributes")
+        self.set_title("Attributes")
         dpg.delete_item(self.attributes_table, children_only=True, slot=1)
 
     def reveal_attribute(self, path: str) -> None:
@@ -124,7 +132,7 @@ class AttributesWidget:
 
         if self.on_graph_changed:
             self.on_graph_changed()
-        
+
         self.clear()
         self._update_attributes()
         # TODO reveal currently revealed attributes
@@ -146,7 +154,7 @@ class AttributesWidget:
                 dpg.add_table_column(label="Key", width_fixed=True)
 
     def _update_attributes(self) -> None:
-        dpg.set_value(f"{self.tag}_attributes_title", self.record.object_id)
+        self.set_title(self.record.object_id)
 
         # Columns will be hidden if header_row=False and no rows exist initially
         for col in dpg.get_item_children(self.attributes_table, slot=0):
@@ -157,7 +165,6 @@ class AttributesWidget:
                 filter_key=key,
                 parent=self.attributes_table,
             ):
-                print("###", key)
                 self._create_attribute_widget(val, key)
 
     def _create_attribute_widget(
@@ -258,9 +265,7 @@ class AttributesWidget:
                     table=self.attributes_table,
                     before=before,
                 ):
-                    self._create_attribute_widget_flags(
-                        value, FieldFlags, path, tag
-                    )
+                    self._create_attribute_widget_flags(value, FieldFlags, path, tag)
                     dpg.add_text(label, color=label_color)
                     is_simple = False
             else:
@@ -268,9 +273,7 @@ class AttributesWidget:
                     table=self.attributes_table,
                     before=before,
                 ):
-                    self._create_attribute_widget_simple(
-                        value, path, tag
-                    )
+                    self._create_attribute_widget_simple(value, path, tag)
                     dpg.add_text(label, color=label_color)
 
         self._create_attribute_menu(widget, value, path, is_simple)
@@ -323,7 +326,16 @@ class AttributesWidget:
     ) -> str:
         attribute = path.split("/")[-1]
 
-        with dpg.group(filter_key=attribute, tag=tag) as group:
+        with dpg.tree_node(
+            label=attribute, filter_key=attribute, default_open=True, tag=tag
+        ) as group:
+            # In some cases the array might could be still empty
+            for i in range(0, 4 - len(array)):
+                if i == 3:
+                    array.append(1.0)
+                else:
+                    array.append(0.0)
+
             for i, comp in zip(range(4), "xyzw"):
                 value = array[i].get_value()
                 dpg.add_input_double(
@@ -351,7 +363,9 @@ class AttributesWidget:
             del array[idx]
 
             # Records potentially contain pointers which will affect the graph
-            Handler = get_value_handler(self.tagfile.type_registry, array.element_type_id)
+            Handler = get_value_handler(
+                self.tagfile.type_registry, array.element_type_id
+            )
             if Handler in (HkbRecord, HkbPointer):
                 if self.on_graph_changed:
                     self.on_graph_changed()
@@ -612,7 +626,7 @@ class AttributesWidget:
                     # binding_var, binding_set_id = data
                     if self.on_graph_changed:
                         self.on_graph_changed()
-                        
+
                     self.clear()
                     self._update_attributes()
                     self.reveal_attribute(path)

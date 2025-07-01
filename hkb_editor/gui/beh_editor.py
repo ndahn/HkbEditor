@@ -50,7 +50,7 @@ class BehaviorEditor(GraphEditor):
         self.pinned_objects_table: str = None
         self.min_notification_severity = logging.INFO
         self.loaded_skeleton_path: str = None
-        
+
         super().__init__(tag)
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
@@ -166,8 +166,12 @@ class BehaviorEditor(GraphEditor):
         dpg.add_separator()
 
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
-            dpg.add_menu_item(label="Undo (ctrl-z)", callback=lambda: self.attributes_widget.undo())
-            dpg.add_menu_item(label="Redo (ctrl-y)", callback=lambda: self.attributes_widget.redo())
+            dpg.add_menu_item(
+                label="Undo (ctrl-z)", callback=lambda: self.attributes_widget.undo()
+            )
+            dpg.add_menu_item(
+                label="Redo (ctrl-y)", callback=lambda: self.attributes_widget.redo()
+            )
 
             dpg.add_separator()
 
@@ -201,7 +205,8 @@ class BehaviorEditor(GraphEditor):
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
             dpg.add_menu_item(
-                label="Create Object...", callback=self.create_object_dialog,
+                label="Create Object...",
+                callback=self.create_object_dialog,
             )
             dpg.add_menu_item(
                 label="Register Clip...", callback=self.open_register_clip_dialog
@@ -256,7 +261,7 @@ class BehaviorEditor(GraphEditor):
                 on_value_changed=self._on_value_changed,
                 tag=f"{self.tag}_attributes_widget",
             )
-        
+
         # Update the input box for filtering the table
         self.attributes_table = self.attributes_widget.attributes_table
         dpg.set_item_user_data(f"{self.tag}_attribute_filter", self.attributes_table)
@@ -325,12 +330,15 @@ class BehaviorEditor(GraphEditor):
 
         def show_attributes():
             self.canvas.deselect()
-            self.attributes_widget.set_record(self.beh, pinned_obj)
+            self.attributes_widget.set_record(pinned_obj)
 
         popup = f"{self.tag}_pin_menu"
 
         if dpg.does_item_exist(popup):
             dpg.delete_item(popup)
+
+        # XXX Without this dpg sometimes has a segmentation fault!
+        dpg.split_frame()
 
         # Pin context menu
         with dpg.window(
@@ -345,10 +353,14 @@ class BehaviorEditor(GraphEditor):
             tag=popup,
         ):
             dpg.add_selectable(
-                label="Unpin", callback=lambda: self.remove_pinned_object(object_id)
+                label="Unpin",
+                callback=lambda s, a, u: self.remove_pinned_object(u),
+                user_data=object_id,
             )
             dpg.add_selectable(
-                label="Jump To", callback=lambda: self.jump_to_object(object_id)
+                label="Jump To",
+                callback=lambda s, a, u: self.jump_to_object(u),
+                user_data=object_id,
             )
             dpg.add_selectable(label="Show Attributes", callback=show_attributes)
             make_copy_menu(pinned_obj)
@@ -469,7 +481,7 @@ class BehaviorEditor(GraphEditor):
 
     def _update_attributes(self, node):
         record = self.beh.objects[node.id]
-        self.attributes_widget.set_record(self.beh, record)
+        self.attributes_widget.set_record(record)
 
     def _clear_attributes(self):
         self.attributes_widget.clear()
@@ -691,28 +703,22 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
-    def open_create_cmsg_dialog(self):
-        tag = f"{self.tag}_create_cmsg_dialog"
+    def create_object_dialog(self):
+        tag = f"{self.tag}_create_object_dialog"
         if dpg.does_item_exist(tag):
             dpg.focus_item(tag)
             return
 
-        def on_cmsg_created(sender: str, ids: tuple[str, str, str], user_data: Any):
-            cmsg_id, clipgen_id, stateinfo_id = ids
-            self.jump_to_object(cmsg_id)
-
-            # This is a bit ugly, but so is adding more stuff to ids
+        def on_object_created(sender: str, new_object: HkbRecord, user_data: Any):
+            # This is a bit ugly, but so is adding more stuff to new_object
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
-                self.add_pinned_object(cmsg_id)
-                self.add_pinned_object(clipgen_id)
-                self.add_pinned_object(stateinfo_id)
+                self.add_pinned_object(new_object.object_id)
 
-        active_sm = self.get_active_statemachine()
-        open_new_cmsg_dialog(
+        open_create_object_dialog(
             self.beh,
-            on_cmsg_created,
-            active_statemachine_id=active_sm.object_id if active_sm else None,
+            self.alias_manager,
+            on_object_created,
             tag=tag,
         )
 
@@ -738,21 +744,28 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
-    def create_object_dialog(self):
-        tag = f"{self.tag}_create_object_dialog"
+    def open_create_cmsg_dialog(self):
+        tag = f"{self.tag}_create_cmsg_dialog"
         if dpg.does_item_exist(tag):
             dpg.focus_item(tag)
             return
 
-        def on_object_created(sender: str, new_object: HkbRecord, user_data: Any):
-            # This is a bit ugly, but so is adding more stuff to new_object
+        def on_cmsg_created(sender: str, ids: tuple[str, str, str], user_data: Any):
+            cmsg_id, clipgen_id, stateinfo_id = ids
+            self.jump_to_object(cmsg_id)
+
+            # This is a bit ugly, but so is adding more stuff to ids
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
-                self.add_pinned_object(new_object.object_id)
+                self.add_pinned_object(cmsg_id)
+                self.add_pinned_object(clipgen_id)
+                self.add_pinned_object(stateinfo_id)
 
-        open_create_object_dialog(
+        active_sm = self.get_active_statemachine()
+        open_new_cmsg_dialog(
             self.beh,
-            on_object_created,
+            on_cmsg_created,
+            active_statemachine_id=active_sm.object_id if active_sm else None,
             tag=tag,
         )
 
