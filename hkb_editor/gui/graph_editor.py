@@ -326,7 +326,7 @@ class GraphEditor:
             dpg.add_separator()
 
             # Child window is needed to fix table sizing
-            with dpg.child_window(border=False):
+            with dpg.child_window(border=False, tag=f"{self.tag}_attributes_table_container"):
                 dpg.add_text("", tag=f"{self.tag}_attributes_title", color=style.blue)
                 with dpg.table(
                     delay_search=True,

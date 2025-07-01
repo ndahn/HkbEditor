@@ -1,51 +1,28 @@
-from typing import Any, Type
+from typing import Any
 import os
 import logging
 import traceback
 from threading import Thread
 import textwrap
 import time
-from enum import IntFlag
-from lxml import etree as ET
 from dearpygui import dearpygui as dpg
 import networkx as nx
-import pyperclip
 
 from hkb_editor.hkb.behavior import HavokBehavior, VariableType
 from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
     HkbRecord,
     HkbPointer,
-    HkbArray,
-    HkbString,
-    HkbInteger,
-    HkbFloat,
-    HkbBool,
-    get_value_handler,
 )
 from hkb_editor.hkb.skeleton import load_skeleton_bones
-from hkb_editor.hkb import get_hkb_enum, get_hkb_flags
 
 from .graph_editor import GraphEditor, Node
+from .attributes_widget import AttributesWidget
 from .dialogs import (
     open_file_dialog,
     edit_simple_array_dialog,
-    select_object,
     search_objects_dialog,
     open_state_graph_viewer,
-)
-from .table_tree import (
-    table_tree_leaf,
-    add_lazy_table_tree_node,
-    get_row_node_item,
-    set_foldable_row_status,
-)
-from .workflows.bind_attribute import (
-    bindable_attribute,
-    select_variable_to_bind,
-    get_bound_attributes,
-    set_bindable_attribute_state,
-    unbind_attribute,
 )
 from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager, AliasMap
@@ -53,7 +30,7 @@ from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
 from .workflows.bone_mirror import open_bone_mirror_dialog
 from .workflows.create_object import open_create_object_dialog
-from .helpers import make_copy_menu, create_flag_checkboxes
+from .helpers import make_copy_menu
 from . import style
 
 
@@ -67,13 +44,14 @@ class BehaviorEditor(GraphEditor):
 
         logging.root.addHandler(LogHandler())
 
-        super().__init__(tag)
         self.beh: HavokBehavior = None
         self.alias_manager = AliasManager()
+        self.attributes_widget: AttributesWidget = None
         self.pinned_objects_table: str = None
         self.min_notification_severity = logging.INFO
-
         self.loaded_skeleton_path: str = None
+        
+        super().__init__(tag)
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
         if severity < self.min_notification_severity:
@@ -188,8 +166,8 @@ class BehaviorEditor(GraphEditor):
         dpg.add_separator()
 
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
-            dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
-            dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
+            dpg.add_menu_item(label="Undo (ctrl-z)", callback=lambda: self.attributes_widget.undo())
+            dpg.add_menu_item(label="Redo (ctrl-y)", callback=lambda: self.attributes_widget.redo())
 
             dpg.add_separator()
 
@@ -267,6 +245,23 @@ class BehaviorEditor(GraphEditor):
     def _setup_content(self) -> None:
         super()._setup_content()
 
+        # Replace the standard table with our more complex widget
+        dpg.delete_item(f"{self.tag}_attributes_table_container")
+
+        with dpg.child_window(border=False, parent=f"{self.tag}_attributes_window"):
+            self.attributes_widget = AttributesWidget(
+                self.alias_manager,
+                jump_callback=self.jump_to_object,
+                on_graph_changed=self.canvas.regenerate,
+                on_value_changed=self._on_value_changed,
+                tag=f"{self.tag}_attributes_widget",
+            )
+        
+        # Update the input box for filtering the table
+        self.attributes_table = self.attributes_widget.attributes_table
+        dpg.set_item_user_data(f"{self.tag}_attribute_filter", self.attributes_table)
+
+        # Pinned objects
         with dpg.window(
             label="Pinned Objects",
             autosize=True,
@@ -330,17 +325,7 @@ class BehaviorEditor(GraphEditor):
 
         def show_attributes():
             self.canvas.deselect()
-            self._clear_attributes()
-
-            # update_attributes wants a Node, not a record, so we do it ourselves
-            dpg.set_value(f"{self.tag}_attributes_title", object_id)
-
-            for key, val in pinned_obj.get_value().items():
-                with dpg.table_row(
-                    filter_key=key,
-                    parent=self.attributes_table,
-                ):
-                    self._create_attribute_widget(pinned_obj, val, key)
+            self.attributes_widget.set_record(self.beh, pinned_obj)
 
         popup = f"{self.tag}_pin_menu"
 
@@ -384,10 +369,6 @@ class BehaviorEditor(GraphEditor):
     def get_graph(self, root_id: str) -> nx.DiGraph:
         self.logger.info("Building graph for node %s", root_id)
         return self.beh.build_graph(root_id)
-
-    def get_node_attributes(self, node: Node) -> dict[str, Any]:
-        obj: HkbRecord = self.beh.objects[node.id]
-        return obj.get_value().items()
 
     def get_node_frontpage(self, node: Node) -> list[str]:
         obj = self.beh.objects[node.id]
@@ -460,669 +441,38 @@ class BehaviorEditor(GraphEditor):
                         label=item, callback=on_item_selected, user_data=item
                     )
 
-    def on_update_pointer(
+    def _on_value_changed(
         self,
-        sender: str,
-        record: HkbRecord,
-        pointer: HkbPointer,
-        old_value: str,
-        new_value: str,
+        sender,
+        handler: XmlValueHandler,
+        change: tuple[Any, Any],
     ) -> None:
-        if old_value:
-            # Could be an entirely new pointer object with no previous value
-            self.add_pinned_object(old_value)
-            self.logger.info("Pinned previous object %s", old_value)
+        old_value, new_value = change
 
-        self.on_attribute_update(sender, new_value, pointer)
+        if isinstance(handler, HkbPointer):
+            if old_value:
+                # Could be an entirely new pointer object with no previous value
+                self.add_pinned_object(old_value)
+                self.logger.info("Pinned previous object %s", old_value)
 
-        if new_value not in self.canvas.nodes:
-            # Edges have changed, previous node may not be connected anymore, new
-            # node may not be part of the current statemachine graph yet, ...
-            root_id = self.get_active_statemachine().object_id
-            selected = self.selected_node
-            self._on_root_selected(sender, True, root_id)
-            if selected:
-                self.canvas.select(selected)
-        else:
-            # Changing a pointer will change the rendered graph
-            self.canvas.regenerate()
-
-    def reveal_attribute(self, path: str) -> None:
-        if not self.selected_node:
-            return
-
-        subpath = ""
-
-        def reveal(part: str):
-            nonlocal subpath
-            subpath += part
-            row = f"{self.tag}_attribute_{subpath}"
-            set_foldable_row_status(row, True)
-
-        for part in path.split("/"):
-            if subpath:
-                subpath += "/"
-
-            subparts = part.split(":")
-            reveal(subparts[0])
-
-            if len(subparts) > 1:
-                for idx in subparts[1:]:
-                    reveal(f":{idx}")
-
-    def _add_attribute_row_contents(self, attribute: str, val: Any, node: Node) -> None:
-        obj = self.beh.objects.get(node.id)
-        self._create_attribute_widget(obj, val, attribute)
-
-    def _create_attribute_widget(
-        self,
-        source_record: HkbRecord,
-        value: XmlValueHandler,
-        path: str,
-        *,
-        before: str = 0,
-    ):
-        self.logger.debug("Creating new attribute widget: %s", path)
-
-        tag = f"{self.tag}_attribute_{path}"
-        widget = tag
-        is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
-
-        label = self.alias_manager.get_attribute_alias(source_record, path)
-        if label is None:
-            label = path.split("/")[-1]
-            label_color = style.white
-        else:
-            label_color = style.green
-
-        if isinstance(value, HkbRecord):
-            # create items on demand, dpg performance tanks with too many widgets
-            def lazy_create_record_attributes(anchor: str):
-                for subkey, subval in value.get_value().items():
-                    self._create_attribute_widget(
-                        source_record, subval, f"{path}/{subkey}", before=anchor
-                    )
-
-            add_lazy_table_tree_node(
-                label,
-                lazy_create_record_attributes,
-                table=self.attributes_table,
-                tag=tag,
-                before=before,
-            )
-            widget = get_row_node_item(tag)
-
-        elif isinstance(value, HkbArray):
-            type_name = self.beh.type_registry.get_name(value.type_id)
-            if type_name in (
-                "hkVector4",
-                "hkVector4f",
-                "hkQuaternion",
-                "hkQuaternionf",
-            ):
-                self._create_attribute_widget_vector4(
-                    source_record,
-                    value,
-                    path,
-                    tag,
-                )
-
+            if new_value not in self.canvas.nodes:
+                # Edges have changed, previous node may not be connected anymore, new
+                # node may not be part of the current statemachine graph yet, ...
+                root_id = self.get_active_statemachine().object_id
+                selected = self.selected_node
+                self._on_root_selected(sender, True, root_id)
+                if selected:
+                    self.canvas.select(selected)
             else:
-                # create items on demand, dpg performance tanks with too many widgets
-                def lazy_create_array_items(anchor: str):
-                    for idx, subval in enumerate(value):
-                        self._create_attribute_widget(
-                            source_record, subval, f"{path}:{idx}", before=anchor
-                        )
-
-                    with table_tree_leaf(
-                        table=self.attributes_table,
-                        tag=f"{tag}_arraybuttons",
-                        before=anchor,
-                    ):
-                        self._create_attribute_widget_array_buttons(
-                            source_record,
-                            value,
-                            path,
-                        )
-
-                add_lazy_table_tree_node(
-                    label,
-                    lazy_create_array_items,
-                    table=self.attributes_table,
-                    tag=tag,
-                    before=before,
-                )
-                widget = get_row_node_item(tag)
-
-        elif isinstance(value, HkbPointer):
-            with table_tree_leaf(
-                table=self.attributes_table,
-                before=before,
-            ):
-                self._create_attribute_widget_pointer(source_record, value, path, tag)
-                dpg.add_text(label, color=label_color)
-
-        else:
-            FieldFlags = get_hkb_flags(
-                self.beh.type_registry,
-                source_record.type_id,
-                path.split("/")[-1],
-            )
-
-            if FieldFlags:
-                with table_tree_leaf(
-                    table=self.attributes_table,
-                    before=before,
-                ):
-                    self._create_attribute_widget_flags(
-                        source_record, value, FieldFlags, path, tag
-                    )
-                    dpg.add_text(label, color=label_color)
-                    is_simple = False
-            else:
-                with table_tree_leaf(
-                    table=self.attributes_table,
-                    before=before,
-                ):
-                    self._create_attribute_widget_simple(
-                        source_record, value, path, tag
-                    )
-                    dpg.add_text(label, color=label_color)
-
-        self._create_attribute_menu(widget, source_record, value, path, is_simple)
-
-    def _create_attribute_widget_pointer(
-        self,
-        source_record: HkbRecord,
-        pointer: HkbPointer,
-        path: str,
-        tag: str = 0,
-        before: dict[str, Any] = None,
-    ) -> str:
-        attribute = path.split("/")[-1]
-
-        def on_pointer_selected(sender, target: HkbRecord, user_data: Any):
-            self.on_update_pointer(
-                sender, source_record, pointer, pointer.get_value(), target.object_id
-            )
-
-            # If the binding set pointer changed we should regenerate all attribute widgets
-            vbs_type_id = self.beh.type_registry.find_first_type_by_name(
-                "hkbVariableBindingSet"
-            )
-            if pointer.type_id == vbs_type_id:
-                self._clear_attributes()
-                self._update_attributes(self.selected_node)
-                self.reveal_attribute(path)
-
-        def open_pointer_dialog():
-            select_object(
-                self.beh, pointer.subtype, on_pointer_selected, include_derived=True
-            )
-
-        with dpg.group(horizontal=True, filter_key=attribute, tag=tag) as group:
-            ptr_input = dpg.add_input_text(
-                default_value=pointer.get_value(),
-                readonly=True,
-                width=-30,  # TODO is there no better solution?
-            )
-            dpg.bind_item_theme(ptr_input, style.pointer_attribute_theme)
-            dpg.add_button(
-                arrow=True,
-                direction=dpg.mvDir_Right,
-                callback=open_pointer_dialog,
-            )
-
-        return group
-
-    def _create_attribute_widget_vector4(
-        self,
-        source_record: HkbRecord,
-        array: HkbArray,
-        path: str,
-        tag: str = 0,
-    ) -> str:
-        attribute = path.split("/")[-1]
-
-        with dpg.group(filter_key=attribute, tag=tag) as group:
-            for i, comp in zip(range(4), "xyzw"):
-                value = array[i].get_value()
-                dpg.add_input_double(
-                    label=comp,
-                    default_value=value,
-                    callback=self.on_attribute_update,
-                    user_data=array[i],
-                )
-
-        return group
-
-    def _create_attribute_widget_array_buttons(
-        self,
-        source_record: HkbRecord,
-        array: HkbArray,
-        path: str,
-        tag: str = 0,
-    ) -> str:
-        if tag in (0, None, ""):
-            tag = dpg.generate_uuid()
-
-        def delete_last_item(sender, app_data, user_data) -> None:
-            # TODO deleting an item may invalidate variable bindings!
-            idx = len(array) - 1
-            undo_manager.on_update_array_item(array, idx, array[idx], None)
-            del array[idx]
-
-            # Records potentially contain pointers which will affect the graph
-            Handler = get_value_handler(self.beh.type_registry, array.element_type_id)
-            if Handler in (HkbRecord, HkbPointer):
+                # Changing a pointer will change the rendered graph
                 self.canvas.regenerate()
 
-            dpg.delete_item(f"{self.tag}_attribute_{path}:{idx}")
+    def _update_attributes(self, node):
+        record = self.beh.objects[node.id]
+        self.attributes_widget.set_record(self.beh, record)
 
-        def append_item() -> None:
-            subtype = array.element_type_id
-            Handler = get_value_handler(self.beh.type_registry, subtype)
-            new_item = Handler.new(self.beh, subtype)
-
-            self.logger.info(
-                "Added new element of type %s to array %s->%s",
-                subtype,
-                source_record.object_id,
-                path,
-            )
-
-            idx = len(array)
-            undo_manager.on_update_array_item(array, idx, None, new_item)
-            array.append(new_item)
-
-            # TODO doesn't work for some reason
-            # self._create_attribute_widget(
-            #     source_record,
-            #     new_item,
-            #     f"{path}:{idx}",
-            #     before=tag,  # insert before the buttons
-            # )
-
-            # TODO this will close the unfolded rows, we should have a "reveal_attribute" function
-            self._clear_attributes()
-            self._update_attributes(self.selected_node)
-            self.reveal_attribute(f"{path}:{idx}")
-
-        with dpg.group(horizontal=True, tag=tag) as button_group:
-            # Deleting from the end doesn't require index updates,
-            # especially for potential bindings
-            dpg.add_button(
-                label="(-)",
-                small=True,
-                callback=delete_last_item,
-            )
-            dpg.add_button(
-                label="(+)",
-                small=True,
-                callback=append_item,
-            )
-
-        return button_group
-
-    def _create_attribute_widget_flags(
-        self,
-        source_record: HkbRecord,
-        value: XmlValueHandler,
-        flag_type: Type[IntFlag],
-        path: str,
-        tag: str = 0,
-    ) -> str:
-        attribute = path.split("/")[-1]
-
-        def on_flag_changed(sender: str, active_flags: int, user_data):
-            self.on_attribute_update(None, int(active_flags), value)
-
-        flags = flag_type(value.get_value())
-        with dpg.tree_node(label=attribute, default_open=True, tag=tag):
-            create_flag_checkboxes(
-                flag_type,
-                on_flag_changed,
-                base_tag=tag,
-                active_flags=flags,
-            )
-
-    def _create_attribute_widget_simple(
-        self,
-        source_record: HkbRecord,
-        value: XmlValueHandler,
-        path: str,
-        tag: str = 0,
-    ) -> str:
-        attribute = path.split("/")[-1]
-
-        with bindable_attribute(filter_key=attribute, tag=tag, width=-1) as bindable:
-            if isinstance(value, HkbString):
-                dpg.add_input_text(
-                    filter_key=attribute,
-                    callback=self.on_attribute_update,
-                    user_data=value,
-                    default_value=value.get_value(),
-                )
-
-            elif isinstance(value, HkbInteger):
-                current_record = source_record
-                if "/" in path:
-                    # The path will become deeper if and only if we descended into
-                    # record fields, so the parent object will always be a record
-                    parent_path = "/".join(path.split("/")[:-1])
-                    current_record = source_record.get_path_value(parent_path)
-
-                enum = get_hkb_enum(
-                    self.beh.type_registry, current_record.type_id, path
-                )
-
-                if enum:
-
-                    def on_enum_change(sender: str, new_value: str, val: HkbInteger):
-                        int_value = enum[new_value].value
-                        self.on_attribute_update(sender, int_value, val)
-
-                    dpg.add_combo(
-                        [e.name for e in enum],
-                        filter_key=attribute,
-                        callback=on_enum_change,
-                        user_data=value,
-                        default_value=enum(value.get_value()).name,
-                    )
-                else:
-                    dpg.add_input_int(
-                        filter_key=attribute,
-                        callback=self.on_attribute_update,
-                        user_data=value,
-                        default_value=value.get_value(),
-                    )
-
-            elif isinstance(value, HkbFloat):
-                dpg.add_input_double(
-                    filter_key=attribute,
-                    callback=self.on_attribute_update,
-                    user_data=value,
-                    default_value=value.get_value(),
-                )
-
-            elif isinstance(value, HkbBool):
-                dpg.add_checkbox(
-                    filter_key=attribute,
-                    callback=self.on_attribute_update,
-                    user_data=value,
-                    default_value=value.get_value(),
-                )
-
-            else:
-                self.logger.error(
-                    "Cannot handle attribute %s (%s) of object %s",
-                    path,
-                    value,
-                    source_record.object_id,
-                )
-                self.logger.debug("The offending record is \n%s", source_record.xml())
-                return None
-
-        return bindable
-
-    def on_attribute_update(
-        self, sender, new_value: Any, handler: XmlValueHandler
-    ) -> None:
-        # The handler may throw if the new value is not appropriate
-        undo_manager.on_update_value(handler, handler.get_value(), new_value)
-        handler.set_value(new_value)
-        if sender:
-            dpg.set_value(sender, new_value)
-
-    def undo(self) -> None:
-        if not undo_manager.can_undo():
-            return
-
-        self.notification(f"Undo: {undo_manager.top()}")
-        undo_manager.undo()
-
-        # TODO so expensive....
-        self.canvas.regenerate()
-        self._clear_attributes()
-        self._update_attributes(self.selected_node)
-        # TODO reveal currently revealed attribute
-
-    def redo(self) -> None:
-        if not undo_manager.can_redo():
-            return
-
-        self.notification(f"Redo: {undo_manager.top()}")
-        undo_manager.redo()
-
-        # TODO so expensive....
-        self.canvas.regenerate()
-        self._clear_attributes()
-        self._update_attributes(self.selected_node)
-        # TODO reveal currently revealed attribute
-
-    def _create_attribute_menu(
-        self,
-        widget: str,
-        source_record: HkbRecord,
-        value: XmlValueHandler,
-        path: str,
-        is_simple: bool,
-    ):
-        # Should never happen, but development is funny ~
-        if value is None:
-            self.logger.error(
-                "%s->%s is None, this should never happen",
-                source_record.object_id,
-                path,
-            )
-            return
-
-        if is_simple:
-            bound_attributes = get_bound_attributes(self.beh, source_record)
-            bound_var_idx = bound_attributes.get(path, -1)
-
-        # Create a context menu for the widget
-        with dpg.popup(widget):
-            dpg.add_text(path.split("/")[-1])
-            type_name = self.beh.type_registry.get_name(value.type_id)
-            dpg.add_text(f"<{type_name}>")
-
-            if is_simple and bound_var_idx >= 0:
-                bound_var_name = self.beh.get_variable_name(bound_var_idx)
-                dpg.add_text(
-                    f"bound: {bound_var_name}",
-                    color=style.pink,
-                )
-
-            # Copy & paste
-            dpg.add_separator()
-            if is_simple:
-                # Not clear how cut should work on records and lists
-                dpg.add_selectable(
-                    label="Cut",
-                    callback=self._cut_value,
-                    user_data=(widget, path, value),
-                )
-
-            dpg.add_selectable(
-                label="Copy",
-                callback=self._copy_value,
-                user_data=(widget, path, value),
-            )
-            dpg.add_selectable(
-                label="Copy Path",
-                callback=self._copy_value_path,
-                user_data=(widget, path, value),
-            )
-            dpg.add_selectable(
-                label="Copy XML",
-                callback=self._copy_value_xml,
-                user_data=(widget, path, value),
-            )
-            dpg.add_selectable(
-                label="Paste",
-                callback=self._paste_value,
-                user_data=(widget, path, value),
-            )
-
-            if isinstance(value, HkbPointer):
-
-                def create_object_for_pointer():
-                    obj = HkbRecord.new(
-                        self.beh, value.subtype, object_id=self.beh.new_id()
-                    )
-                    with undo_manager.combine():
-                        undo_manager.on_create_object(self.beh, obj)
-                        self.beh.add_object(obj)
-                        self.on_update_pointer(
-                            widget,
-                            source_record,
-                            value,
-                            value.get_value(),
-                            obj.object_id,
-                        )
-
-                def go_to_pointer():
-                    oid = value.get_value()
-                    if not oid or oid == "object0":
-                        return
-
-                    node = self.canvas.nodes[oid]
-                    self.canvas.select(node)
-                    # TODO not quite right yet, not sure why
-                    self.look_at(node.x + node.width / 2, node.y + node.width / 2)
-
-                dpg.add_separator()
-
-                dpg.add_selectable(
-                    label="New object",
-                    callback=create_object_for_pointer,
-                )
-                dpg.add_selectable(label="Go to", callback=go_to_pointer)
-
-            if is_simple:
-                set_bindable_attribute_state(self.beh, widget, bound_var_idx)
-
-                def _bind_variable(sender, app_data, user_data):
-                    # deselect the selectable
-                    dpg.set_value(sender, False)
-                    select_variable_to_bind(*user_data)
-
-                def _unbind_variable(sender, app_data, user_data):
-                    # deselect the selectable
-                    dpg.set_value(sender, False)
-                    unbind_attribute(*user_data)
-
-                def _on_binding_established(
-                    sender, data: tuple[int, str], user_data: Any
-                ):
-                    # If a new binding set was created the graph will change
-                    # binding_var, binding_set_id = data
-                    # TODO graph needs to be rebuilt
-                    self.canvas.regenerate()
-                    self._clear_attributes()
-                    self._update_attributes(self.selected_node)
-                    self.reveal_attribute(path)
-
-                dpg.add_separator()
-                dpg.add_selectable(
-                    label="Bind Variable",
-                    callback=lambda s, a, u: _bind_variable(s, a, u),
-                    user_data=(
-                        self.beh,
-                        source_record,
-                        widget,
-                        path,
-                        bound_var_idx,
-                        _on_binding_established,
-                    ),
-                )
-
-                dpg.add_selectable(
-                    label="Clear binding",
-                    callback=lambda s, a, u: _unbind_variable(s, a, u),
-                    user_data=(self.beh, source_record, widget, path),
-                )
-
-    def _cut_value(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
-    ) -> None:
-        # deselect the selectable
-        dpg.set_value(sender, False)
-
-        widget, path, value = user_data
-        val = dpg.get_value(widget)
-
-        try:
-            pyperclip.copy(str(val))
-        except pyperclip.PyperclipException as e:
-            self.logger.error("Cut value failed: %s", e)
-            # Not nice, but clearing the value without having copied it is worse
-            return
-
-        default_val = type(val)()
-        self.on_attribute_update(widget, default_val, value)
-
-        self.logger.info("Cut value:\n%s", val)
-
-    def _copy_value(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
-    ) -> None:
-        # deselect the selectable
-        dpg.set_value(sender, False)
-
-        widget, path, value = user_data
-        val = dpg.get_value(widget)
-        self._copy_to_clipboard(val)
-
-    def _copy_value_xml(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
-    ) -> None:
-        # deselect the selectable
-        dpg.set_value(sender, False)
-
-        widget, path, value = user_data
-        val = value.xml().strip().strip("\n")
-        self._copy_to_clipboard(val)
-
-    def _copy_value_path(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
-    ) -> None:
-        # deselect the selectable
-        dpg.set_value(sender, False)
-
-        widget, path, value = user_data
-        self._copy_to_clipboard(path)
-
-    def _paste_value(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
-    ) -> None:
-        # deselect the selectable
-        dpg.set_value(sender, False)
-
-        widget, path, value = user_data
-        data = pyperclip.paste()
-
-        try:
-            xml = ET.fromstring(data)
-            new_value = type(value)(xml, value.type_id)
-        except:
-            new_value = data
-
-        try:
-            self.on_attribute_update(widget, new_value, value)
-        except Exception as e:
-            self.logger.error("Paste value to %s failed: %s", widget, e)
-            return
-
-    def _copy_to_clipboard(self, data: str):
-        try:
-            pyperclip.copy(data)
-        except:
-            pass
-
-        self.logger.debug("Copied value:\n%s", data)
+    def _clear_attributes(self):
+        self.attributes_widget.clear()
 
     # Common use cases
     def get_active_statemachine(self, for_object_id: str = None) -> HkbRecord:
@@ -1174,7 +524,7 @@ class BehaviorEditor(GraphEditor):
 
         # Reveal the node in the state machine graph
         path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
-        self._clear_attributes()
+        self.attributes_widget.clear()
         self.canvas.show_node_path(path)
 
     def open_variable_editor(self):

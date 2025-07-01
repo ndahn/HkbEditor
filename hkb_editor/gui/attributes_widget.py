@@ -43,38 +43,40 @@ from . import style
 class AttributesWidget:
     def __init__(
         self,
-        tagfile: Tagfile,
         alias_manager: AliasManager,
-        record: HkbRecord = None,
         *,
         jump_callback: Callable[[str], None] = None,
         on_graph_changed: Callable[[], None] = None,
-        on_pointer_changed: Callable[[HkbPointer, str, str], None] = None,
+        on_value_changed: Callable[[str, XmlValueHandler, tuple[Any, Any]], None] = None,
         tag: str = None,
     ):
         if tag in (None, 0, ""):
             tag = dpg.generate_uuid()
 
-        self.tagfile = tagfile
         self.alias_manager = alias_manager
+        self.tagfile: Tagfile = None
         self.record: HkbRecord = None
         self.jump_callback = jump_callback
         self.on_graph_changed = on_graph_changed
-        self.on_pointer_changed = on_pointer_changed
+        self.on_value_changed = on_value_changed
         self.tag = tag
         
         self.logger = logging.getLogger()
         self.attributes_table = None
 
         self._setup_content()
-        self.set_record(record)
 
-    def set_record(self, record: HkbRecord) -> None:
-        self._clear_attributes()
+    def set_record(self, tagfile: Tagfile, record: HkbRecord) -> None:
+        self.clear()
+        self.tagfile = tagfile
         self.record = record
 
         if record:
             self._update_attributes()
+
+    def clear(self) -> None:
+        dpg.set_value(f"{self.tag}_attributes_title", "Attributes")
+        dpg.delete_item(self.attributes_table, children_only=True, slot=1)
 
     def reveal_attribute(self, path: str) -> None:
         if not self.selected_node:
@@ -109,6 +111,8 @@ class AttributesWidget:
         if self.on_graph_changed:
             self.on_graph_changed()
 
+        self.clear()
+        self._update_attributes()
         # TODO reveal currently revealed attributes
 
     def redo(self) -> None:
@@ -121,7 +125,7 @@ class AttributesWidget:
         if self.on_graph_changed:
             self.on_graph_changed()
         
-        self._clear_attributes()
+        self.clear()
         self._update_attributes()
         # TODO reveal currently revealed attributes
 
@@ -141,10 +145,6 @@ class AttributesWidget:
                 dpg.add_table_column(label="Value", width_stretch=True)
                 dpg.add_table_column(label="Key", width_fixed=True)
 
-    def _clear_attributes(self) -> None:
-        dpg.set_value(f"{self.tag}_attributes_title", "Attributes")
-        dpg.delete_item(self.attributes_table, children_only=True, slot=1)
-
     def _update_attributes(self) -> None:
         dpg.set_value(f"{self.tag}_attributes_title", self.record.object_id)
 
@@ -152,11 +152,12 @@ class AttributesWidget:
         for col in dpg.get_item_children(self.attributes_table, slot=0):
             dpg.show_item(col)
 
-        for key, val in self.record.get_value():
+        for key, val in self.record.get_value().items():
             with dpg.table_row(
                 filter_key=key,
                 parent=self.attributes_table,
             ):
+                print("###", key)
                 self._create_attribute_widget(val, key)
 
     def _create_attribute_widget(
@@ -283,18 +284,14 @@ class AttributesWidget:
         attribute = path.split("/")[-1]
 
         def on_pointer_selected(sender, target: HkbRecord, user_data: Any):
-            old_value = pointer.get_value()
             self._on_value_changed(sender, target.object_id, pointer)
-
-            if self.on_pointer_changed:
-                self.on_pointer_changed(pointer, old_value, target.object_id)
 
             # If the binding set pointer changed we should regenerate all attribute widgets
             vbs_type_id = self.tagfile.type_registry.find_first_type_by_name(
                 "hkbVariableBindingSet"
             )
             if pointer.type_id == vbs_type_id:
-                self._clear_attributes()
+                self.clear()
                 self._update_attributes()
                 self.reveal_attribute(path)
 
@@ -385,7 +382,7 @@ class AttributesWidget:
             #     before=tag,  # insert before the buttons
             # )
 
-            self._clear_attributes()
+            self.clear()
             self._update_attributes()
             self.reveal_attribute(f"{path}:{idx}")
 
@@ -577,12 +574,7 @@ class AttributesWidget:
                     with undo_manager.combine():
                         undo_manager.on_create_object(self.tagfile, obj)
                         self.tagfile.add_object(obj)
-
-                        old_value = value.get_value()
                         self._on_value_changed(widget, obj.object_id, value)
-
-                        if self.on_pointer_changed:
-                            self.on_pointer_changed(value, old_value, obj.object_id)
 
                 def jump():
                     oid = value.get_value()
@@ -621,7 +613,7 @@ class AttributesWidget:
                     if self.on_graph_changed:
                         self.on_graph_changed()
                         
-                    self._clear_attributes()
+                    self.clear()
                     self._update_attributes()
                     self.reveal_attribute(path)
 
@@ -649,6 +641,10 @@ class AttributesWidget:
     def _on_value_changed(
         self, sender, new_value: Any, handler: XmlValueHandler
     ) -> None:
+        if self.on_value_changed:
+            old_value = handler.get_value()
+            self.on_value_changed(sender, handler, (old_value, new_value))
+
         # The handler may throw if the new value is not appropriate
         undo_manager.on_update_value(handler, handler.get_value(), new_value)
         handler.set_value(new_value)

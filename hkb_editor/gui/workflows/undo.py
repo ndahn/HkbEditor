@@ -128,7 +128,7 @@ class UndoManager:
     def can_redo(self) -> None:
         return self.history and self.index + 1 < len(self.history)
 
-    def undo(self) -> None:
+    def undo(self) -> UndoAction:
         if not self.can_undo():
             raise ValueError("Nothing to undo")
 
@@ -137,7 +137,9 @@ class UndoManager:
         action.undo()
         self.index -= 1
 
-    def redo(self) -> None:
+        return action
+
+    def redo(self) -> UndoAction:
         if not self.can_redo():
             raise ValueError("Nothing to redo")
 
@@ -148,6 +150,8 @@ class UndoManager:
         action = self.history[self.index + 1]
         action.redo()
         self.index += 1
+
+        return action
 
     def _on_action(self, action: UndoAction) -> None:
         if self._combining:
