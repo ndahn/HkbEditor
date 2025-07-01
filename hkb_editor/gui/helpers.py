@@ -1,4 +1,6 @@
-from typing import Any, Callable
+from typing import Any, Callable, Type
+from enum import IntFlag
+import logging
 from dearpygui import dearpygui as dpg
 import pyperclip
 
@@ -127,3 +129,69 @@ def estimate_drawn_text_size(
     w = (len_est + margin * 2) * scale
     h = (font_size * num_lines + margin * 2) * scale
     return w, h
+
+
+def create_flag_checkboxes(
+    flag_type: Type[IntFlag],
+    callback: Callable[[str, int, Any], None],
+    *,
+    base_tag: str = None,
+    active_flags: int = 0,
+    user_data: Any = None,
+) -> str:
+    if base_tag in (None, 0, ""):
+        base_tag = dpg.generate_uuid()
+
+    def on_flag_changed(sender: str, checked: bool, flag: IntFlag):
+        nonlocal active_flags
+
+        if checked:
+            # Checking 0 will disable all other flags
+            if flag == 0:
+                active_flags = flag_type(0)
+            else:
+                active_flags |= flag
+        else:
+            # Prevent disabling 0
+            if flag == 0:
+                dpg.set_value(f"{base_tag}_0", True)
+                return
+
+            active_flags &= ~flag
+
+        # Flags are not required to have a 0 mapping
+        if dpg.does_item_exist(f"{base_tag}_0"):
+            # 0 disables all other flags and enables 0
+            if active_flags == 0:
+                for flag in flag_type:
+                    dpg.set_value(f"{base_tag}_{flag.value}", False)
+                dpg.set_value(f"{base_tag}_0", True)
+            # 0 is disabled by any other flag
+            else:
+                dpg.set_value(f"{base_tag}_0", False)
+
+        if callback:
+            callback(base_tag, active_flags, user_data)
+
+    if not isinstance(active_flags, flag_type):
+        try:
+            active_flags = flag_type(active_flags)
+        except ValueError:
+            logger = logging.getLogger(__name__)
+            logger.error(f"{active_flags} is not valid for flag type {flag_type.__name__}")
+            active_flags = 0
+
+    for flag in flag_type:
+        if flag == 0:
+            # 0 is in every flag
+            active = (active_flags == 0)
+        else:
+            active = (flag in active_flags)
+
+        dpg.add_checkbox(
+            default_value=active,
+            callback=on_flag_changed,
+            label=flag.name, 
+            tag=f"{base_tag}_{flag.value}",
+            user_data=flag,
+        )

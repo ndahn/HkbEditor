@@ -14,7 +14,7 @@ from hkb_editor.hkb.hkb_flags import (
 )
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_event, select_animation_name, select_object
-from hkb_editor.gui.helpers import center_window
+from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
 from hkb_editor.gui import style
 
 
@@ -132,7 +132,7 @@ def open_new_cmsg_dialog(
 
         transition_flags = 0
         for flag in TransitionInfoFlags:
-            if dpg.get_value(f"{tag}_transitioninfo_flag_{flag.name}"):
+            if dpg.get_value(f"{tag}_transition_flags_{flag.value}"):
                 transition_flags |= flag
 
         # Generate the new objects
@@ -342,9 +342,13 @@ def open_new_cmsg_dialog(
 
             # TransitionInfo flags
             with dpg.tree_node(label="Transition Flags"):
-                for flag in TransitionInfoFlags:
-                    dpg.add_checkbox(label=flag.name, tag=f"{tag}_transitioninfo_flag_{flag.name}")
-
+                create_flag_checkboxes(
+                    TransitionInfoFlags,
+                    None,
+                    base_tag=f"{tag}_transition_flags",
+                    active_flags=0,
+                )
+                
             # AnimeEndEventType
             dpg.add_combo(
                 [e.name for e in AnimeEndEventType],

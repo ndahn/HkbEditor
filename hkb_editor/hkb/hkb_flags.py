@@ -8,10 +8,11 @@ from .type_registry import TypeRegistry
 # TODO check HKLib to extract more flag definitions
 # https://github.com/The12thAvenger/HKLib/tree/main/HKLib/hk2018/Autogen
 
-# TODO add 0 mappings where missing, handle 0 in clipgen and cmsg dialogs
+# NOTE: HKLib does not always have a mapping for 0 - I added those were missing
 
 
 class hkbClipGenerator_Flags(IntFlag):
+    NONE = 0  # added
     CONTINUE_MOTION_AT_END = 1
     SYNC_HALF_CYCLE_IN_PING_PONG_MODE = 2
     MIRROR = 4
@@ -21,6 +22,7 @@ class hkbClipGenerator_Flags(IntFlag):
 
 
 class hkbStateMachine_TransitionInfo_Flags(IntFlag):
+    NONE = 0
     USE_TRIGGER_INTERVAL = 1
     USE_INITIATE_INTERVAL = 2
     UNINTERRUPTIBLE_WHILE_PLAYING = 4
@@ -39,7 +41,7 @@ class hkbStateMachine_TransitionInfo_Flags(IntFlag):
 
 
 class hkbBlendingTransitionEffect_Flags(IntFlag):
-    NONE = 0
+    NONE = 0  # added
     IGNORE_FROM_WORLD_FROM_MODEL = 1
     SYNC = 2
     IGNORE_TO_WORLD_FROM_MODEL = 4
@@ -54,6 +56,7 @@ class CustomTransitionEffect_Flags(IntFlag):
 
 
 class hkbBlenderGenerator_Flags(IntFlag):
+    NONE = 0  # added
     SYNC = 1
     SMOOTH_GENERATOR_WEIGHTS = 4
     DONT_DEACTIVATE_CHILDREN_WITH_ZERO_WEIGHTS = 8

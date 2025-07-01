@@ -52,7 +52,7 @@ from .workflows.aliases import AliasManager, AliasMap
 from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
 from .workflows.bone_mirror import open_bone_mirror_dialog
-from .helpers import make_copy_menu, center_window
+from .helpers import make_copy_menu, create_flag_checkboxes
 from . import style
 
 
@@ -776,45 +776,17 @@ class BehaviorEditor(GraphEditor):
     ) -> str:
         attribute = path.split("/")[-1]
 
-        def on_flag_changed(sender: str, checked: bool, flag: IntFlag):
-            active = value.get_value()
-            if checked:
-                # Checking 0 will disable all other flags
-                if flag == 0:
-                    active = flag_type(0)
-                else:
-                    active |= flag
-            else:
-                # Prevent disabling 0
-                if flag == 0:
-                    dpg.set_value(f"{tag}_flag_0", True)
-                    return
-
-                active &= ~flag
-
-            # Flags are not required to have a 0 mapping
-            if dpg.does_item_exist(f"{tag}_flag_0"):
-                # 0 disables all other flags and enables 0
-                if active == 0:
-                    for flag in flag_type:
-                        dpg.set_value(f"{tag}_flag_{flag.value}", False)
-                    dpg.set_value(f"{tag}_flag_0", True)
-                # 0 is disabled by any other flag
-                else:
-                    dpg.set_value(f"{tag}_flag_0", False)
-
-            self.on_attribute_update(None, active.value, value)
+        def on_flag_changed(sender: str, active_flags: int, user_data):
+            self.on_attribute_update(None, int(active_flags), value)
 
         flags = flag_type(value.get_value())
         with dpg.tree_node(label=attribute, default_open=True, tag=tag):
-            for flag in flag_type:
-                dpg.add_checkbox(
-                    label=flag.name,
-                    default_value=(flag in flags),
-                    callback=on_flag_changed,
-                    tag=f"{tag}_flag_{flag.value}",
-                    user_data=flag,
-                )
+            create_flag_checkboxes(
+                flag_type,
+                on_flag_changed,
+                base_tag=tag,
+                active_flags=flags,
+            )
 
     def _create_attribute_widget_simple(
         self,

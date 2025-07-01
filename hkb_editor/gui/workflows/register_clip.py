@@ -7,8 +7,8 @@ from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMo
 from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_animation_name
-from hkb_editor.gui.helpers import center_window
-from hkb_editor.gui import style
+from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
+
 
 _logger = getLogger(__name__)
 
@@ -35,7 +35,7 @@ def open_register_clip_dialog(
         cmsg_name = dpg.get_value(f"{tag}_cmsg")
         playback_mode_name = dpg.get_value(f"{tag}_playback_mode")
 
-        # TODO this could be nicer
+        # TODO add a notification text above the buttons
         if not all([clip_name, animation_name, cmsg_name]):
             _logger.error("Cannot create CMSG as some values were missing")
             return
@@ -48,7 +48,7 @@ def open_register_clip_dialog(
 
         clip_flags = 0
         for flag in hkbClipGenerator_Flags:
-            if dpg.get_value(f"{tag}_flag_{flag.name}"):
+            if dpg.get_value(f"{tag}_clipflags_{flag.name}"):
                 clip_flags |= flag
 
         clipgen = HkbRecord.new(
@@ -146,8 +146,12 @@ def open_register_clip_dialog(
 
         # Flags
         with dpg.tree_node(label="Flags"):
-            for flag in hkbClipGenerator_Flags:
-                dpg.add_checkbox(label=flag.name, tag=f"{tag}_flag_{flag.name}")
+            create_flag_checkboxes(
+                hkbClipGenerator_Flags,
+                None,
+                base_tag=f"{tag}_clipflags",
+                active_flags=0,
+            )
 
         # Main form done, now just some buttons and such
         dpg.add_separator()
