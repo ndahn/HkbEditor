@@ -13,4 +13,4 @@ def load_skeleton_bones(skeleton_path: str, skeleton_idx: int = 0) -> list[str]:
     if len(skeletons) > 1:
         raise ValueError(f"{skeleton_path} contained multiple objects of type {skeleton_type_id} (hkaSkeleton)")
 
-    return [b["name"] for b in skeletons[skeleton_idx]["bones"]]
+    return [b["name"].get_value() for b in skeletons[skeleton_idx]["bones"]]

@@ -1,5 +1,6 @@
-from typing import Any
 import os
+import io
+import csv
 import pyperclip
 from dearpygui import dearpygui as dpg
 
@@ -31,7 +32,9 @@ def open_bone_mirror_dialog(
         bones = load_skeleton_bones(path)
 
         if mirror_info and len(mirror_info["bonePairMap"]) != len(bones):
-            dpg.set_value(f"{tag}_notification", f"Skeleton does not match loaded Character!")
+            dpg.set_value(
+                f"{tag}_notification", f"Skeleton does not match loaded Character!"
+            )
             dpg.show_item(f"{tag}_notification")
             bones = None
             return
@@ -49,41 +52,51 @@ def open_bone_mirror_dialog(
         mirror_info = character.find_first_by_type_name("hkbMirroredSkeletonInfo")
 
         if bones and len(mirror_info["bonePairMap"]) != len(bones):
-            dpg.set_value(f"{tag}_notification", f"Character does not match loaded Skeleton!")
+            dpg.set_value(
+                f"{tag}_notification", f"Character does not match loaded Skeleton!"
+            )
             dpg.show_item(f"{tag}_notification")
             mirror_info = None
             return
-        
+
         dpg.set_value(f"{tag}_character_file", path)
         fill_table()
 
-    def check_ready() -> bool:
+    def is_bones_loaded() -> bool:
         dpg.hide_item(f"{tag}_notification")
 
-        if not bones or not mirror_info:
-            if bones:
-                dpg.set_value(f"{tag}_notification", f"No character loaded!")
-            elif mirror_info:
-                dpg.set_value(f"{tag}_notification", f"No skeleton loaded!")
-            else:
-                dpg.set_value(f"{tag}_notification", f"Load a skeleton and character file first!")
-            
+        if not bones:
+            dpg.set_value(f"{tag}_notification", f"No skeleton loaded!")
+            dpg.show_item(f"{tag}_notification")
+            return False
+
+        return True
+
+    def is_character_loaded() -> bool:
+        dpg.hide_item(f"{tag}_notification")
+
+        if not mirror_info:
+            dpg.set_value(f"{tag}_notification", f"No character loaded!")
             dpg.show_item(f"{tag}_notification")
             return False
 
         return True
 
     def fill_table() -> None:
-        if not check_ready():
+        if not is_bones_loaded():
             return
 
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
-        
-        pair_map = mirror_info["bonePairMap"]
+
+        if mirror_info:
+            pair_map = mirror_info["bonePairMap"]
 
         for idx, bone in enumerate(bones):
-            alt_idx = pair_map[idx].get_value()
-            alt_bone = bones[alt_idx]
+            if mirror_info:
+                alt_idx = pair_map[idx].get_value()
+                alt_bone = bones[alt_idx]
+            else:
+                alt_bone = bone
 
             with dpg.table_row(
                 tag=f"{tag}_bone_{idx}",
@@ -91,11 +104,11 @@ def open_bone_mirror_dialog(
             ):
                 dpg.add_text(str(idx))
                 dpg.add_text(bone)
-                # Can only contain already existing bones, use different widget 
+                # Can only contain already existing bones, use different widget
                 dpg.add_input_text(default_value=alt_bone)
 
     def update_mirror_info() -> None:
-        if not check_ready():
+        if not is_bones_loaded() or not is_character_loaded():
             return
 
         pair_map: HkbArray = mirror_info["bonePairMap"]
@@ -109,20 +122,17 @@ def open_bone_mirror_dialog(
                 alt_idx = bones.index(alt_bone)
                 pair_map[i] = alt_idx
         except ValueError:
-            dpg.set_value(f"{tag}_notification", f"{alt_bone} ({i}) is not a valid bone name")
+            dpg.set_value(
+                f"{tag}_notification", f"{alt_bone} ({i}) is not a valid bone name"
+            )
             dpg.show_item(f"{tag}_notification")
 
     def auto_mirror() -> None:
-        if not check_ready():
+        if not is_bones_loaded():
             return
 
-        pair_map: HkbArray = mirror_info["bonePairMap"]
         rows = dpg.get_item_children(f"{tag}_table", slot=1)
-
-        for i in range(len(pair_map)):
-            row = rows[i]
-            bone = bones[i]
-
+        for row, bone in zip(rows, bones):
             if bone.startswith("L_"):
                 alt_bone = "R_" + bone[2:]
             elif bone.startswith("R_"):
@@ -138,25 +148,43 @@ def open_bone_mirror_dialog(
                 # TODO different widget
                 dpg.set_value(dpg.get_item_children(row, slot=1)[2], alt_bone)
 
+    def copy_csv() -> None:
+        if not is_bones_loaded():
+            return
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["idx", "bone", "mirror_idx", "mirror_bone"])
+        rows = dpg.get_item_children(f"{tag}_table", slot=1)
+
+        for idx, (row, bone) in enumerate(zip(rows, bones)):
+            alt_bone = dpg.get_value(dpg.get_item_children(row, slot=1)[2])
+            alt_idx = bones.index(alt_bone)
+            writer.writerow([idx, bone, alt_idx, alt_bone])
+
+        pyperclip.copy(output.getvalue())
+
+    def copy_xml() -> None:
+        if not is_bones_loaded() or not is_character_loaded():
+            return
+
+        update_mirror_info()
+        pyperclip.copy(mirror_info.xml())
+
     def save_character() -> None:
-        if not check_ready():
+        if not is_bones_loaded() or not is_character_loaded():
             return
 
         update_mirror_info()
 
         char_path = dpg.get_value(f"{tag}_character_file")
-        save_file_dialog(
+        dest_file = save_file_dialog(
             title="Save Character File",
             default_dir=os.path.dirname(char_path),
             default_file=os.path.basename(char_path),
         )
 
-    def copy_to_clipboard() -> None:
-        if not check_ready():
-            return
-
-        update_mirror_info()
-        pyperclip.copy(mirror_info.xml())
+        mirror_info.tagfile.save_to_file(dest_file)
 
     with dpg.window(
         label=title,
@@ -167,7 +195,7 @@ def open_bone_mirror_dialog(
         tag=tag,
         on_close=lambda: dpg.delete_item(window),
     ) as window:
-        with dpg.group(horizontal=True, width=400):
+        with dpg.group(horizontal=True, width=300):
             dpg.add_input_text(
                 default_value=skeleton_path or "",
                 readonly=True,
@@ -175,18 +203,25 @@ def open_bone_mirror_dialog(
             )
             dpg.add_button(label="Load Skeleton...", callback=select_skeleton_file)
 
-        with dpg.group(horizontal=True, width=400):
+        with dpg.group(horizontal=True, width=300):
             dpg.add_input_text(
                 default_value=character_path or "",
                 readonly=True,
                 tag=f"{tag}_character_file",
             )
-            dpg.add_button(label="Load Character...", callback=select_character_file)
+            dpg.add_button(
+                label="Load Pairings from Character...", callback=select_character_file
+            )
 
         dpg.add_separator()
 
-        with dpg.table(tag=f"{tag}_table", height=500, scrollY=True):
-            dpg.add_table_column(label="Index", width=50, width_fixed=True)
+        with dpg.table(
+            tag=f"{tag}_table",
+            height=500,
+            scrollY=True,
+            policy=dpg.mvTable_SizingStretchProp,
+        ):
+            dpg.add_table_column(label="Index", width=100)
             dpg.add_table_column(label="Bone")
             dpg.add_table_column(label="Mirrored")
 
@@ -194,27 +229,26 @@ def open_bone_mirror_dialog(
 
         instructions = """\
 This dialog allows you to generate a 'hkbMirroredSkeletonInfo', which is an array
-in Character/cXXXX.hkb that is used when using clips with the MIRROR flag enabled.
+in Character/cXXXX.hkb that is used for clips with the MIRROR flag enabled.
 
-To the correct bone pairings (i.e. left/right), load a Skeleton file and the 
-Character/cXXXX.hkx from an unpacked behavior (both have to be converted to XML). 
-Then hit 'Auto Mirror' and/or adjust manually as needed. You can directly write 
-back to the Character file, or copy to clipboard to use otherwise. 
+To generate the correct left/right pairings, load a Skeleton and hit 'Auto Mirror' 
+or adjust manually as needed. You can also load pairings from a Character file
+(e.g. Character/c0000.xml from an unpacked behavior).
 
-Note that the object ID and type IDs may be different when inserting into other 
-behaviors or games.\
+Note that the object ID and type IDs may differ between characters and games.\
 """
         with dpg.group():
             for line in instructions.split("\n"):
                 dpg.add_text(line)
 
+        dpg.add_button(label="Auto Mirror", callback=auto_mirror)
         dpg.add_separator()
 
         dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
 
-        with dpg.group(horizontal=False):
-            dpg.add_button(label="Auto Mirror", callback=auto_mirror)
-            dpg.add_button(label="Copy XML", callback=copy_to_clipboard)
+        with dpg.group(horizontal=True):
+            dpg.add_button(label="Copy CSV", callback=copy_csv)
+            dpg.add_button(label="Copy XML", callback=copy_xml)
             dpg.add_button(label="Save...", callback=save_character)
 
     # Fill table if we already have everything

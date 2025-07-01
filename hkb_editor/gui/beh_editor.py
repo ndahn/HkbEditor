@@ -1,6 +1,7 @@
 from typing import Any, Callable
 import os
 import logging
+import traceback
 from threading import Thread
 import textwrap
 import time
@@ -76,7 +77,9 @@ class BehaviorEditor(GraphEditor):
         if severity < self.min_notification_severity:
             return
 
-        lines = textwrap.wrap(message)
+        lines = [
+            subline for line in message.split("\n") for subline in textwrap.wrap(line)
+        ]
 
         with dpg.mutex():
             with dpg.window(
@@ -141,12 +144,19 @@ class BehaviorEditor(GraphEditor):
 
         undo_manager.clear()
         self.alias_manager.clear()
-        filename = os.path.basename(file_path)
-        dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
-        self.beh = HavokBehavior(file_path)
-        self._set_menus_enabled(True)
-
-        dpg.delete_item(loading_screen)
+        try:
+            self.beh = HavokBehavior(file_path)
+            filename = os.path.basename(file_path)
+            dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
+            self._set_menus_enabled(True)
+        except Exception as e:
+            details = traceback.format_exception_only(e)
+            self.logger.error(
+                f"Loading behavior failed: {details[0]}\nSee log for details!"
+            )
+            raise e
+        finally:
+            dpg.delete_item(loading_screen)
 
     def _do_write_to_file(self, file_path):
         self.beh.save_to_file(file_path)
@@ -178,6 +188,11 @@ class BehaviorEditor(GraphEditor):
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
             dpg.add_menu_item(label="Undo (ctrl-z)", callback=self.undo)
             dpg.add_menu_item(label="Redo (ctrl-y)", callback=self.redo)
+
+            dpg.add_separator()
+
+            with dpg.menu(label="Aliases"):
+                dpg.add_menu_item(label="Load Bone Names...", callback=self.load_bone_names)
 
             dpg.add_separator()
 
@@ -217,7 +232,6 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_separator()
 
-            dpg.add_menu_item(label="Load Bone Names...", callback=self.load_bone_names)
             dpg.add_menu_item(
                 label="Generate Bone Mirror Map...",
                 callback=self.open_bone_mirror_map_dialog,
