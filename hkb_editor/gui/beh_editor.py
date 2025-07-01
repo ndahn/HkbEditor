@@ -780,26 +780,28 @@ class BehaviorEditor(GraphEditor):
             active = value.get_value()
             if checked:
                 # Checking 0 will disable all other flags
-                if flag.value == 0:
+                if flag == 0:
                     active = flag_type(0)
                 else:
                     active |= flag
             else:
                 # Prevent disabling 0
-                if flag.value == 0:
+                if flag == 0:
                     dpg.set_value(f"{tag}_flag_0", True)
                     return
 
                 active &= ~flag
 
-            # 0 disables all other flags and enables 0
-            if active == 0:
-                for flag in flag_type:
-                    dpg.set_value(f"{tag}_flag_{flag.value}", False)
-                dpg.set_value(f"{tag}_flag_0", True)
-            # 0 is disabled by any other flag
-            else:
-                dpg.set_value(f"{tag}_flag_0", False)
+            # Flags are not required to have a 0 mapping
+            if dpg.does_item_exist(f"{tag}_flag_0"):
+                # 0 disables all other flags and enables 0
+                if active == 0:
+                    for flag in flag_type:
+                        dpg.set_value(f"{tag}_flag_{flag.value}", False)
+                    dpg.set_value(f"{tag}_flag_0", True)
+                # 0 is disabled by any other flag
+                else:
+                    dpg.set_value(f"{tag}_flag_0", False)
 
             self.on_attribute_update(None, active.value, value)
 

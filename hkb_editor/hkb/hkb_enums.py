@@ -5,6 +5,10 @@ from functools import cache
 from .type_registry import TypeRegistry
 
 
+# TODO check HKLib to extract more flag definitions
+# https://github.com/The12thAvenger/HKLib/tree/main/HKLib/hk2018/Autogen
+
+
 # Enum values are not documented within the behavior files, but we can discover
 # many values from when they are used and the comments going with them
 # hkbBehaviorGraph_VariableMode(IntEnum): pass

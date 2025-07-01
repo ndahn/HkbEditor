@@ -8,6 +8,8 @@ from .type_registry import TypeRegistry
 # TODO check HKLib to extract more flag definitions
 # https://github.com/The12thAvenger/HKLib/tree/main/HKLib/hk2018/Autogen
 
+# TODO add 0 mappings where missing, handle 0 in clipgen and cmsg dialogs
+
 
 class hkbClipGenerator_Flags(IntFlag):
     CONTINUE_MOTION_AT_END = 1
