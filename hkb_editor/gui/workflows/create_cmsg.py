@@ -9,6 +9,9 @@ from hkb_editor.hkb.hkb_enums import (
     hkbClipGenerator_PlaybackMode as PlaybackMode,
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
+from hkb_editor.hkb.hkb_flags import (
+    hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
+)
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_event, select_animation_name, select_object
 from hkb_editor.gui.helpers import center_window
@@ -43,7 +46,7 @@ def open_new_cmsg_dialog(
         tag = dpg.generate_uuid()
 
     types = behavior.type_registry
-    
+
     # CMSG generation
     def on_okay():
         # No need to verify, okay should be disabled when values are invalid
@@ -127,6 +130,11 @@ def open_new_cmsg_dialog(
             t.object_id for t in transitions if t["name"].get_value() == transition_val
         )
 
+        transition_flags = 0
+        for flag in TransitionInfoFlags:
+            if dpg.get_value(f"{tag}_transitioninfo_flag_{flag.name}"):
+                transition_flags |= flag
+
         # Generate the new objects
         cmsg_id = behavior.new_id()
         clipgen_id = behavior.new_id()
@@ -174,9 +182,9 @@ def open_new_cmsg_dialog(
                 "transition": transition_id,
                 "eventId": event_id,
                 "toStateId": new_state_id,
-                # "flags": 0,  # TODO Who knows what this one does
+                "flags": transition_flags,
             },
-            # No ID, this one lives inside an array
+            # No object ID, this one lives inside an array
         )
 
         with undo_manager.combine():
@@ -227,11 +235,11 @@ def open_new_cmsg_dialog(
         sm_type = types.find_first_type_by_name("hkbStateMachine")
         statemachines = behavior.find_objects_by_type(sm_type)
         sm_items = [sm["name"] for sm in statemachines]
-        
+
         default_sm = sm_items[0]
         if active_statemachine_id:
             default_sm = behavior.objects[active_statemachine_id]["name"].get_value()
-        
+
         dpg.add_combo(
             items=sm_items,
             default_value=default_sm,
@@ -252,6 +260,7 @@ def open_new_cmsg_dialog(
 
         # CMSG event
         with dpg.group(horizontal=True):
+
             def on_event_selected(sender: str, event_id: int, user_data: Any):
                 event_name = behavior.get_event(event_id)
                 dpg.set_value(f"{tag}_event", event_name)
@@ -268,13 +277,14 @@ def open_new_cmsg_dialog(
                 arrow=True,
                 direction=dpg.mvDir_Right,
                 callback=lambda s, a, u: select_event(*u),
-                user_data=(behavior, on_event_selected)
+                user_data=(behavior, on_event_selected),
             )
 
             dpg.add_text("CMSG Event")
 
         # ClipGenerator animation
         with dpg.group(horizontal=True):
+
             def on_animation_selected(sender: str, animation_id: int, user_data: Any):
                 animation_name = behavior.get_animation(animation_id)
                 dpg.set_value(f"{tag}_animation", animation_name)
@@ -292,7 +302,7 @@ def open_new_cmsg_dialog(
                 arrow=True,
                 direction=dpg.mvDir_Right,
                 callback=lambda s, a, u: select_animation_name(*u),
-                user_data=(behavior, on_animation_selected)
+                user_data=(behavior, on_animation_selected),
             )
 
             dpg.add_text("Clip Animation")
@@ -330,6 +340,11 @@ def open_new_cmsg_dialog(
                     "Decides how animations are blended when transitioning to the CMSG"
                 )
 
+            # TransitionInfo flags
+            with dpg.tree_node(label="Transition Flags"):
+                for flag in TransitionInfoFlags:
+                    dpg.add_checkbox(label=flag.name, tag=f"{tag}_transitioninfo_flag_{flag.name}")
+
             # AnimeEndEventType
             dpg.add_combo(
                 [e.name for e in AnimeEndEventType],
@@ -341,6 +356,7 @@ def open_new_cmsg_dialog(
             # StateInfo transition pointer
             # TODO we probably need a table to get a clean layout
             with dpg.group(horizontal=True):
+
                 def on_pointer_selected(sender: str, target: HkbRecord, user_data: Any):
                     dpg.set_value(f"{tag}_stateinfo_transitions", target.object_id)
 
@@ -354,7 +370,7 @@ def open_new_cmsg_dialog(
                     arrow=True,
                     direction=dpg.mvDir_Right,
                     callback=lambda s, a, u: select_object(*u),
-                    user_data=(behavior, transition_type, on_pointer_selected)
+                    user_data=(behavior, transition_type, on_pointer_selected),
                 )
                 dpg.add_text("StateInfo Transitions")
 
@@ -369,7 +385,7 @@ def open_new_cmsg_dialog(
                 callback=lambda: dpg.delete_item(dialog),
             )
             dpg.add_checkbox(
-                label="Pin created objects", 
+                label="Pin created objects",
                 default_value=True,
                 tag=f"{tag}_pin_objects",
             )

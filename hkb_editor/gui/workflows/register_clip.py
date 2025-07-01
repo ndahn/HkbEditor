@@ -4,6 +4,7 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
+from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_animation_name
 from hkb_editor.gui.helpers import center_window
@@ -22,7 +23,9 @@ def open_register_clip_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-    cmsg_type = behavior.type_registry.find_first_type_by_name("CustomManualSelectorGenerator")
+    cmsg_type = behavior.type_registry.find_first_type_by_name(
+        "CustomManualSelectorGenerator"
+    )
     clipgen_type = behavior.type_registry.find_first_type_by_name("hkbClipGenerator")
     cmsg_candidates: list[HkbRecord] = []
 
@@ -42,7 +45,12 @@ def open_register_clip_dialog(
         cmsg = next(c for c in cmsg_candidates if c["name"].get_value() == cmsg_name)
         playback_mode = PlaybackMode[playback_mode_name].value
         anim_idx = behavior.find_animation(animation_name)
-        
+
+        clip_flags = 0
+        for flag in hkbClipGenerator_Flags:
+            if dpg.get_value(f"{tag}_flag_{flag.name}"):
+                clip_flags |= flag
+
         clipgen = HkbRecord.new(
             behavior,
             clipgen_type,
@@ -51,6 +59,7 @@ def open_register_clip_dialog(
                 "animationName": animation_name,
                 "mode": playback_mode,
                 "animationInternalId": anim_idx,
+                "flags": clip_flags,
             },
             clipgen_id,
         )
@@ -86,6 +95,7 @@ def open_register_clip_dialog(
 
         # Animation name
         with dpg.group(horizontal=True):
+
             def on_animation_selected(sender: str, animation_id: int, user_data: Any):
                 nonlocal cmsg_candidates
                 animation_name = behavior.get_animation(animation_id)
@@ -94,7 +104,9 @@ def open_register_clip_dialog(
 
                 # Find CMSGs with a matching animId
                 anim_id = animation_name.split("_")[1]
-                cmsg_candidates = list(behavior.query(f"type_id:{cmsg_type} AND animId:{anim_id}"))
+                cmsg_candidates = list(
+                    behavior.query(f"type_id:{cmsg_type} AND animId:{anim_id}")
+                )
                 items = [c["name"].get_value() for c in cmsg_candidates]
 
                 dpg.configure_item(
@@ -114,7 +126,7 @@ def open_register_clip_dialog(
                 direction=dpg.mvDir_Right,
                 # TODO allow creating new animations from selection dialog
                 callback=lambda s, a, u: select_animation_name(*u),
-                user_data=(behavior, on_animation_selected)
+                user_data=(behavior, on_animation_selected),
             )
             dpg.add_text("Animation")
 
@@ -132,6 +144,11 @@ def open_register_clip_dialog(
             tag=f"{tag}_playback_mode",
         )
 
+        # Flags
+        with dpg.tree_node(label="Flags"):
+            for flag in hkbClipGenerator_Flags:
+                dpg.add_checkbox(label=flag.name, tag=f"{tag}_flag_{flag.name}")
+
         # Main form done, now just some buttons and such
         dpg.add_separator()
         with dpg.group(horizontal=True):
@@ -141,7 +158,7 @@ def open_register_clip_dialog(
                 callback=lambda: dpg.delete_item(dialog),
             )
             dpg.add_checkbox(
-                label="Pin created objects", 
+                label="Pin created objects",
                 default_value=True,
                 tag=f"{tag}_pin_objects",
             )
