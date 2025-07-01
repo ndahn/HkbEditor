@@ -270,8 +270,11 @@ class HkbArray(XmlValueHandler):
             index = len(self) + index
         
         self.element[:] = [
-            e.element for i, e in enumerate(self.get_value()) if e != index
+            elem
+            for i, elem in enumerate(self.element)
+            if i != index
         ]
+
         self._count -= 1
 
     def _wrap_value(self, value: Any) -> XmlValueHandler:
