@@ -32,12 +32,17 @@ class Tagfile:
             for obj in root.findall(".//object")
         }
 
-        self._next_object_id = max(
-            int(k[len("object"):]) for k in self.objects.keys() if k.startswith("object")
-        ) + 1
-        self._next_userdata_value = max(
+        objectid_values = [
+            int(k[len("object") :])
+            for k in self.objects.keys()
+            if k.startswith("object")
+        ]
+        self._next_object_id = max(objectid_values) + 1
+
+        userdata_values = [
             int(v) for v in self._tree.xpath("//field[@name='userData']/integer/@value")
-        ) + 1
+        ]
+        self._next_userdata_value = max(userdata_values + [-1]) + 1
 
     def save_to_file(self, file_path: str) -> None:
         ET.indent(self._tree)
@@ -53,7 +58,7 @@ class Tagfile:
             elem = next(self._tree.xpath(f".//object[@id='{object_id}']"), None)
             if elem:
                 return HkbRecord.from_object(self, elem)
-        
+
         return None
 
     # TODO include subtypes
