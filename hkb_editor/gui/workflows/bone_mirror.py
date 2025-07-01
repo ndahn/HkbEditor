@@ -137,7 +137,7 @@ def open_bone_mirror_dialog(
         find_dialog(
             lambda s: [(i, b) for i, b in enumerate(bones) if s in b],
             ["Index", "Bone"],
-            lambda item: item[1],
+            lambda item: item,
             okay_callback=on_bone_selected,
             title="Select Mirror Bone",
             tag=dialog,
