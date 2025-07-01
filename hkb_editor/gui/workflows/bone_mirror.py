@@ -7,7 +7,7 @@ from dearpygui import dearpygui as dpg
 from hkb_editor.hkb.tagfile import Tagfile
 from hkb_editor.hkb.hkb_types import HkbArray, HkbRecord
 from hkb_editor.hkb.skeleton import load_skeleton_bones
-from hkb_editor.gui.dialogs import open_file_dialog, save_file_dialog
+from hkb_editor.gui.dialogs import open_file_dialog, save_file_dialog, find_dialog
 
 
 def open_bone_mirror_dialog(
@@ -104,26 +104,52 @@ def open_bone_mirror_dialog(
             ):
                 dpg.add_text(str(idx))
                 dpg.add_text(bone)
-                # Can only contain already existing bones, use different widget
-                dpg.add_input_text(default_value=alt_bone)
+                with dpg.group(horizontal=True):
+                    dpg.add_input_text(
+                        default_value=alt_bone,
+                        readonly=True,
+                        tag=f"{tag}_alt_bone_{idx}",
+                    )
+                    dpg.add_button(
+                        arrow=True,
+                        direction=dpg.mvDir_Right,
+                        callback=lambda s, a, u: select_mirror_bone(u),
+                        user_data=idx,
+                    )
+
+    def select_mirror_bone(bone_idx: int) -> str:
+        dialog = f"{tag}_select_mirror_bone"
+        if dpg.does_item_exist(dialog):
+            dpg.focus_item(dialog)
+            return
+
+        def on_bone_selected(sender: str, item: tuple[int, str], user_data) -> None:
+            alt_bone = item[1]
+            dpg.set_value(f"{tag}_alt_bone_{bone_idx}", alt_bone)
+
+        find_dialog(
+            lambda s: [(i, b) for i, b in enumerate(bones) if s in b],
+            ["Index", "Bone"],
+            lambda item: item[1],
+            okay_callback=on_bone_selected,
+            title="Select Mirror Bone",
+            tag=dialog,
+        )
 
     def update_mirror_info() -> None:
         if not is_bones_loaded() or not is_character_loaded():
             return
 
         pair_map: HkbArray = mirror_info["bonePairMap"]
-        rows = dpg.get_item_children(f"{tag}_table", slot=1)
 
         try:
-            for i in range(len(pair_map)):
-                row = rows[i]
-                # TODO different widget
-                alt_bone = dpg.get_value(dpg.get_item_children(row, slot=1)[2])
+            for idx in range(len(pair_map)):
+                alt_bone = dpg.get_value(f"{tag}_alt_bone_{idx}")
                 alt_idx = bones.index(alt_bone)
-                pair_map[i] = alt_idx
+                pair_map[idx] = alt_idx
         except ValueError:
             dpg.set_value(
-                f"{tag}_notification", f"{alt_bone} ({i}) is not a valid bone name"
+                f"{tag}_notification", f"{alt_bone} ({idx}) is not a valid bone name"
             )
             dpg.show_item(f"{tag}_notification")
 
@@ -131,8 +157,7 @@ def open_bone_mirror_dialog(
         if not is_bones_loaded():
             return
 
-        rows = dpg.get_item_children(f"{tag}_table", slot=1)
-        for row, bone in zip(rows, bones):
+        for idx, bone in enumerate(bones):
             if bone.startswith("L_"):
                 alt_bone = "R_" + bone[2:]
             elif bone.startswith("R_"):
@@ -145,8 +170,7 @@ def open_bone_mirror_dialog(
                 continue
 
             if alt_bone in bones:
-                # TODO different widget
-                dpg.set_value(dpg.get_item_children(row, slot=1)[2], alt_bone)
+                dpg.set_value(f"{tag}_alt_bone_{idx}", alt_bone)
 
     def copy_csv() -> None:
         if not is_bones_loaded():
