@@ -61,6 +61,8 @@ notification_error_theme = None
 input_field_error_theme = None
 input_field_okay_theme = None
 
+link_button_theme = None
+
 
 def pastel(color: tuple[int, int, int, int]):
     return tuple((c + 255) // 2 for c in color[:3]) + (color[3],)
@@ -81,6 +83,7 @@ def setup_styles():
     global notification_error_theme
     global input_field_okay_theme
     global input_field_error_theme
+    global link_button_theme
 
     with dpg.theme() as bound_attribute_theme:
         with dpg.theme_component(dpg.mvAll):
@@ -115,3 +118,7 @@ def setup_styles():
     with dpg.theme() as input_field_error_theme:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Border, red)
+
+    with dpg.theme() as link_button_theme:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Text, blue, category=dpg.mvThemeCat_Core)

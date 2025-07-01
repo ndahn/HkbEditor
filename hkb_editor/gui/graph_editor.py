@@ -9,6 +9,7 @@ import networkx as nx
 
 from .graph_widget import GraphWidget, GraphLayout, Node
 from .dialogs import open_file_dialog, save_file_dialog
+from .helpers import center_window
 from . import style
 
 
@@ -155,35 +156,42 @@ class GraphEditor:
             )
 
     def _create_dpg_menu(self):
-        with dpg.menu(label="dearpygui"):
+        with dpg.menu(label="Help"):
+            with dpg.menu(label="dearpygui"):
+                dpg.add_menu_item(
+                    label="Show About", callback=lambda: dpg.show_tool(dpg.mvTool_About)
+                )
+                dpg.add_menu_item(
+                    label="Show Metrics", callback=lambda: dpg.show_tool(dpg.mvTool_Metrics)
+                )
+                dpg.add_menu_item(
+                    label="Show Documentation",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Doc),
+                )
+                dpg.add_menu_item(
+                    label="Show Debug", callback=lambda: dpg.show_tool(dpg.mvTool_Debug)
+                )
+                dpg.add_menu_item(
+                    label="Show Style Editor",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Style),
+                )
+                dpg.add_menu_item(
+                    label="Show Font Manager",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Font),
+                )
+                dpg.add_menu_item(
+                    label="Show Item Registry",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_ItemRegistry),
+                )
+                dpg.add_menu_item(
+                    label="Show Stack Tool",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Stack),
+                )
+
+            dpg.add_separator()
             dpg.add_menu_item(
-                label="Show About", callback=lambda: dpg.show_tool(dpg.mvTool_About)
-            )
-            dpg.add_menu_item(
-                label="Show Metrics", callback=lambda: dpg.show_tool(dpg.mvTool_Metrics)
-            )
-            dpg.add_menu_item(
-                label="Show Documentation",
-                callback=lambda: dpg.show_tool(dpg.mvTool_Doc),
-            )
-            dpg.add_menu_item(
-                label="Show Debug", callback=lambda: dpg.show_tool(dpg.mvTool_Debug)
-            )
-            dpg.add_menu_item(
-                label="Show Style Editor",
-                callback=lambda: dpg.show_tool(dpg.mvTool_Style),
-            )
-            dpg.add_menu_item(
-                label="Show Font Manager",
-                callback=lambda: dpg.show_tool(dpg.mvTool_Font),
-            )
-            dpg.add_menu_item(
-                label="Show Item Registry",
-                callback=lambda: dpg.show_tool(dpg.mvTool_ItemRegistry),
-            )
-            dpg.add_menu_item(
-                label="Show Stack Tool",
-                callback=lambda: dpg.show_tool(dpg.mvTool_Stack),
+                label="HkbEditor",
+                callback=self.open_about_dialog,
             )
 
     def open_node_menu(self, node: Node) -> None:
@@ -465,6 +473,39 @@ class GraphEditor:
             )
 
         dpg.add_text(key)
+
+    def open_about_dialog(self) -> None:
+        tag = f"{self.tag}_about_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
+        rainbow = style.HighContrastColorGenerator()
+        rainbow.hue_step = 0.1
+
+        with dpg.window(
+            width=300,
+            height=150,
+            label="About",
+            no_saved_settings=True,
+            tag=tag,
+        ) as dialog:
+            from . import __version__
+            dpg.add_text(f"HkbEditor v{__version__}", color=rainbow())
+            
+            dpg.add_separator()
+            
+            dpg.add_text("Written by Nikolas Dahn", color=rainbow())
+            dpg.add_button(label="https://github.com/ndahn/HkbEditor", small=True)
+            dpg.bind_item_theme(dpg.last_item(), style.link_button_theme)
+            
+            dpg.add_separator()
+
+            dpg.add_text("Bugs, questions, feature request?", color=rainbow())
+            dpg.add_text("Find me on ?ServerName? @Managarm!", color=rainbow())
+
+        dpg.split_frame()
+        center_window(dialog)
 
 
 def main():
