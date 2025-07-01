@@ -87,7 +87,7 @@ def get_hkb_enum(
     type_registry: TypeRegistry, record_type_id: str, field: str
 ) -> Type[IntEnum]:
     # Not all records are objects or have IDs, so going from the record type is better
-    field_type = type_registry.get_fields(record_type_id).get(field, None)
+    field_type = type_registry.get_field_types(record_type_id).get(field, None)
 
     if not field_type or type_registry.get_name(field_type) != "hkEnum":
         # Not robust, but seems consistent so far

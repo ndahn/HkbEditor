@@ -1,4 +1,8 @@
+from typing import Type
 from enum import IntFlag
+from functools import cache
+
+from .type_registry import TypeRegistry
 
 
 # TODO check HKLib to extract more flag definitions
@@ -56,3 +60,15 @@ class hkbBlenderGenerator_Flags(IntFlag):
     FORCE_DENSE_POSE = 64
     BLEND_MOTION_OF_ADDITIVE_ANIMATIONS = 128
     USE_VELOCITY_SYNCHRONIZATION = 256
+
+
+@cache
+def get_hkb_flags(
+    type_registry: TypeRegistry, record_type_id: str, field: str
+) -> Type[IntFlag]:
+    if field != "flags":
+        # Seems consistent so far
+        return None
+
+    flags_name = type_registry.get_name(record_type_id).replace("::", "_") + "_Flags"
+    return globals().get(flags_name, None)

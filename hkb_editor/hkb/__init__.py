@@ -15,4 +15,4 @@ from .hkb_types import (
 )
 from .cached_array import CachedArray
 from .hkb_enums import get_hkb_enum
-from . import hkb_flags
+from .hkb_flags import get_hkb_flags

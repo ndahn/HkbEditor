@@ -335,7 +335,7 @@ class HkbRecord(XmlValueHandler):
 
         # Make sure the xml subtree contains all required fields
         def create_fields(parent_elem: ET.Element, record_type_id: str):
-            for fname, ftype in tagfile.type_registry.get_fields(
+            for fname, ftype in tagfile.type_registry.get_field_types(
                 record_type_id
             ).items():
 
@@ -378,7 +378,7 @@ class HkbRecord(XmlValueHandler):
 
         super().__init__(tagfile, element, type_id)
         self.object_id = object_id
-        self._fields = tagfile.type_registry.get_fields(type_id)
+        self._fields = tagfile.type_registry.get_field_types(type_id)
 
     def get_value(self) -> dict[str, XmlValueHandler]:
         ret = {}

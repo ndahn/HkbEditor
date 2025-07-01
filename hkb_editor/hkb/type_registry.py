@@ -103,7 +103,7 @@ class TypeRegistry:
     def get_format(self, type_id: str) -> int:
         return self.types[type_id]["format"]
 
-    def get_fields(self, type_id: str) -> dict[str, str]:
+    def get_field_types(self, type_id: str) -> dict[str, str]:
         return self.types[type_id]["fields"]
 
     def get_subtype(self, type_id: str) -> str:

@@ -1,10 +1,11 @@
-from typing import Any, Callable
+from typing import Any, Type
 import os
 import logging
 import traceback
 from threading import Thread
 import textwrap
 import time
+from enum import IntFlag
 from lxml import etree as ET
 from dearpygui import dearpygui as dpg
 import networkx as nx
@@ -23,7 +24,7 @@ from hkb_editor.hkb.hkb_types import (
     get_value_handler,
 )
 from hkb_editor.hkb.skeleton import load_skeleton_bones
-from hkb_editor.hkb.hkb_enums import get_hkb_enum
+from hkb_editor.hkb import get_hkb_enum, get_hkb_flags
 
 from .graph_editor import GraphEditor, Node
 from .dialogs import (
@@ -192,7 +193,9 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             with dpg.menu(label="Aliases"):
-                dpg.add_menu_item(label="Load Bone Names...", callback=self.load_bone_names)
+                dpg.add_menu_item(
+                    label="Load Bone Names...", callback=self.load_bone_names
+                )
 
             dpg.add_separator()
 
@@ -524,6 +527,7 @@ class BehaviorEditor(GraphEditor):
 
         tag = f"{self.tag}_attribute_{path}"
         widget = tag
+        is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
 
         label = self.alias_manager.get_attribute_alias(source_record, path)
         if label is None:
@@ -601,12 +605,31 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_text(label, color=label_color)
 
         else:
-            with table_tree_leaf(
-                table=self.attributes_table,
-                before=before,
-            ):
-                self._create_attribute_widget_simple(source_record, value, path, tag)
-                dpg.add_text(label, color=label_color)
+            FieldFlags = get_hkb_flags(
+                self.beh.type_registry,
+                source_record.type_id,
+                path.split("/")[-1],
+            )
+
+            if FieldFlags:
+                with table_tree_leaf(
+                    table=self.attributes_table,
+                    before=before,
+                ):
+                    self._create_attribute_widget_flags(
+                        source_record, value, FieldFlags, path, tag
+                    )
+                    dpg.add_text(label, color=label_color)
+                    is_simple = False
+            else:
+                with table_tree_leaf(
+                    table=self.attributes_table,
+                    before=before,
+                ):
+                    self._create_attribute_widget_simple(
+                        source_record, value, path, tag
+                    )
+                    dpg.add_text(label, color=label_color)
 
         self._create_attribute_menu(widget, source_record, value, path)
 
@@ -743,6 +766,54 @@ class BehaviorEditor(GraphEditor):
 
         return button_group
 
+    def _create_attribute_widget_flags(
+        self,
+        source_record: HkbRecord,
+        value: XmlValueHandler,
+        flag_type: Type[IntFlag],
+        path: str,
+        tag: str = 0,
+    ) -> str:
+        attribute = path.split("/")[-1]
+
+        def on_flag_changed(sender: str, checked: bool, flag: IntFlag):
+            active = value.get_value()
+            if checked:
+                # Checking 0 will disable all other flags
+                if flag.value == 0:
+                    active = flag_type(0)
+                else:
+                    active |= flag
+            else:
+                # Prevent disabling 0
+                if flag.value == 0:
+                    dpg.set_value(f"{tag}_flag_0", True)
+                    return
+
+                active &= ~flag
+
+            # 0 disables all other flags and enables 0
+            if active == 0:
+                for flag in flag_type:
+                    dpg.set_value(f"{tag}_flag_{flag.value}", False)
+                dpg.set_value(f"{tag}_flag_0", True)
+            # 0 is disabled by any other flag
+            else:
+                dpg.set_value(f"{tag}_flag_0", False)
+
+            self.on_attribute_update(None, active.value, value)
+
+        flags = flag_type(value.get_value())
+        with dpg.tree_node(label=attribute, default_open=True, tag=tag):
+            for flag in flag_type:
+                dpg.add_checkbox(
+                    label=flag.name,
+                    default_value=(flag in flags),
+                    callback=on_flag_changed,
+                    tag=f"{tag}_flag_{flag.value}",
+                    user_data=flag,
+                )
+
     def _create_attribute_widget_simple(
         self,
         source_record: HkbRecord,
@@ -828,7 +899,8 @@ class BehaviorEditor(GraphEditor):
         # The handler may throw if the new value is not appropriate
         undo_manager.on_update_value(handler, handler.get_value(), new_value)
         handler.set_value(new_value)
-        dpg.set_value(sender, new_value)
+        if sender:
+            dpg.set_value(sender, new_value)
 
     def undo(self) -> None:
         if not undo_manager.can_undo():
@@ -862,6 +934,7 @@ class BehaviorEditor(GraphEditor):
         source_record: HkbRecord,
         value: XmlValueHandler,
         path: str,
+        is_simple: bool = False,
     ):
         # Should never happen, but development is funny ~
         if value is None:
@@ -871,8 +944,6 @@ class BehaviorEditor(GraphEditor):
                 path,
             )
             return
-
-        is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
 
         if is_simple:
             bound_attributes = get_bound_attributes(self.beh, source_record)
@@ -1373,9 +1444,7 @@ class BehaviorEditor(GraphEditor):
                 aliases = AliasMap()
 
                 for idx, bone in enumerate(bones):
-                    aliases.add(
-                        bone, f"{basepath}:{idx}", boneweights_type_id, None
-                    )
+                    aliases.add(bone, f"{basepath}:{idx}", boneweights_type_id, None)
 
                 # Insert left so that these aliases take priority
                 self.alias_manager.aliases.insert(0, aliases)
