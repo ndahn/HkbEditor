@@ -67,6 +67,23 @@ class hkbBlenderGenerator_Flags(IntFlag):
     USE_VELOCITY_SYNCHRONIZATION = 256
 
 
+class hkbRoleAttribute_Flags(IntFlag):
+    NONE = 0
+    RAGDOLL = 1
+    NORMALIZED = 2
+    NOT_VARIABLE = 4
+    HIDDEN = 8
+    OUTPUT = 16
+    NOT_CHARACTER_PROPERTY = 32
+    CHAIN = 64
+
+
+class hkbDockingGenerator_Flags(IntFlag):
+    NONE = 0
+    DOCK_TO_FUTURE_POSITION = 1
+    OVERRIDE_MOTION = 2
+
+
 @cache
 def get_hkb_flags(
     type_registry: TypeRegistry, record_type_id: str, field: str
