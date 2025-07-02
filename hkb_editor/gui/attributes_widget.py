@@ -212,11 +212,12 @@ class AttributesWidget:
                 "hkQuaternion",
                 "hkQuaternionf",
             ):
-                self._create_attribute_widget_vector4(
-                    value,
-                    path,
-                    tag,
-                )
+                with table_tree_leaf(
+                    table=self.attributes_table,
+                    tag=tag,
+                    before=before,
+                ):
+                    widget = self._create_attribute_widget_vector4(value, path)
 
             else:
                 # create items on demand, dpg performance tanks with too many widgets
@@ -231,10 +232,7 @@ class AttributesWidget:
                         tag=f"{tag}_arraybuttons",
                         before=anchor,
                     ):
-                        self._create_attribute_widget_array_buttons(
-                            value,
-                            path,
-                        )
+                        self._create_attribute_widget_array_buttons(value, path)
 
                 add_lazy_table_tree_node(
                     label,
@@ -248,9 +246,10 @@ class AttributesWidget:
         elif isinstance(value, HkbPointer):
             with table_tree_leaf(
                 table=self.attributes_table,
+                tag=tag,
                 before=before,
             ):
-                self._create_attribute_widget_pointer(value, path, tag)
+                widget = self._create_attribute_widget_pointer(value, path)
                 dpg.add_text(label, color=label_color)
 
         else:
@@ -282,7 +281,6 @@ class AttributesWidget:
         self,
         pointer: HkbPointer,
         path: str,
-        tag: str = 0,
     ) -> str:
         attribute = path.split("/")[-1]
 
@@ -303,7 +301,7 @@ class AttributesWidget:
                 self.tagfile, pointer.subtype, on_pointer_selected, include_derived=True
             )
 
-        with dpg.group(horizontal=True, filter_key=attribute, tag=tag) as group:
+        with dpg.group(horizontal=True, filter_key=attribute) as group:
             ptr_input = dpg.add_input_text(
                 default_value=pointer.get_value(),
                 readonly=True,
@@ -322,13 +320,14 @@ class AttributesWidget:
         self,
         array: HkbArray,
         path: str,
-        tag: str = 0,
     ) -> str:
         attribute = path.split("/")[-1]
 
         with dpg.tree_node(
-            label=attribute, filter_key=attribute, default_open=True, tag=tag
-        ) as group:
+            label=attribute,
+            filter_key=attribute,
+            default_open=False,
+        ) as tree_node:
             # In some cases the array might could be still empty
             for i in range(0, 4 - len(array)):
                 if i == 3:
@@ -345,7 +344,7 @@ class AttributesWidget:
                     user_data=array[i],
                 )
 
-        return group
+        return tree_node
 
     def _create_attribute_widget_array_buttons(
         self,
@@ -522,6 +521,14 @@ class AttributesWidget:
         path: str,
         is_simple: bool,
     ):
+        if not widget:
+            self.logger.error(
+                "Can't create attribute menu for %s (%s) as no widget was passed", 
+                path,
+                type(value).__name__,
+            )
+            return
+
         # Should never happen, but development is funny ~
         if value is None:
             self.logger.error(

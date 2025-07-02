@@ -199,6 +199,10 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             dpg.add_menu_item(
+                label="Pin Lost Objects", callback=lambda: self.pin_lost_objects()
+            )
+
+            dpg.add_menu_item(
                 label="Find Object...", callback=lambda: self.open_search_dialog()
             )
 
@@ -272,6 +276,8 @@ class BehaviorEditor(GraphEditor):
             label="Pinned Objects",
             autosize=True,
             no_close=True,
+            no_scroll_with_mouse=True,
+            no_scrollbar=True,
             tag=f"{self.tag}_pinned_objects",
         ):
             # Child window to fix table sizing
@@ -323,6 +329,10 @@ class BehaviorEditor(GraphEditor):
             if dpg.get_item_user_data(row) == object_id:
                 dpg.delete_item(row)
                 break
+
+    def pin_lost_objects(self) -> None:
+        for oid in self.find_lost_objects():
+            self.add_pinned_object(oid)
 
     def open_pin_menu(self, sender: str, app_data: str, user_data: Any) -> None:
         _, selectable = app_data
@@ -506,6 +516,16 @@ class BehaviorEditor(GraphEditor):
         return next(
             (sm for sm in self.beh.find_parents_by_type(for_object_id, sm_type)), None
         )
+    
+    def find_lost_objects(self) -> list[str]:
+        root_sm = next(self.beh.query("name:Root"), None)
+        if not root_sm:
+            self.logger.error("Could not locate Root SM")
+            return []
+
+        graph = self.beh.build_graph(root_sm.object_id)
+        lost = [n for n in self.beh.objects.keys() if n not in graph]
+        return lost
 
     # Not used right now, but might be useful at some point
     def get_active_cmsg(self) -> HkbRecord:
