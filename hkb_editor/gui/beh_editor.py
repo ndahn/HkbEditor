@@ -230,7 +230,7 @@ class BehaviorEditor(GraphEditor):
             with dpg.menu(label="Templates"):
                 for template_file, label in get_templates().items():
                     dpg.add_menu_item(
-                        label=label,
+                        label=label[:25],
                         callback=lambda s, a, u: self.open_apply_template_dialog(u),
                         user_data=template_file,
                     )
