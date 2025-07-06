@@ -127,6 +127,9 @@ class BehaviorEditor(GraphEditor):
 
         undo_manager.clear()
         self.alias_manager.clear()
+        self.clear_attributes()
+        self.remove_all_pinned_objects()
+        
         try:
             self.beh = HavokBehavior(file_path)
             filename = os.path.basename(file_path)
@@ -201,11 +204,11 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             dpg.add_menu_item(
-                label="Pin Lost Objects", callback=lambda: self.pin_lost_objects()
+                label="Pin Lost Objects", callback=self.pin_lost_objects
             )
 
             dpg.add_menu_item(
-                label="Find Object...", callback=lambda: self.open_search_dialog()
+                label="Find Object...", callback=self.open_search_dialog
             )
 
         with dpg.menu(
@@ -342,6 +345,9 @@ class BehaviorEditor(GraphEditor):
                 dpg.delete_item(row)
                 break
 
+    def remove_all_pinned_objects(self) -> None:
+        dpg.delete_item(f"{self.tag}_pinned_objects_table", children_only=True, slot=1)
+
     def pin_lost_objects(self) -> None:
         for oid in self.find_lost_objects():
             self.add_pinned_object(oid)
@@ -379,6 +385,10 @@ class BehaviorEditor(GraphEditor):
                 label="Unpin",
                 callback=lambda s, a, u: self.remove_pinned_object(u),
                 user_data=object_id,
+            )
+            dpg.add_selectable(
+                label="Unpin All",
+                callback=self.remove_all_pinned_objects,
             )
             dpg.add_selectable(
                 label="Jump To",
@@ -506,7 +516,7 @@ class BehaviorEditor(GraphEditor):
         record = self.beh.objects[node.id]
         self.attributes_widget.set_record(record)
 
-    def _clear_attributes(self):
+    def clear_attributes(self):
         self.attributes_widget.clear()
 
     # Common use cases

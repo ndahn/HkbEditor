@@ -65,7 +65,7 @@ class GraphEditor:
         self.selected_node = node
 
         # Update the attributes panel
-        self._clear_attributes()
+        self.clear_attributes()
         if node:
             self._update_attributes(node)
 
@@ -364,7 +364,7 @@ class GraphEditor:
             return
 
         self.canvas.clear()
-        self._clear_attributes()
+        self.clear_attributes()
         self.selected_node = None
 
         # For now we only allow one root to be selected
@@ -400,7 +400,7 @@ class GraphEditor:
                     tag=f"{self.tag}_root_{root_id}_selectable",
                 )
 
-    def _clear_attributes(self) -> None:
+    def clear_attributes(self) -> None:
         dpg.set_value(f"{self.tag}_attributes_title", "Attributes")
         dpg.delete_item(self.attributes_table, children_only=True, slot=1)
 
