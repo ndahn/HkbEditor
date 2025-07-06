@@ -32,6 +32,10 @@ def run(
     - known constants (Animation, Event, Variable)
     - other behavior objects (HkbRecord, no defaults)
 
+    Defaults for Animations, Events and Variables may be provided as int or string.
+    Defaults for HkbRecord objects may be provided as a string representing an 
+    object ID or lucene search string to preselect a matching object.
+
     Please try to follow these guidelines, especially when submitting new scripts
     to be included in future releases.
 

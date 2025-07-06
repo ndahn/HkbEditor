@@ -1,11 +1,17 @@
 from hkb_editor.templates import *
 
 
-def run(ctx: TemplateContext, throw_id: int, cmsg_name: str, animation: Animation):
-    """Grab/Throw Behavior
+def run(
+    ctx: TemplateContext,
+    cmsg_name: str = "Throw40168_CMSG",
+    animation: Animation = "a000_040168",
+    throw_id: int = 40168,
+    #throw_sm: HkbRecord = "name:ThrowAtk_Blend",
+):
+    """Throw Attack Behavior
 
     Creates a new throw attack behavior.
-    
+
     TODO: more documentation, what does it do, how to use it in game, etc.
 
     Author: FloppyDonuts
@@ -29,6 +35,7 @@ def run(ctx: TemplateContext, throw_id: int, cmsg_name: str, animation: Animatio
     cmsg = ctx.create(
         "CustomManualSelectorGenerator",
         name=cmsg_name,
+        animId=throw_id,
         offsetType=18,
         animeEndEventType=2,
         enableScript=True,

@@ -170,8 +170,17 @@ def apply_template_dialog(
                 )
                 dpg.add_text(arg.name)
 
-        elif arg.type == HavokBehavior:
-            default = str(arg.value) if arg.value is not None else ""
+        elif arg.type == HkbRecord:
+            default = ""
+            if isinstance(arg.value, str):
+                if arg.value in tagfile.objects:
+                    default = arg.value
+                else:
+                    # Assume it's a query string and try to resolve it
+                    match = next(tagfile.query(arg.value), None)
+                    if match:
+                        args[arg.name] = match.object_id
+                        default = match.object_id
 
             with dpg.group(horizontal=True) as widget:
                 dpg.add_input_text(
