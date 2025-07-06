@@ -15,6 +15,16 @@ def is_foldable_row(row: str) -> bool:
     return isinstance(data, tuple) and data[0] == _foldable_row_sentinel
 
 
+def is_foldable_row_leaf(row: str) -> bool:
+    if not is_foldable_row(row):
+        return False
+
+    if not get_row_selectable_item(row):
+        return True
+
+    return False
+
+
 def get_row_level(row: str, default: int = 0) -> bool:
     data = dpg.get_item_user_data(row)
     try:
@@ -153,7 +163,7 @@ def apply_row_indent(
 
 
 def set_foldable_row_status(row: str, expanded: bool) -> None:
-    if not is_foldable_row(row):
+    if not is_foldable_row(row) or is_foldable_row_leaf(row):
         return
 
     selectable = get_row_selectable_item(row)

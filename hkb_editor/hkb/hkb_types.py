@@ -56,6 +56,8 @@ class HkbString(XmlValueHandler):
         return self.element.attrib.get("value", "")
 
     def set_value(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise ValueError(f"Value {value} ({type(value)}) is not a string")
         self.element.attrib["value"] = str(value)
 
 
@@ -76,7 +78,7 @@ class HkbInteger(XmlValueHandler):
         return int(self.element.attrib.get("value", 0))
 
     def set_value(self, value: int) -> None:
-        self.element.attrib["value"] = str(value)
+        self.element.attrib["value"] = str(int(value))
 
 
 class HkbFloat(XmlValueHandler):
@@ -105,8 +107,8 @@ class HkbFloat(XmlValueHandler):
 
     def set_value(self, value: float) -> None:
         # Behaviors use commas as decimal separators
-        self.element.attrib["dec"] = str(value).replace(".", ",")
-        self.element.attrib["hex"] = self.float_to_ieee754(value)
+        self.element.attrib["dec"] = str(float(value)).replace(".", ",")
+        self.element.attrib["hex"] = self.float_to_ieee754(float(value))
 
 
 class HkbBool(XmlValueHandler):
@@ -127,6 +129,8 @@ class HkbBool(XmlValueHandler):
         return self.element.attrib.get("value", "false").lower() == "true"
 
     def set_value(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise ValueError(f"Value {value} ({type(value)}) is not a bool")
         self.element.attrib["value"] = "true" if value else "false"
 
 
@@ -156,8 +160,14 @@ class HkbPointer(XmlValueHandler):
         return val
 
     def set_value(self, value: str) -> None:
+        if isinstance(value, HkbRecord):
+            value = value.object_id
+
         if value in ("", None):
             value = "object0"
+
+        if not isinstance(value, str):
+            raise ValueError(f"Value {value} ({type(value)}) is not a pointer")
 
         self.element.attrib["id"] = str(value)
 

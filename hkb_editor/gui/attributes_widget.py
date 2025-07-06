@@ -87,9 +87,6 @@ class AttributesWidget:
         dpg.delete_item(self.attributes_table, children_only=True, slot=1)
 
     def reveal_attribute(self, path: str) -> None:
-        if not self.selected_node:
-            return
-
         subpath = ""
 
         def reveal(part: str):
@@ -469,7 +466,8 @@ class AttributesWidget:
 
                     def on_enum_change(sender: str, new_value: str, val: HkbInteger):
                         int_value = enum[new_value].value
-                        self._on_value_changed(sender, int_value, val)
+                        ui_repr = enum[new_value].name
+                        self._on_value_changed(sender, (int_value, ui_repr), val)
 
                     dpg.add_combo(
                         [e.name for e in enum],
@@ -660,8 +658,13 @@ class AttributesWidget:
 
     # Internal callbacks
     def _on_value_changed(
-        self, sender, new_value: Any, handler: XmlValueHandler
+        self, sender, new_value: Any | tuple[Any, Any], handler: XmlValueHandler
     ) -> None:
+        if isinstance(new_value, tuple):
+            new_value, ui_repr = new_value
+        else:
+            ui_repr = new_value
+
         if self.on_value_changed:
             old_value = handler.get_value()
             self.on_value_changed(sender, handler, (old_value, new_value))
@@ -670,8 +673,9 @@ class AttributesWidget:
         old_value = handler.get_value()
         handler.set_value(new_value)
         undo_manager.on_update_value(handler, old_value, new_value)
+        
         if sender:
-            dpg.set_value(sender, new_value)
+            dpg.set_value(sender, ui_repr)
 
     def _cut_value(
         self, sender, app_data, user_data: tuple[str, XmlValueHandler]
