@@ -1,14 +1,10 @@
 from typing import Any, Type, Literal, NewType
 from dataclasses import dataclass
 import ast
-import importlib.util
 from docstring_parser import parse as parse_docstring, DocstringParam
 
 from hkb_editor.hkb import Tagfile, HkbRecord, HkbArray
 from hkb_editor.gui.workflows.undo import undo_manager
-
-
-ID = NewType("ID", str)
 
 
 @dataclass
@@ -116,26 +112,6 @@ class TemplateContext:
         collect_args(func.args.args, func.args.defaults)
         collect_args(func.args.kwonlyargs, func.args.kw_defaults)
 
-    def _execute(self, **args) -> None:
-        undo_top = undo_manager.top()
-
-        try:
-            # Load the template so we can execute its main function
-            spec = importlib.util.spec_from_file_location("mod", self._template_file)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            run_func = getattr(mod, "run")
-
-            # Run the template
-            with undo_manager.combine():
-                run_func(self, **args)
-        except Exception as e:
-            # Undo any changes that might have already happened
-            if undo_top != undo_manager.top():
-                undo_manager.undo()
-
-            raise e
-
     def find_all(self, query: str) -> list[HkbRecord]:
         return list(self._tagfile.query(query))
 
@@ -220,105 +196,3 @@ class TemplateContext:
         array: HkbArray = record.get_path_value(path)
         undo_manager.on_update_array_item(array, index, array[index], None)
         return array.pop(index).get_value()
-
-
-# TODO just let the user open the source code, 
-def get_template_actions(
-    context: TemplateContext,
-) -> list[tuple[str, list[Any], dict[str, Any]], list[str]]:
-    actions = []
-
-    for node in context._template_func.body:
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-            call = node.value
-            func = call.func
-            if isinstance(func, ast.Name):
-                if isinstance(node, ast.Assign):
-                    targets = [ast.unparse(t) for t in node.targets]
-                else:
-                    targets = []
-
-                # We keep simple types and unparse complex ones
-                args = []
-                for arg in call.args:
-                    if isinstance(arg, ast.Constant) and isinstance(
-                        arg.value, (str, int, float, bool, bytes, type(None))
-                    ):
-                        args.append(arg.value)
-                    else:
-                        args.append(ast.unparse(arg))
-
-                # We keep simple types and unparse complex ones
-                kwargs = {}
-                for key, val in call.keywords.items():
-                    if isinstance(val, ast.Constant) and isinstance(
-                        val.value, (str, int, float, bool, bytes, type(None))
-                    ):
-                        kwargs[key] = val.value
-                    else:
-                        kwargs[key] = ast.unparse(val)
-
-                actions.append((func.id, args, kwargs, targets))
-
-    return actions
-
-
-def describe_actions(context: TemplateContext) -> list[tuple[str, str]]:
-    actions = get_template_actions(context)
-    ret = []
-
-    for call, args, kwargs, targets in actions:
-        if call == "find_all":
-            if not targets:
-                continue
-
-            desc = f"{targets[0]} = find_all('{args[0]}')"
-            ret.append((desc, style.light_blue))
-
-        elif call == "find":
-            if not targets:
-                continue
-
-            desc = f"{targets[0]} = find('{args[0]}')"
-            ret.append((desc, style.light_blue))
-
-        elif call == "create":
-            desc = f"create('{args[0]}')"
-            if targets:
-                desc = f"{targets[0]} = " + desc
-
-            ret.append((desc, style.green))
-
-            all_args = {p: v for p, v in args[1:]}
-            all_args.update(kwargs)
-
-            for path, value in all_args.items():
-                ret.append((f"- {path} = {value}", style.pink))
-
-        elif call == "get":
-            if not targets:
-                continue
-
-            desc = f"{targets[0]} = get({args[0]}, '{args[1]}')"
-            ret.append((desc, style.purple))
-
-        elif call == "set":
-            desc = f"set({args[0]})"
-            ret.append((desc, style.purple))
-
-            all_args = {p: v for p, v in args[1:]}
-            all_args.update(kwargs)
-
-            for path, value in all_args.items():
-                ret.append((f"- {path} = {value}", style.pink))
-
-        # TODO delete, array_add, array_pop, other
-
-
-def execute(self) -> None:
-    try:
-        env._context.set(self)
-        exec(self._template, self._get_exec_env())
-    finally:
-        env._context.set(None)
-

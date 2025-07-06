@@ -16,6 +16,7 @@ from hkb_editor.hkb.hkb_types import (
 )
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
+from hkb_editor.templates.glue import get_templates
 
 from .graph_editor import GraphEditor, Node
 from .attributes_widget import AttributesWidget
@@ -31,6 +32,7 @@ from .workflows.create_cmsg import open_new_cmsg_dialog
 from .workflows.register_clip import open_register_clip_dialog
 from .workflows.bone_mirror import open_bone_mirror_dialog
 from .workflows.create_object import open_create_object_dialog
+from .workflows.apply_template import open_apply_template_dialog
 from .helpers import make_copy_menu
 from . import style
 
@@ -219,6 +221,16 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(
                 label="Create CMSG...", callback=self.open_create_cmsg_dialog
             )
+
+            dpg.add_separator()
+
+            with dpg.menu(label="Templates"):
+                for template_file, label in get_templates().items:
+                    dpg.add_menu_item(
+                        label=label,
+                        callback=lambda s, a, u: self.open_apply_template_dialog(u),
+                        user_data=template_file,
+                    )
 
             dpg.add_separator()
 
@@ -845,3 +857,15 @@ class BehaviorEditor(GraphEditor):
             return
 
         open_bone_mirror_dialog(self.loaded_skeleton_path, tag=tag)
+
+    def open_apply_template_dialog(self, template_file: str):
+        tag = f"{self.tag}_apply_template_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.focus_item(tag)
+            return
+
+        open_apply_template_dialog(
+            self.beh,
+            template_file,
+            tag=tag
+        )

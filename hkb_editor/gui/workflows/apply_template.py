@@ -6,10 +6,11 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.templates import (
     TemplateContext,
-    Variable as T_Variable,
-    Event as T_Event,
-    Animation as T_Animation,
+    Variable,
+    Event,
+    Animation,
 )
+from hkb_editor.templates.glue import execute_template
 from hkb_editor.hkb import Tagfile, HavokBehavior, HkbRecord
 from hkb_editor.gui.dialogs import (
     select_variable,
@@ -17,6 +18,7 @@ from hkb_editor.gui.dialogs import (
     select_animation_name,
     select_object,
 )
+from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.helpers import center_window, add_paragraphs
 from hkb_editor.gui import style
 
@@ -49,18 +51,18 @@ def open_apply_template_dialog(
                     value = choice
                     break
 
-        elif arg.type == T_Variable:
+        elif arg.type == Variable:
             var_name = cast(HavokBehavior, tagfile).get_variable_name(value)
-            value = T_Variable(value, var_name)
+            value = Variable(value, var_name)
 
-        elif arg.type == T_Event:
+        elif arg.type == Event:
             event = cast(HavokBehavior, tagfile).get_event(value)
-            value = T_Event(value, event)
+            value = Event(value, event)
 
-        elif arg.type == T_Animation:
+        elif arg.type == Animation:
             anim = cast(HavokBehavior, tagfile).get_short_animation_name(value)
             anim_long = cast(HavokBehavior, tagfile).get_full_animation_name(value)
-            value = T_Animation(value, anim, anim_long)
+            value = Animation(value, anim, anim_long)
 
         else:
             # simple types and HkbRecord will just be passed through
@@ -123,7 +125,7 @@ def open_apply_template_dialog(
             )
 
         # Common constants
-        elif arg.type in (T_Variable, T_Event, T_Animation):
+        elif arg.type in (Variable, Event, Animation):
             if not isinstance(tagfile, HavokBehavior):
                 raise ValueError("Cannot use this template on a non-behavior tagfile")
 
@@ -132,21 +134,21 @@ def open_apply_template_dialog(
                 if isinstance(arg.value, str):
                     default = arg.value
                 elif isinstance(arg.value, int):
-                    if arg.type == T_Variable:
+                    if arg.type == Variable:
                         default = tagfile.get_variable_name(arg.value)
-                    elif arg.type == T_Event:
+                    elif arg.type == Event:
                         default = tagfile.get_event(arg.value)
-                    elif arg.type == T_Animation:
+                    elif arg.type == Animation:
                         default = tagfile.get_short_animation_name(arg.value)
-                elif isinstance(arg.value, (T_Animation, T_Event, T_Animation)):
+                elif isinstance(arg.value, (Animation, Event, Animation)):
                     if tagfile.find_variable(arg.value, None):
                         default = arg.value.name
 
-            if arg.type == T_Variable:
+            if arg.type == Variable:
                 selector = select_variable
-            elif arg.type == T_Event:
+            elif arg.type == Event:
                 selector = select_event
-            elif arg.type == T_Animation:
+            elif arg.type == Animation:
                 selector = select_animation_name
 
             with dpg.group(horizontal=True) as widget:
@@ -193,9 +195,16 @@ def open_apply_template_dialog(
     def on_okay() -> None:
         dpg.hide_item(f"{tag}_notification")
 
+        undo_top = undo_manager.top()
+
         try:
-            template._execute(**args)
+            with undo_manager.combine():
+                execute_template(template, **args)
         except Exception as e:
+            # Undo any changes that might have already happened
+            if undo_top != undo_manager.top():
+                undo_manager.undo()
+
             logger.error(f"Template failed: {str(e)}", exc_info=e)
             show_warning(f"Template failed: {str(e)}")
         else:
