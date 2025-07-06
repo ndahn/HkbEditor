@@ -179,7 +179,7 @@ def apply_template_dialog(
                     # Assume it's a query string and try to resolve it
                     match = next(tagfile.query(arg.value), None)
                     if match:
-                        args[arg.name] = match.object_id
+                        args[arg.name] = match
                         default = match.object_id
 
             with dpg.group(horizontal=True) as widget:
