@@ -355,6 +355,9 @@ class AttributesWidget:
         def delete_last_item(sender, app_data, user_data) -> None:
             # TODO deleting an item may invalidate variable bindings!
             idx = len(array) - 1
+            if idx < 0:
+                return
+                
             old_value = array.pop(idx)
             undo_manager.on_update_array_item(array, idx, old_value, None)
 
