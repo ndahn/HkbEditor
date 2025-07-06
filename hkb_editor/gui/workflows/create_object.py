@@ -105,8 +105,8 @@ def create_object_dialog(
             show_warning("No type selected")
             return
 
-        undo_manager.on_create_object(tagfile, record)
         tagfile.add_object(record)
+        undo_manager.on_create_object(tagfile, record)
         callback(window, record, user_data)
         dpg.delete_item(window)
 

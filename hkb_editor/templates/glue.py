@@ -18,6 +18,9 @@ def get_templates() -> dict[str, str]:
     ret = {}
 
     for file in templates:
+        if file == "example.py":
+            continue
+
         path = os.path.join(tdir, file)
         if not file.endswith(".py") or not os.path.isfile(path):
             continue

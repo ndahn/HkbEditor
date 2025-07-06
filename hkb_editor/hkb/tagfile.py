@@ -140,5 +140,11 @@ class Tagfile:
 
     def remove_object(self, id: str) -> "HkbRecord":
         obj = self.objects.pop(id)
-        self._tree.getroot().remove(obj.element)
+        
+        # Proper objects will have their <record> inside an <object> tag
+        parent = obj.element.getparent()
+        if not parent:
+            parent = self._tree.getroot()
+        parent.remove(obj.element)
+
         return obj

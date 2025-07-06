@@ -113,15 +113,15 @@ def create_cmsg_dialog(
         try:
             anim_idx = behavior.find_animation(animation_val)
         except IndexError:
-            undo_manager.on_create_animation(behavior, animation_val)
             anim_idx = behavior.create_animation(animation_val)
+            undo_manager.on_create_animation(behavior, animation_val)
 
         # Add event to the events array
         try:
             event_id = behavior.find_event(event_val)
         except IndexError:
-            undo_manager.on_create_event(behavior, event_val)
             event_id = behavior.create_event(event_val)
+            undo_manager.on_create_event(behavior, event_val)
 
         playback_mode = PlaybackMode[playback_mode_val].value
         animation_end_event_type = AnimeEndEventType[animation_end_event_type_val].value
@@ -193,32 +193,32 @@ def create_cmsg_dialog(
 
         with undo_manager.combine():
             # Add objects with IDs to behavior
-            undo_manager.on_create_object(behavior, cmsg)
             behavior.add_object(cmsg)
+            undo_manager.on_create_object(behavior, cmsg)
 
-            undo_manager.on_create_object(behavior, clipgen)
             behavior.add_object(clipgen)
+            undo_manager.on_create_object(behavior, clipgen)
 
-            undo_manager.on_create_object(behavior, stateinfo)
             behavior.add_object(stateinfo)
+            undo_manager.on_create_object(behavior, stateinfo)
 
             # add stateinfo to statemachine/states array
             sm_states: HkbArray = statemachine.get_field("states")
             stateinfo_pointer = HkbPointer.new(
                 behavior, sm_states.element_type_id, stateinfo_id
             )
-            undo_manager.on_update_array_item(sm_states, -1, None, stateinfo_pointer)
             sm_states.append(stateinfo_pointer)
+            undo_manager.on_update_array_item(sm_states, -1, None, stateinfo_pointer)
 
             # Add transition info to statemachine
             wildcard_transitions_obj = behavior.objects[
                 wildcard_transitions_ptr.get_value()
             ]
             wildcard_transitions: HkbArray = wildcard_transitions_obj["transitions"]
+            wildcard_transitions.append(transitioninfo)
             undo_manager.on_update_array_item(
                 wildcard_transitions, -1, None, transitioninfo
             )
-            wildcard_transitions.append(transitioninfo)
 
         # TODO tell user where to place generated event(s)
 

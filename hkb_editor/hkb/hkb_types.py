@@ -434,7 +434,7 @@ class HkbRecord(XmlValueHandler):
         except (AttributeError, KeyError) as e:
             if default != _undefined:
                 return default
-            raise KeyError from e
+            raise KeyError(f"No field with path '{path}'") from e
 
         if resolve:
             return obj.get_value()
@@ -492,10 +492,10 @@ class HkbRecord(XmlValueHandler):
         if not id:
             id = self.object_id
 
-        obj = ET.Element("object", typeid=self.type_id, id=id)
-        obj.append(self.element)
+        elem = ET.Element("object", typeid=self.type_id, id=id)
+        elem.append(self.element)
 
-        return obj
+        return elem
 
 
 def get_value_handler(type_registry: TypeRegistry, type_id: str) -> Type[XmlValueHandler]:

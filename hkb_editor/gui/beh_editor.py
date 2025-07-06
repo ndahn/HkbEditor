@@ -225,7 +225,7 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             with dpg.menu(label="Templates"):
-                for template_file, label in get_templates().items:
+                for template_file, label in get_templates().items():
                     dpg.add_menu_item(
                         label=label,
                         callback=lambda s, a, u: self.open_apply_template_dialog(u),
@@ -528,7 +528,7 @@ class BehaviorEditor(GraphEditor):
         return next(
             (sm for sm in self.beh.find_parents_by_type(for_object_id, sm_type)), None
         )
-    
+
     def find_lost_objects(self) -> list[str]:
         root_sm = next(self.beh.query("name:Root"), None)
         if not root_sm:
@@ -584,22 +584,22 @@ class BehaviorEditor(GraphEditor):
                     "A variable named '%s' already exists (%d)", new_value[0], idx
                 )
 
-            undo_manager.on_create_variable(self.beh, new_value, idx)
             self.beh.create_variable(*new_value, idx)
+            undo_manager.on_create_variable(self.beh, new_value, idx)
 
         def on_update(
             idx: int,
             old_value: tuple[str, int, int, int],
             new_value: tuple[str, int, int, int],
         ):
-            undo_manager.on_update_variable(self.beh, idx, old_value, new_value)
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
+            undo_manager.on_update_variable(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
             # TODO list variable bindings affected by this
-            undo_manager.on_delete_variable(self.beh, idx)
             self.beh.delete_variable(idx)
+            undo_manager.on_delete_variable(self.beh, idx)
 
         edit_simple_array_dialog(
             [
@@ -641,20 +641,20 @@ class BehaviorEditor(GraphEditor):
                     "An event named '%s' already exists (%d)", new_value, idx
                 )
 
-            undo_manager.on_create_event(self.beh, new_value, idx)
             self.beh.create_event(new_value, idx)
+            undo_manager.on_create_event(self.beh, new_value, idx)
 
         def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
             old_value = old_value[0]
             new_value = new_value[0]
 
-            undo_manager.on_update_event(self.beh, idx, old_value, new_value)
             self.beh.rename_event(idx, new_value)
+            undo_manager.on_update_event(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
             # TODO list transition infos affected by this
-            undo_manager.on_delete_event(self.beh, idx)
             self.beh.delete_event(idx)
+            undo_manager.on_delete_event(self.beh, idx)
 
         edit_simple_array_dialog(
             [(e,) for e in self.beh.get_events()],
@@ -690,20 +690,20 @@ class BehaviorEditor(GraphEditor):
                     "An animation named '%s' already exists (%d)", new_value, idx
                 )
 
-            undo_manager.on_create_animation(self.beh, new_value, idx)
             self.beh.create_animation(new_value, idx)
+            undo_manager.on_create_animation(self.beh, new_value, idx)
 
         def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
             old_value = old_value[0]
             new_value = new_value[0]
 
-            undo_manager.on_update_animation(self.beh, idx, old_value, new_value)
             self.beh.rename_animation(idx, new_value)
+            undo_manager.on_update_animation(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
             # TODO list generators affected by this
-            undo_manager.on_delete_animation(self.beh, idx)
             self.beh.delete_animation(idx)
+            undo_manager.on_delete_animation(self.beh, idx)
 
         edit_simple_array_dialog(
             [(a,) for a in self.beh.get_animations()],
@@ -864,8 +864,18 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
+        def on_template_finished(
+            sender: str, new_objects: list[HkbRecord], user_data: Any
+        ):
+            # This is a bit ugly, but so is adding more stuff to ids
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                for obj in new_objects:
+                    self.add_pinned_object(obj.object_id)
+
         apply_template_dialog(
             self.beh,
             template_file,
-            tag=tag
+            on_template_finished,
+            tag=tag,
         )

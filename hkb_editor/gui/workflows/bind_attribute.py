@@ -120,13 +120,14 @@ def create_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> s
     binding_set = HkbRecord.new(behavior, bindings_type_id, None, binding_id)
 
     # Add the new binding set
-    undo_manager.on_create_object(behavior, binding_set)
     behavior.add_object(binding_set)
+    undo_manager.on_create_object(behavior, binding_set)
 
     # Assign pointer to source record
     vbs = record["variableBindingSet"]
-    undo_manager.on_update_value(vbs, vbs.get_value(), binding_id)
+    old_value = vbs.get_value()
     vbs.set_value(binding_id)
+    undo_manager.on_update_value(vbs, old_value, binding_id)
 
     return binding_id
 
@@ -150,8 +151,9 @@ def bind_attribute(
     for bnd in bindings:
         if bnd["memberPath"] == path:
             val = bnd["variableIndex"]
-            undo_manager.on_update_value(val, val.get_value(), variable_idx)
+            old_value = val.get_value()
             val.set_value(variable_idx)
+            undo_manager.on_update_value(val, old_value, variable_idx)
             break
     else:
         new_binding = HkbRecord.new(
@@ -164,8 +166,8 @@ def bind_attribute(
                 "bindingType": 0,
             },
         )
-        undo_manager.on_update_array_item(bindings, -1, None, new_binding)
         bindings.append(new_binding)
+        undo_manager.on_update_array_item(bindings, -1, None, new_binding)
 
     set_bindable_attribute_state(behavior, bindable_attribute, variable_idx)
 
@@ -189,6 +191,6 @@ def unbind_attribute(
 
     for idx, bnd in enumerate(bindings):
         if bnd["memberPath"] == path:
-            undo_manager.on_update_array_item(bindings, idx, bindings[idx], None)
-            del bindings[idx]
+            old_value = bindings.pop(idx)
+            undo_manager.on_update_array_item(bindings, idx, old_value, None)
             break

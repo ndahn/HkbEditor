@@ -358,8 +358,8 @@ class AttributesWidget:
         def delete_last_item(sender, app_data, user_data) -> None:
             # TODO deleting an item may invalidate variable bindings!
             idx = len(array) - 1
-            undo_manager.on_update_array_item(array, idx, array[idx], None)
-            del array[idx]
+            old_value = array.pop(idx)
+            undo_manager.on_update_array_item(array, idx, old_value, None)
 
             # Records potentially contain pointers which will affect the graph
             Handler = get_value_handler(
@@ -384,8 +384,8 @@ class AttributesWidget:
             )
 
             idx = len(array)
-            undo_manager.on_update_array_item(array, idx, None, new_item)
             array.append(new_item)
+            undo_manager.on_update_array_item(array, idx, None, new_item)
 
             # TODO doesn't work for some reason
             # self._create_attribute_widget(
@@ -593,8 +593,8 @@ class AttributesWidget:
                         self.tagfile, value.subtype, object_id=self.tagfile.new_id()
                     )
                     with undo_manager.combine():
-                        undo_manager.on_create_object(self.tagfile, obj)
                         self.tagfile.add_object(obj)
+                        undo_manager.on_create_object(self.tagfile, obj)
                         self._on_value_changed(widget, obj.object_id, value)
 
                 def jump():
@@ -667,8 +667,9 @@ class AttributesWidget:
             self.on_value_changed(sender, handler, (old_value, new_value))
 
         # The handler may throw if the new value is not appropriate
-        undo_manager.on_update_value(handler, handler.get_value(), new_value)
+        old_value = handler.get_value()
         handler.set_value(new_value)
+        undo_manager.on_update_value(handler, old_value, new_value)
         if sender:
             dpg.set_value(sender, new_value)
 

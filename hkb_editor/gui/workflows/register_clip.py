@@ -73,12 +73,12 @@ def register_clip_dialog(
 
         with undo_manager.combine():
             # Add objects with IDs to behavior
-            undo_manager.on_create_object(behavior, clipgen)
             behavior.add_object(clipgen)
+            undo_manager.on_create_object(behavior, clipgen)
 
             generators: HkbArray = cmsg["generators"]
-            undo_manager.on_update_array_item(generators, -1, None, clipgen_id)
             generators.append(clipgen_id)
+            undo_manager.on_update_array_item(generators, -1, None, clipgen_id)
 
         callback(dialog, (clipgen_id, cmsg.object_id), user_data)
         dpg.delete_item(dialog)

@@ -10,7 +10,7 @@ from hkb_editor.templates import *
 # - choices (Literal of simple types)
 # - known constants (Animation, Event, Variable)
 # - other behavior objects (HkbRecord)
-def run(ctx: TemplateContext, throw_id: float, cmsg_name: str, animation: Animation):
+def run(ctx: TemplateContext, throw_id: int, cmsg_name: str, animation: Animation):
     """Grab/Throw Behavior
 
     Creates a new throw attack behavior.
@@ -21,7 +21,7 @@ def run(ctx: TemplateContext, throw_id: float, cmsg_name: str, animation: Animat
     ----------
     ctx : TemplateContext
         The template context.
-    throw_id : float
+    throw_id : int
         The ID of the new throw attack.
     cmsg_name : str
         Name of the CMSG.
@@ -39,7 +39,7 @@ def run(ctx: TemplateContext, throw_id: float, cmsg_name: str, animation: Animat
         "CustomManualSelectorGenerator",
         name=cmsg_name,
         offsetType=18,
-        animEndEventType=2,
+        animeEndEventType=2,
         enableScript=True,
         enableTae=True,
         changeTypeOfSelectedIndexAfterActivate=1,
@@ -47,18 +47,19 @@ def run(ctx: TemplateContext, throw_id: float, cmsg_name: str, animation: Animat
     )
     clip = ctx.create(
         "hkbClipGenerator",
-        name=animation.value + ".hkx",
-        animationName=animation.value.name,
+        name=animation.name + ".hkx",
+        animationName=animation.name,
         playbackSpeed=1,
-        animationInternalId=animation.value.index,
+        animationInternalId=animation.index,
     )
 
     # Link the objects together and to their already existing parent
+    # TODO only exists in Elden Ring
     parent = ctx.find("name:ThrowAtk_Blend")
 
     # Right now it's possible to set these directly on the objects. This is not
     # recommended, as it will circumvent the undo manager. I might change this 
     # in the future and make it impossible.
     ctx.array_add(cmsg, "generators", clip.object_id)
-    ctx.set(blender, "generator", cmsg)
+    ctx.set(blender, generator=cmsg.object_id)
     ctx.array_add(parent, "children", blender.object_id)

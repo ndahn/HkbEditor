@@ -110,7 +110,7 @@ class UndoManager:
     def __init__(self, maxlen: int = 100):
         self.history: deque[UndoAction] = deque(maxlen=maxlen)
         self.index = -1
-        self._combining: ComboAction = None
+        self._combo_stack: list[ComboAction] = []
 
     def clear(self) -> None:
         self.history = deque(maxlen=self.history.maxlen)
@@ -154,8 +154,8 @@ class UndoManager:
         return action
 
     def _on_action(self, action: UndoAction) -> None:
-        if self._combining:
-            self._combining.add(action)
+        if self._combo_stack:
+            self._combo_stack[-1].add(action)
         else:
             # Remove subsequent actions that could have been redone until now. Deque doesn't
             # support slice notation it seems
@@ -303,20 +303,13 @@ class UndoManager:
 
     @contextmanager
     def combine(self):
-        if self._combining:
-            raise ValueError(
-                "Cannot assemble a combo action with another one already open"
-            )
-
         try:
-            self._combining = ComboAction()
+            self._combo_stack.append(ComboAction())
             yield
         finally:
-            action = self._combining
-            self._combining = None
-
+            action = self._combo_stack.pop()
             if action.actions:
-                self._on_action(self._combining)
+                self._on_action(action)
 
 
 undo_manager = UndoManager(100)

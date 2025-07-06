@@ -1,4 +1,4 @@
-from typing import Any, Literal, get_args as get_choices, get_origin, cast
+from typing import Any, Callable, Literal, get_args as get_choices, get_origin, cast
 import os
 import logging
 import webbrowser
@@ -26,8 +26,10 @@ from hkb_editor.gui import style
 def apply_template_dialog(
     tagfile: Tagfile,
     template_file: str,
+    callback: Callable[[str, list[HkbRecord], Any], None] = None,
     *,
     tag: str = None,
+    user_data: Any = None,
 ) -> str:
     if tag in (None, 0, ""):
         tag = dpg.generate_uuid()
@@ -54,21 +56,24 @@ def apply_template_dialog(
         elif arg.type == Variable:
             var_name = cast(HavokBehavior, tagfile).get_variable_name(value)
             value = Variable(value, var_name)
+            dpg.set_value(f"{tag}_attribute_{arg.name}", var_name)
 
         elif arg.type == Event:
             event = cast(HavokBehavior, tagfile).get_event(value)
             value = Event(value, event)
+            dpg.set_value(f"{tag}_attribute_{arg.name}", event)
 
         elif arg.type == Animation:
-            anim = cast(HavokBehavior, tagfile).get_short_animation_name(value)
-            anim_long = cast(HavokBehavior, tagfile).get_full_animation_name(value)
-            value = Animation(value, anim, anim_long)
+            anim_short = cast(HavokBehavior, tagfile).get_animation(value, full_name=False)
+            anim_long = cast(HavokBehavior, tagfile).get_animation(value, full_name=True)
+            value = Animation(value, anim_short, anim_long)
+            dpg.set_value(f"{tag}_attribute_{arg.name}", anim_short)
 
         else:
             # simple types and HkbRecord will just be passed through
             pass
 
-        args[arg] = value
+        args[arg.name] = value
 
     def create_widget(arg: TemplateContext._Arg) -> None:
         # TODO make some of the AttributeWidget functions reusable for this
@@ -208,6 +213,9 @@ def apply_template_dialog(
             logger.error(f"Template failed: {str(e)}", exc_info=e)
             show_warning(f"Template failed: {str(e)}")
         else:
+            if callback:
+                callback(window, template._created_objects, user_data)
+
             dpg.delete_item(window)
 
     with dpg.window(
@@ -242,6 +250,11 @@ def apply_template_dialog(
             dpg.add_button(
                 label="Cancel",
                 callback=lambda: dpg.delete_item(window),
+            )
+            dpg.add_checkbox(
+                label="Pin created objects",
+                default_value=True,
+                tag=f"{tag}_pin_objects",
             )
 
     dpg.split_frame()
