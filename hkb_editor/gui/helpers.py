@@ -1,6 +1,8 @@
 from typing import Any, Callable, Type
+from itertools import groupby
 from enum import IntFlag
 import logging
+import textwrap
 from dearpygui import dearpygui as dpg
 import pyperclip
 
@@ -178,20 +180,34 @@ def create_flag_checkboxes(
             active_flags = flag_type(active_flags)
         except ValueError:
             logger = logging.getLogger(__name__)
-            logger.error(f"{active_flags} is not valid for flag type {flag_type.__name__}")
+            logger.error(
+                f"{active_flags} is not valid for flag type {flag_type.__name__}"
+            )
             active_flags = 0
 
     for flag in flag_type:
         if flag == 0:
             # 0 is in every flag
-            active = (active_flags == 0)
+            active = active_flags == 0
         else:
-            active = (flag in active_flags)
+            active = flag in active_flags
 
         dpg.add_checkbox(
             default_value=active,
             callback=on_flag_changed,
-            label=flag.name, 
+            label=flag.name,
             tag=f"{base_tag}_{flag.value}",
             user_data=flag,
         )
+
+
+def add_paragraphs(text: str, line_width: int = 70, paragraph_gap: int = 5, **textargs):
+    with dpg.group():
+        for has_chars, fragments in groupby(text.splitlines(), bool):
+            if not has_chars:
+                dpg.add_spacer(height=paragraph_gap)
+                continue
+
+            paragraph = " ".join(fragments)
+            for line in textwrap.wrap(paragraph, width=line_width):
+                dpg.add_text(line, **textargs)

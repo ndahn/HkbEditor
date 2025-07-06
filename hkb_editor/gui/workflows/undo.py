@@ -116,7 +116,7 @@ class UndoManager:
         self.history = deque(maxlen=self.history.maxlen)
         self.index = -1
 
-    def top(self) -> None:
+    def top(self) -> UndoAction:
         if not self.history:
             return None
 
@@ -187,6 +187,17 @@ class UndoManager:
         self.on_complex_action(
             lambda obj=new_object: tagfile.remove_object(obj.object_id),
             lambda obj=new_object: tagfile.add_object(obj),
+        )
+
+    def on_delete_object(
+        self,
+        tagfile: Tagfile,
+        obj: HkbRecord,
+    ) -> None:
+        assert obj.object_id in tagfile.objects, "Trying to remove non-existing object"
+        self.on_complex_action(
+            lambda obj=obj: tagfile.add_object(obj),
+            lambda obj=obj: tagfile.remove_object(obj.object_id),
         )
 
     def on_create_variable(

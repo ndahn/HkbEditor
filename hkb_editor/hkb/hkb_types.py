@@ -323,6 +323,11 @@ class HkbArray(XmlValueHandler):
         self.element.insert(index, value.element)
         self._count += 1
 
+    def pop(self, index: int) -> XmlValueHandler:
+        ret = self[index]
+        del self[index]
+        return ret
+
 
 class HkbRecord(XmlValueHandler):
     @classmethod

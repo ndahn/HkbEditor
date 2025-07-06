@@ -69,6 +69,10 @@ class CachedArray(HkbArray, Generic[T]):
         super().append(value)
         self._cache.append(self[-1])
 
-    def insert(self, index: int, value: XmlValueHandler | T):
+    def insert(self, index: int, value: XmlValueHandler | T) -> None:
         super().insert(index, value)
         self._cache.insert(index, self[-1])
+
+    def pop(self, index: int) -> T:
+        super().__delitem__(index)
+        return self._cache.pop(index)
