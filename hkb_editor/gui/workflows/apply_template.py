@@ -23,7 +23,7 @@ from hkb_editor.gui.helpers import center_window, add_paragraphs
 from hkb_editor.gui import style
 
 
-def open_apply_template_dialog(
+def apply_template_dialog(
     tagfile: Tagfile,
     template_file: str,
     *,

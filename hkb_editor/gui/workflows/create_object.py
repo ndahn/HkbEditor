@@ -9,7 +9,7 @@ from hkb_editor.gui.attributes_widget import AttributesWidget
 from hkb_editor.gui.helpers import center_window
 
 
-def open_create_object_dialog(
+def create_object_dialog(
     tagfile: Tagfile,
     alias_manager: AliasManager,
     callback: Callable[[str, HkbRecord, Any], None],

@@ -28,11 +28,11 @@ from .dialogs import (
 )
 from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager, AliasMap
-from .workflows.create_cmsg import open_new_cmsg_dialog
-from .workflows.register_clip import open_register_clip_dialog
-from .workflows.bone_mirror import open_bone_mirror_dialog
-from .workflows.create_object import open_create_object_dialog
-from .workflows.apply_template import open_apply_template_dialog
+from .workflows.create_cmsg import create_cmsg_dialog
+from .workflows.register_clip import register_clip_dialog
+from .workflows.bone_mirror import bone_mirror_dialog
+from .workflows.create_object import create_object_dialog
+from .workflows.apply_template import apply_template_dialog
 from .helpers import make_copy_menu
 from . import style
 
@@ -766,7 +766,7 @@ class BehaviorEditor(GraphEditor):
             if pin_objects:
                 self.add_pinned_object(new_object.object_id)
 
-        open_create_object_dialog(
+        create_object_dialog(
             self.beh,
             self.alias_manager,
             on_object_created,
@@ -789,7 +789,7 @@ class BehaviorEditor(GraphEditor):
                 self.add_pinned_object(clip_id)
                 self.add_pinned_object(cmsg_id)
 
-        open_register_clip_dialog(
+        register_clip_dialog(
             self.beh,
             on_clip_registered,
             tag=tag,
@@ -813,7 +813,7 @@ class BehaviorEditor(GraphEditor):
                 self.add_pinned_object(stateinfo_id)
 
         active_sm = self.get_active_statemachine()
-        open_new_cmsg_dialog(
+        create_cmsg_dialog(
             self.beh,
             on_cmsg_created,
             active_statemachine_id=active_sm.object_id if active_sm else None,
@@ -856,7 +856,7 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        open_bone_mirror_dialog(self.loaded_skeleton_path, tag=tag)
+        bone_mirror_dialog(self.loaded_skeleton_path, tag=tag)
 
     def open_apply_template_dialog(self, template_file: str):
         tag = f"{self.tag}_apply_template_dialog"
@@ -864,7 +864,7 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        open_apply_template_dialog(
+        apply_template_dialog(
             self.beh,
             template_file,
             tag=tag

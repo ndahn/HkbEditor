@@ -16,7 +16,7 @@ from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
 from hkb_editor.gui import style
 
 
-def open_new_cmsg_dialog(
+def create_cmsg_dialog(
     behavior: HavokBehavior,
     callback: Callable[
         [str, tuple[HkbRecord, HkbRecord, HkbRecord, HkbRecord], Any], None

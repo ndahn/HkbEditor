@@ -11,7 +11,7 @@ from hkb_editor.gui.dialogs import open_file_dialog, save_file_dialog, find_dial
 from hkb_editor.gui import style
 
 
-def open_bone_mirror_dialog(
+def bone_mirror_dialog(
     skeleton_path: str = None,
     character_path: str = None,
     *,

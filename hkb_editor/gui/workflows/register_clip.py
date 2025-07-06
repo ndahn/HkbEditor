@@ -9,7 +9,7 @@ from hkb_editor.gui.dialogs import select_animation_name
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
 
 
-def open_register_clip_dialog(
+def register_clip_dialog(
     behavior: HavokBehavior,
     callback: Callable[[str, tuple[str, str], Any], None],
     *,
