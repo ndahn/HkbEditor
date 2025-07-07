@@ -1,16 +1,18 @@
 from hkb_editor.templates import *
+from hkb_editor.hkb.hkb_enums import (
+    CustomManualSelectorGenerator_AnimeEndEventType as EndEventType,
+)
 
 
 def run(
     ctx: TemplateContext,
     cmsg_name: str = "Throw40168_CMSG",
     animation: Animation = "a000_040168",
-    throw_id: int = 40168,
     #throw_sm: HkbRecord = "name:ThrowAtk_Blend",
 ):
     """Throw Attack Behavior
 
-    Creates a new throw attack behavior.
+    Creates a new throw attack behavior (i.e. grabbing an enemy).
 
     TODO: more documentation, what does it do, how to use it in game, etc.
 
@@ -20,13 +22,13 @@ def run(
     ----------
     ctx : TemplateContext
         The template context.
-    throw_id : int
-        The ID of the new throw attack.
     cmsg_name : str
         Name of the CMSG.
     animation : Animation
         The animation to use.
     """
+    throw_id = int(animation.name.split("_")[1])
+
     try:
         # Check if the throw ID is already in use somewhere
         ctx.find(f"type_name:hkbBlenderGeneratorChild,weight:{throw_id}")
@@ -44,7 +46,7 @@ def run(
         name=cmsg_name,
         animId=throw_id,
         offsetType=18,
-        animeEndEventType=2,
+        animeEndEventType=EndEventType.FIRE_IDLE_EVENT,
         enableScript=True,
         enableTae=True,
         changeTypeOfSelectedIndexAfterActivate=1,
@@ -52,7 +54,7 @@ def run(
     )
     clip = ctx.create(
         "hkbClipGenerator",
-        name=animation.name + ".hkx",
+        name=animation.name,
         animationName=animation.name,
         playbackSpeed=1,
         animationInternalId=animation.index,
@@ -61,6 +63,6 @@ def run(
     # TODO only exists in Elden Ring, can this be used for Sekiro?
     parent = ctx.find("name:ThrowAtk_Blend")
 
-    ctx.array_add(cmsg, "generators", clip.object_id)
     ctx.set(blender, generator=cmsg.object_id)
+    ctx.array_add(cmsg, "generators", clip.object_id)
     ctx.array_add(parent, "children", blender.object_id)
