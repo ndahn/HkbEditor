@@ -4,4 +4,5 @@ from .context import (
     Event,
     Animation,
     HkbRecord,
+    HkbRecordSpec,
 )

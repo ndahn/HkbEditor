@@ -1,4 +1,4 @@
-from typing import Any, Callable, Literal, get_args as get_choices, get_origin, cast
+from typing import Any, Callable, Literal, get_args as get_choices, get_origin
 import os
 import logging
 import webbrowser
@@ -9,6 +9,7 @@ from hkb_editor.templates import (
     Variable,
     Event,
     Animation,
+    HkbRecordSpec,
 )
 from hkb_editor.templates.glue import execute_template
 from hkb_editor.hkb import Tagfile, HavokBehavior, HkbRecord
@@ -24,7 +25,7 @@ from hkb_editor.gui import style
 
 
 def apply_template_dialog(
-    tagfile: Tagfile,
+    behavior: HavokBehavior,
     template_file: str,
     callback: Callable[[str, list[HkbRecord], Any], None] = None,
     *,
@@ -35,7 +36,7 @@ def apply_template_dialog(
         tag = dpg.generate_uuid()
 
     logger = logging.getLogger(f"{tag}_template_{os.path.basename(template_file)}")
-    template = TemplateContext(tagfile, template_file)
+    template = TemplateContext(behavior, template_file)
     args = {arg.name: arg.value for arg in template._args.values()}
 
     def show_warning(msg: str) -> None:
@@ -54,18 +55,18 @@ def apply_template_dialog(
                     break
 
         elif arg.type == Variable:
-            var_name = cast(HavokBehavior, tagfile).get_variable_name(value)
+            var_name = behavior.get_variable_name(value)
             value = Variable(value, var_name)
             dpg.set_value(f"{tag}_attribute_{arg.name}", var_name)
 
         elif arg.type == Event:
-            event = cast(HavokBehavior, tagfile).get_event(value)
+            event = behavior.get_event(value)
             value = Event(value, event)
             dpg.set_value(f"{tag}_attribute_{arg.name}", event)
 
         elif arg.type == Animation:
-            anim_short = cast(HavokBehavior, tagfile).get_animation(value, full_name=False)
-            anim_long = cast(HavokBehavior, tagfile).get_animation(value, full_name=True)
+            anim_short = behavior.get_animation(value, full_name=False)
+            anim_long = behavior.get_animation(value, full_name=True)
             value = Animation(value, anim_short, anim_long)
             dpg.set_value(f"{tag}_attribute_{arg.name}", anim_short)
 
@@ -131,29 +132,57 @@ def apply_template_dialog(
 
         # Common constants
         elif arg.type in (Variable, Event, Animation):
-            if not isinstance(tagfile, HavokBehavior):
-                raise ValueError("Cannot use this template on a non-behavior tagfile")
-
             default = ""
-            if arg.value is not None:
-                if isinstance(arg.value, str):
-                    default = arg.value
-                elif isinstance(arg.value, int):
-                    if arg.type == Variable:
-                        default = tagfile.get_variable_name(arg.value)
-                    elif arg.type == Event:
-                        default = tagfile.get_event(arg.value)
-                    elif arg.type == Animation:
-                        default = tagfile.get_short_animation_name(arg.value)
-                elif isinstance(arg.value, (Animation, Event, Animation)):
-                    if tagfile.find_variable(arg.value, None):
-                        default = arg.value.name
 
             if arg.type == Variable:
+                if arg.value is not None:
+                    if isinstance(arg.value, str):
+                        default = arg.value
+                    elif isinstance(arg.value, int):
+                        default = behavior.get_variable_name(arg.value)
+                    elif isinstance(arg.value, Variable):
+                        if behavior.find_variable(arg.value.index, None):
+                            default = arg.value.name
+
+                    # Update the args default
+                    if default:
+                        index = behavior.find_variable(default)
+                        set_arg(None, index, arg)
+
                 selector = select_variable
+
             elif arg.type == Event:
+                if arg.value is not None:
+                    if isinstance(arg.value, str):
+                        default = arg.value
+                    elif isinstance(arg.value, int):
+                        default = behavior.get_event(arg.value)
+                    elif isinstance(arg.value, Event):
+                        if behavior.find_event(arg.value.index, None):
+                            default = arg.value.name
+
+                    # Update the args default
+                    if default:
+                        index = behavior.find_variable(default)
+                        set_arg(None, index, arg)
+
                 selector = select_event
+
             elif arg.type == Animation:
+                if arg.value is not None:
+                    if isinstance(arg.value, str):
+                        default = arg.value
+                    elif isinstance(arg.value, int):
+                        default = behavior.get_short_animation_name(arg.value)
+                    elif isinstance(arg.value, Animation):
+                        if behavior.find_animation(arg.value.index, None):
+                            default = arg.value.name
+
+                    # Update the args default
+                    if default:
+                        index = behavior.find_animation(default)
+                        set_arg(None, index, arg)
+
                 selector = select_animation_name
 
             with dpg.group(horizontal=True) as widget:
@@ -165,7 +194,7 @@ def apply_template_dialog(
                 dpg.add_button(
                     arrow=True,
                     direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: selector(tagfile, set_arg, user_data=u),
+                    callback=lambda s, a, u: selector(behavior, set_arg, user_data=u),
                     user_data=arg,
                 )
                 dpg.add_text(arg.name)
@@ -173,14 +202,20 @@ def apply_template_dialog(
         elif arg.type == HkbRecord:
             default = ""
             if isinstance(arg.value, str):
-                if arg.value in tagfile.objects:
-                    default = arg.value
+                arg.value = HkbRecordSpec(arg.value)
+
+            if isinstance(arg.value, HkbRecordSpec):
+                if arg.value.query in behavior.objects:
+                    default = arg.value.query
                 else:
-                    # Assume it's a query string and try to resolve it
-                    match = next(tagfile.query(arg.value), None)
+                    query = arg.value.query
+                    if arg.value.type_name:
+                        query = f"type_name:{arg.value.type_name},{query}"
+                    match = next(behavior.query(query), None)
                     if match:
-                        args[arg.name] = match
                         default = match.object_id
+                    # Update our args default
+                    set_arg(None, match, arg)
 
             with dpg.group(horizontal=True) as widget:
                 dpg.add_input_text(
@@ -192,7 +227,7 @@ def apply_template_dialog(
                     arrow=True,
                     direction=dpg.mvDir_Right,
                     callback=lambda s, a, u: select_object(
-                        tagfile, None, set_arg, user_data=u
+                        behavior, None, set_arg, user_data=u
                     ),
                     user_data=arg,
                 )

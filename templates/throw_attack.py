@@ -27,6 +27,13 @@ def run(
     animation : Animation
         The animation to use.
     """
+    try:
+        # Check if the throw ID is already in use somewhere
+        ctx.find(f"type_name:hkbBlenderGeneratorChild,weight:{throw_id}")
+        raise ValueError(f"throw_id {throw_id} already in use")
+    except KeyError:
+        pass
+
     blender = ctx.create(
         "hkbBlenderGeneratorChild",
         weight=throw_id,

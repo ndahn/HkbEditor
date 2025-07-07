@@ -1,12 +1,11 @@
 from typing import Any
 from collections import deque
 from dataclasses import dataclass
-from enum import IntEnum
 from lxml import etree as ET
 import networkx as nx
 
 from .tagfile import Tagfile
-from .hkb_types import HkbRecord, HkbArray, HkbString
+from .hkb_types import HkbRecord, HkbArray
 from .hkb_enums import hkbVariableInfo_VariableType as VariableType
 from .cached_array import CachedArray
 
