@@ -1,6 +1,7 @@
 from typing import Any
 import sys
 import os
+import logging
 import ast
 import importlib.util
 from docstring_parser import parse as parse_doc
@@ -25,16 +26,27 @@ def get_templates() -> dict[str, str]:
         if not file.endswith(".py") or not os.path.isfile(path):
             continue
 
-        tree = ast.parse(open(path).read())
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "run":
-                docstring = ast.get_docstring(node) or ""
-                doc = parse_doc(docstring)
-                
-                if doc and doc.short_description:
-                    ret[path] = doc.short_description
+        try:
+            with open(path) as f:
+                tree = ast.parse(f.read())
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef) and node.name == "run":
+                        docstring = ast.get_docstring(node) or ""
+                        doc = parse_doc(docstring)
+                        
+                        if doc and doc.short_description:
+                            ret[path] = doc.short_description
+                        else:
+                            ret[path] = os.path.splitext(file)[0]
+
+                        break
                 else:
-                    ret[path] = os.path.splitext(file)[0]
+                    # TODO logging.getLogger().warning, see below
+                    print(f"{file} is not a valid template")
+        except Exception as e:
+            # TODO logging.getLogger().error needs logging with a QueueHandler
+            print(f"Loading template {file} failed: {e}")
+            continue
 
     return ret
 

@@ -245,6 +245,7 @@ def apply_template_dialog(
         dpg.hide_item(f"{tag}_notification")
 
         undo_top = undo_manager.top()
+        last_obj_id = next(reversed(behavior.objects.keys()))
 
         try:
             with undo_manager.combine():
@@ -257,8 +258,16 @@ def apply_template_dialog(
             logger.error(f"Template failed: {str(e)}", exc_info=e)
             show_warning(f"Template failed: {str(e)}")
         else:
+            # Dicts retain insertion order, so anything after the previous last key is new
+            new_objects = []
+            for oid in reversed(behavior.objects.keys()):
+                if oid == last_obj_id:
+                    break
+                new_objects.append(behavior.objects[oid])
+            new_objects.reverse()
+
             if callback:
-                callback(window, template._created_objects, user_data)
+                callback(window, new_objects, user_data)
 
             dpg.delete_item(window)
 

@@ -171,6 +171,13 @@ class HkbPointer(XmlValueHandler):
 
         self.element.attrib["id"] = str(value)
 
+    def get_target(self) -> "HkbRecord":
+        oid = self.get_value()
+        if not oid:
+            return None
+
+        return self.tagfile.objects[oid]
+
 
 class HkbArray(XmlValueHandler):
     @classmethod
@@ -484,7 +491,9 @@ class HkbRecord(XmlValueHandler):
                     f"Tried to assign value with non-matching type {value.type_id} to field {name} ({ftype})"
                 )
 
-            # TODO fully replace the inner field element
+            # TODO should we fully replace the inner field element?
+            #field_el.remove(next(field_el))
+            #field_el.append(value.element)
             value = value.get_value()
 
         wrapped = wrap_element(self.tagfile, field_el, ftype)

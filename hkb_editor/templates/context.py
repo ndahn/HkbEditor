@@ -53,8 +53,6 @@ class TemplateContext:
         self._description: str = None
         self._args: dict[str, TemplateContext._Arg] = {}
 
-        self._created_objects: list[HkbRecord] = []
-
         tree = ast.parse(open(template_file).read(), template_file, mode="exec")
 
         for node in ast.walk(tree):
@@ -152,14 +150,17 @@ class TemplateContext:
         range_max: int = 0,
     ) -> Variable:
         idx = self._behavior.create_variable(name, data_type,  range_min, range_max)
+        undo_manager.on_create_variable(self._behavior, name)
         return Variable(idx, name)
 
     def new_event(self, event: str) -> Event:
         idx = self._behavior.create_event(event)
+        undo_manager.on_create_event(self._behavior, event)
         return Event(idx, event)
 
     def new_animation(self, animation: str) -> Animation:
         idx = self._behavior.create_animation(animation)
+        undo_manager.on_create_animation(self._behavior, animation)
         return Animation(
             idx,
             self._behavior.get_animation(idx, full_name=False),
@@ -184,8 +185,6 @@ class TemplateContext:
         if record.object_id:
             self._behavior.add_object(record)
             undo_manager.on_create_object(self._behavior, record)
-
-        self._created_objects.append(record)
 
         return record
 
