@@ -5,6 +5,7 @@ import traceback
 from threading import Thread
 import textwrap
 import time
+import pyperclip
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
@@ -203,13 +204,9 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_separator()
 
-            dpg.add_menu_item(
-                label="Pin Lost Objects", callback=self.pin_lost_objects
-            )
+            dpg.add_menu_item(label="Pin Lost Objects", callback=self.pin_lost_objects)
 
-            dpg.add_menu_item(
-                label="Find Object...", callback=self.open_search_dialog
-            )
+            dpg.add_menu_item(label="Find Object...", callback=self.open_search_dialog)
 
         with dpg.menu(
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
@@ -305,7 +302,7 @@ class BehaviorEditor(GraphEditor):
                     scrollY=True,
                     tag=f"{self.tag}_pinned_objects_table",
                 ) as self.pinned_objects_table:
-                    dpg.add_table_column(label="ID")
+                    dpg.add_table_column(label="ID", width_stretch=True)
                     dpg.add_table_column(label="Name", width_stretch=True)
                     dpg.add_table_column(label="Type", width_stretch=True)
 
@@ -315,6 +312,10 @@ class BehaviorEditor(GraphEditor):
             )
 
     def add_pinned_object(self, object_id: str) -> None:
+        if dpg.does_item_exist(f"{self.tag}_pin_{object_id}"):
+            # Already pinned
+            return
+
         obj = self.beh.objects[object_id]
 
         def on_select(sender: str):
@@ -485,6 +486,13 @@ class BehaviorEditor(GraphEditor):
                     dpg.add_selectable(
                         label=item, callback=on_item_selected, user_data=item
                     )
+
+    def _copy_to_clipboard(self, data: str):
+        try:
+            pyperclip.copy(data)
+            self.logger.debug("Copied value:\n%s", data)
+        except Exception as e:
+            self.logger.warning(f"Copying value failed: {e}", exc_info=e)
 
     def _on_value_changed(
         self,
@@ -736,19 +744,18 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
-    def open_search_dialog(self, close_after_select: bool = False):
+    def open_search_dialog(self):
         tag = f"{self.tag}_search_dialog"
         if dpg.does_item_exist(tag):
             dpg.focus_item(tag)
             return
 
-        def jump(sender: str, object_id: str, user_data: Any):
-            self.jump_to_object(object_id)
-
-            if close_after_select:
-                dpg.delete_item(dialog)
-
-        dialog = search_objects_dialog(self.beh, jump, tag=tag)
+        search_objects_dialog(
+            self.beh,
+            pin_callback=lambda s, a, u: self.add_pinned_object(a),
+            jump_callback=lambda s, a, u: self.jump_to_object(a),
+            tag=tag,
+        )
 
     def open_stategraph_dialog(self):
         tag = f"{self.tag}_state_graph_dialog"

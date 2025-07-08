@@ -11,8 +11,10 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
     hkbClipGenerator_PlaybackMode as PlaybackMode,
 )
-from hkb_editor.hkb.hkb_flags import hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags
-from hkb_editor.hkb.utils import get_object, get_next_state_id
+from hkb_editor.hkb.hkb_flags import (
+    hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
+)
+from hkb_editor.hkb.utils import get_object, get_next_state_id, bind_variable
 
 
 @dataclass
@@ -198,11 +200,8 @@ class TemplateContext:
         undo_manager.on_update_array_item(array, index, ret, None)
         return ret
 
-    def free_state_id(
-        self,
-        statemachine: HkbRecord | str
-    ) -> int:
-        statemachine = get_object(self._behavior, statemachine)
+    def free_state_id(self, statemachine: HkbRecord | str) -> int:
+        statemachine = get_object(self._behavior, self._behavior, statemachine)
         return get_next_state_id(statemachine)
 
     def new_variable(
@@ -216,10 +215,16 @@ class TemplateContext:
         undo_manager.on_create_variable(self._behavior, name)
         return Variable(idx, name)
 
+    def get_variable(self, name: str) -> Variable:
+        return Variable(self._behavior.find_variable(name), name)
+
     def new_event(self, event: str) -> Event:
         idx = self._behavior.create_event(event)
         undo_manager.on_create_event(self._behavior, event)
         return Event(idx, event)
+
+    def get_event(self, name: str) -> Event:
+        return Event(self._behavior.find_event(name), name)
 
     def new_animation(self, animation: str) -> Animation:
         idx = self._behavior.create_animation(animation)
@@ -229,6 +234,11 @@ class TemplateContext:
             self._behavior.get_animation(idx, full_name=False),
             self._behavior.get_animation(idx, full_name=True),
         )
+
+    def get_animation(self, short_name: str) -> Animation:
+        idx = self._behavior.find_event(short_name)
+        full_name = self._behavior.get_animation(idx, full_name=True)
+        return Animation(idx, short_name, full_name)
 
     def new(
         self,
@@ -257,21 +267,24 @@ class TemplateContext:
         *,
         object_id: str = "<new>",
         name: str = "",
-        animId: int | str = 0,
+        animId: Animation | int | str = 0,
         generators: list[HkbRecord | str] = None,
-        offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
         enableScript: bool = True,
         enableTae: bool = True,
-        checkAnimEndSlotNo: int = -1,
+        offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
         animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
+        checkAnimEndSlotNo: int = -1,
         **kwargs,
     ) -> HkbRecord:
+        if isinstance(animId, Animation):
+            animId = animId.name
+
         if isinstance(animId, str):
             # Assume it's an animation name
             animId = int(animId.split("_")[-1])
 
         if generators:
-            generators = [get_object(obj) for obj in generators]
+            generators = [get_object(self._behavior, obj).object_id for obj in generators]
         else:
             generators = []
 
@@ -289,9 +302,50 @@ class TemplateContext:
             **kwargs,
         )
 
+    def new_selector(
+        self,
+        variable: Variable | int | str,
+        *,
+        object_id: str = "<new>",
+        name: str = "",
+        generators: list[HkbRecord | str] = None,
+        variableBindingSet: HkbRecord | str = None,
+        selectedIndexCanChangeAfterActivate: bool = False,
+        **kwargs,
+    ) -> HkbRecord:
+        if generators:
+            generators = [get_object(self._behavior, obj) for obj in generators]
+        else:
+            generators = []
+
+        variableBindingSet = get_object(self._behavior, variableBindingSet)
+
+        kwargs.setdefault("sentOnClipEnd/id", -1)
+        kwargs.setdefault("endOfClipEventId", -1)
+
+        selector = self.new(
+            "hkbManualSelectorGenerator",
+            object_id=object_id,
+            name=name,
+            generators=generators,
+            variableBindingSet=(
+                variableBindingSet.object_id if variableBindingSet else None
+            ),
+            selectedIndexCanChangeAfterActivate=selectedIndexCanChangeAfterActivate,
+            **kwargs,
+        )
+
+        if isinstance(variable, Variable):
+            variable = variable.index
+
+        # Will create a new binding set if necessary
+        bind_variable(self._behavior, selector, "selectedGeneratorIndex", variable)
+
+        return selector
+
     def new_clip(
         self,
-        animation: int | str,
+        animation: Animation | int | str,
         *,
         object_id: str = "<new>",
         name: str = None,
@@ -299,7 +353,10 @@ class TemplateContext:
         mode: PlaybackMode = PlaybackMode.SINGLE_PLAY,
         **kwargs,
     ) -> HkbRecord:
-        if isinstance(animation, int):
+        if isinstance(animation, Animation):
+            anim_name = animation.name
+            anim_id = animation.index
+        elif isinstance(animation, int):
             anim_name = self._behavior.get_animation(animation)
             anim_id = animation
         else:
@@ -316,6 +373,7 @@ class TemplateContext:
             animationName=anim_name,
             playbackSpeed=playbackSpeed,
             animationInternalId=anim_id,
+            mode=mode,
             **kwargs,
         )
 
@@ -331,8 +389,8 @@ class TemplateContext:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
-        transition = get_object(transition)
-        generator = get_object(generator)
+        transition = get_object(self._behavior, transition)
+        generator = get_object(self._behavior, generator)
 
         return self.new(
             "hkbStateMachine::StateInfo",
@@ -349,7 +407,7 @@ class TemplateContext:
     def new_transition_info(
         self,
         toStateId: int,
-        eventId: str | int,
+        eventId: Event | str | int,
         *,
         transition: HkbRecord | str = None,
         flags: TransitionInfoFlags = 0,
@@ -357,6 +415,16 @@ class TemplateContext:
     ) -> HkbRecord:
         if transition is None:
             transition = next(self._behavior.query("name:DefaultTransition"), None)
+
+        if isinstance(eventId, Event):
+            eventId = eventId.index
+        elif isinstance(eventId, str):
+            eventId = self._behavior.find_event(eventId)
+
+        kwargs.setdefault("triggerInterval/enterEventId", -1)
+        kwargs.setdefault("triggerInterval/exitEventId", -1)
+        kwargs.setdefault("initiateInterval/enterEventId", -1)
+        kwargs.setdefault("initiateInterval/exitEventId", -1)
 
         return self.new(
             "hkbStateMachine::TransitionInfo",
@@ -372,20 +440,11 @@ class TemplateContext:
         cmsg: HkbRecord | str,
         *,
         object_id: str = "<new>",
-        weight: float = 0.0,
+        weight: float = 1.0,
         worldFromModelWeight: int = 1,
         **kwargs,
     ) -> HkbRecord:
-        blender_child_type_id = self._behavior.type_registry.find_first_type_by_name(
-            "hkbBlenderGeneratorChild"
-        )
-
-        if transition is None:
-            transition = next(self._behavior.query("name:DefaultTransition"), None)
-            if transition:
-                transition = transition.object_id
-
-        cmsg = get_object(cmsg)
+        cmsg = get_object(self._behavior, cmsg)
 
         return self.new(
             "hkbBlenderGeneratorChild",
@@ -395,3 +454,72 @@ class TemplateContext:
             worldFromModelWeight=worldFromModelWeight,
             **kwargs,
         )
+
+    # Some typical chains
+    def create_state_chain(
+        self,
+        state_id: int,
+        animation: Animation | int | str,
+        name: str,
+        *,
+        clip_mode: PlaybackMode = PlaybackMode.SINGLE_PLAY,
+        state_transitions: HkbRecord | str = None,
+        cmsg_name: str = None,
+        enableScript: bool = True,
+        enableTae: bool = True,
+        offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
+        animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
+        checkAnimEndSlotNo: int = -1,
+        **cmsg_kwargs,
+    ) -> tuple[HkbRecord, HkbRecord, HkbRecord]:
+        transitions = get_object(self._behavior, state_transitions)
+
+        clip = self.new_clip(animation, mode=clip_mode)
+        cmsg = self.new_cmsg(
+            name=cmsg_name or name + "_CMSG",
+            animId=animation,
+            generators=[clip],
+            enableScript=enableScript,
+            enableTae=enableTae,
+            offsetType=offsetType,
+            animeEndEventType=animeEndEventType,
+            checkAnimEndSlotNo=checkAnimEndSlotNo,
+            **cmsg_kwargs,
+        )
+        state = self.new_statemachine_state(
+            stateId=state_id,
+            name=name,
+            generator=cmsg,
+            transitions=transitions.object_id if transitions else None,
+        )
+
+        return (state, cmsg, clip)
+
+    def create_blend_chain(
+        self,
+        clip: HkbRecord | str,
+        animation: int | str,
+        cmsg_name: str = None,
+        *,
+        blend_weight: int = 1,
+        enableScript: bool = True,
+        enableTae: bool = True,
+        offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
+        animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
+        checkAnimEndSlotNo: int = -1,
+        **cmsg_kwargs,
+    ) -> tuple[HkbRecord, HkbRecord]:
+        cmsg = self.new_cmsg(
+            name=cmsg_name,
+            animId=animation,
+            generators=[clip],
+            enableScript=enableScript,
+            enableTae=enableTae,
+            offsetType=offsetType,
+            animeEndEventType=animeEndEventType,
+            checkAnimEndSlotNo=checkAnimEndSlotNo,
+            **cmsg_kwargs,
+        )
+        blend = self.new_blender_generator_child(cmsg, weight=blend_weight)
+
+        return (blend, cmsg)

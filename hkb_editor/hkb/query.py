@@ -13,7 +13,7 @@ lucene_grammar = r"""
     ?start: or_expr
 
     ?or_expr: and_expr ("OR" and_expr)*     -> or_
-    ?and_expr: not_expr ("AND" not_expr)*   -> and_
+    ?and_expr: not_expr+                    -> and_
     ?not_expr: "NOT" not_expr               -> not_
              | atom
 
@@ -47,7 +47,8 @@ Supports Lucene-style search queries (<field>:<value>).
 - Fields are used verbatim, with the only excception that array indices 
    may be replaced by a * wildcard.
 - Values may be specified using fields, wildcards, fuzzy searches, ranges.
-- Terms may be combined using grouping, AND, OR, NOT. 
+- Terms may be combined using grouping, OR, NOT. 
+- Termas separated by a space are assumed to be AND.
 
 You may run queries over the following fields:
 - id
@@ -58,7 +59,7 @@ You may run queries over the following fields:
 - any attribute path
 
 Examples:
-- id:*588 AND type_name:hkbStateMachine
+- id:*588 OR type_name:hkbStateMachine
 - "bindings:0/memberPath":selectedGeneratorIndex
 - animId:[100000 TO 200000]
 - name:~AddDamageFire

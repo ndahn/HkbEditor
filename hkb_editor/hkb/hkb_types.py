@@ -240,12 +240,9 @@ class HkbArray(XmlValueHandler):
 
             values = wrapped
 
-        for idx, item in enumerate(values):
+        for item in values:
             if isinstance(item, XmlValueHandler):
-                if item.type_id != self.element_type_id:
-                    raise ValueError(
-                        f"Non-matching value type {item.type_id} (should be {self.element_type_id})"
-                    )
+                self._verify_compatible(item)
 
         for child in list(self.element):
             self.element.remove(child)
@@ -273,11 +270,7 @@ class HkbArray(XmlValueHandler):
             index = len(self) + index
         
         if isinstance(value, XmlValueHandler):
-            if value.type_id != self.element_type_id:
-                raise ValueError(
-                    f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
-                )
-
+            self._verify_compatible(value)
             value = value.get_value()
 
         self[index].set_value(value)
@@ -298,13 +291,30 @@ class HkbArray(XmlValueHandler):
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return Handler.new(self.tagfile, self.element_type_id, value)
 
+    def _verify_compatible(self, value: XmlValueHandler) -> None:
+        if value.type_id == self.element_type_id:
+            return True
+        
+        # We might be an array of pointers instead
+        # TODO check format once we have a complete format map
+        #fmt = self.tagfile.type_registry.get_format(self.element_type_id)
+        #if fmt == TypeFormats.POINTER
+        #subtype = self.tagfile.type_registry.get_subtype(self.element_type_id)
+        #if value.type_id == subtype:
+        #    return True
+
+        # NOTE could check for compatible types, but I have yet to see that in use
+
+        val_type = self.tagfile.type_registry.get_name(value.type_id)
+        exp_type = self.tagfile.type_registry.get_name(self.element_type_id)
+        
+        raise ValueError(
+            f"Non-matching value type {value.type_id} ({val_type}), expected {self.element_type_id} ({exp_type})"
+        )
+
     def index(self, value: XmlValueHandler | Any) -> int:
         if isinstance(value, XmlValueHandler):
-            if value.type_id != self.element_type_id:
-                raise ValueError(
-                    f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
-                )
-
+            self._verify_compatible(value)
             value = value.get_value()
 
         for idx, item in enumerate(self):
@@ -314,13 +324,10 @@ class HkbArray(XmlValueHandler):
         raise IndexError("Item not found")
 
     def append(self, value: XmlValueHandler | Any) -> None:
-        if not isinstance(value, XmlValueHandler):
+        if isinstance(value, XmlValueHandler):
+            self._verify_compatible(value)
+        else:
             value = self._wrap_value(value)
-        
-        if value.type_id != self.element_type_id:
-            raise ValueError(
-                f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
-            )
 
         self.element.append(value.element)
         self._count += 1
@@ -329,13 +336,10 @@ class HkbArray(XmlValueHandler):
         if index < 0:
             index = len(self) + index
         
-        if not isinstance(value, XmlValueHandler):
+        if isinstance(value, XmlValueHandler):
+            self._verify_compatible(value)
+        else:
             value = self._wrap_value(value)
-        
-        if value.type_id != self.element_type_id:
-            raise ValueError(
-                f"Non-matching value type {value.type_id} (should be {self.element_type_id})"
-            )
 
         self.element.insert(index, value.element)
         self._count += 1

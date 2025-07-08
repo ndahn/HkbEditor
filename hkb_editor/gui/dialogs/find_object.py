@@ -197,6 +197,7 @@ def find_dialog(
 
 def search_objects_dialog(
     behavior: HavokBehavior,
+    pin_callback: Callable[[str, str, Any], None] = None,
     jump_callback: Callable[[str, str, Any], None] = None,
     *,
     initial_filter: str = "",
@@ -227,13 +228,17 @@ def search_objects_dialog(
             autosize=True,
             tag=popup,
         ):
-            make_copy_menu(item)
+            if pin_callback:
+                dpg.add_selectable(
+                    label="Pin",
+                    callback=lambda: pin_callback(tag, item.object_id, user_data),
+                )
             if jump_callback:
-                dpg.add_separator()
                 dpg.add_selectable(
                     label="Jump To",
                     callback=lambda: jump_callback(tag, item.object_id, user_data),
                 )
+            make_copy_menu(item)
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
         dpg.show_item(popup)

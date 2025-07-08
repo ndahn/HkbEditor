@@ -754,7 +754,6 @@ class AttributesWidget:
     def _copy_to_clipboard(self, data: str):
         try:
             pyperclip.copy(data)
-        except:
-            pass
-
-        self.logger.debug("Copied value:\n%s", data)
+            self.logger.debug("Copied value:\n%s", data)
+        except Exception as e:
+            self.logger.warning(f"Copying value failed: {e}", exc_info=e)

@@ -143,7 +143,7 @@ class Tagfile:
         
         # Proper objects will have their <record> inside an <object> tag
         parent = obj.element.getparent()
-        if not parent:
+        if parent is None:
             parent = self._tree.getroot()
         parent.remove(obj.element)
 

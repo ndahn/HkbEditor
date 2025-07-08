@@ -9,7 +9,6 @@ from hkb_editor.hkb.hkb_flags import (
 )
 
 
-
 def run(
     ctx: TemplateContext,
     event1_name: str,
@@ -38,14 +37,14 @@ def run(
 
     trans1 = ctx.new_transition_info(
         toStateId=state1_id,
-        eventId=event1.index,
+        eventId=event1,
         transition="object9398",  # TODO unknown pointer?
         flags=transition_flags,
     )
 
     trans2 = ctx.new_transition_info(
         toStateId=state2_id,
-        eventId=event2.index,
+        eventId=event2,
         transition="object9398",  # TODO
         flags=transition_flags,
     )
@@ -63,15 +62,25 @@ def run(
     )
     transition_info = ctx.new_transition_info(
         toStateId=state2_id,
-        eventId=transition_event.index,
+        eventId=transition_event,
         transition=default_transition.object_id,
     )
     ctx.array_add(transitions, "transitions", transition_info.object_id)
 
+    # TODO use?
+    # state1, state1_cmsg, state1_clip = ctx.create_state_chain(
+    #     state1_id,
+    #     anim_start,
+    #     event1_name,
+    #     state_transitions=transitions,
+    #     cmsg_enable_script=False,
+    #     offsetType=CmsgOffsetType.IDLE_CATEGORY,
+    # )
+
     state1_clip = ctx.new_clip(anim_start.index)
     state1_cmsg = ctx.new_cmsg(
         name=f"{event1_name}_CMSG",
-        animId=anim_start.name,
+        animId=anim_start,
         generators=[state1_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -88,9 +97,21 @@ def run(
     # Blending
     start_blend_common_clip = ctx.new_clip(anim_start.index)
     
+    # TODO use?
+    # start_blend01, start_blend01_cmsg = ctx.create_blend_chain(
+    #     start_blend_common_clip,
+    #     anim_start.index,
+    #     f"{gesture_base_name}_LoopStart",
+    #     blend_weight=gesture_id,
+    #     cmsg_enable_script=False,
+    #     cmsg_enable_tae=False,
+    #     offsetType=CmsgOffsetType.IDLE_CATEGORY,
+    #     nimeEndEventType=AnimeEndEventType.NONE,
+    # )
+
     start_blend01_cmsg = ctx.new_cmsg(
         name=f"{gesture_base_name}_LoopStart",
-        animId=anim_start.name,
+        animId=anim_start,
         generators=[start_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -107,7 +128,7 @@ def run(
 
     start_blend00_cmsg = ctx.new_cmsg(
         name=f"{gesture_base_name}_LoopStart00",
-        animId=anim_start.name,
+        animId=anim_start,
         generators=[start_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         checkAnimEndSlotNo=1,
@@ -126,7 +147,7 @@ def run(
     state2_clip = ctx.new_clip(anim_loop.index, mode=PlaybackMode.LOOPING)
     state2_cmsg = ctx.new_cmsg(
         name=f"{event2_name}_CMSG",
-        animId=anim_loop.name,
+        animId=anim_loop,
         generators=[state2_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -145,7 +166,7 @@ def run(
     
     loop_blend00_cmsg = ctx.new_cmsg(
         name=f"{gesture_base_name}_Loop",
-        animId=anim_loop.name,
+        animId=anim_loop,
         generators=[loop_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -161,7 +182,7 @@ def run(
 
     loop_blend02_cmsg = ctx.new_cmsg(
         name=f"{gesture_base_name}_Loop02",
-        animId=anim_loop.name,
+        animId=anim_loop,
         generators=[loop_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         checkAnimEndSlotNo=1,
@@ -182,7 +203,7 @@ def run(
     
     end_blend01_cmsg = ctx.new_cmsg(
         name=f"{gesture_base_name}_LoopEnd",
-        animId=anim_end.name,
+        animId=anim_end,
         generators=[end_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -198,7 +219,7 @@ def run(
 
     end_blend00_cmsg = ctx.new_cmsg(
         name=f"{gesture_base_name}_LoopEnd00",
-        animId=anim_end.name,
+        animId=anim_end,
         generators=[end_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         checkAnimEndSlotNo=1,

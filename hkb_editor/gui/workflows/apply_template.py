@@ -281,7 +281,10 @@ def apply_template_dialog(
         on_close=lambda: dpg.delete_item(window),
     ) as window:
         # Description first
-        add_paragraphs(template._description, color=style.light_blue)
+        if template._description:
+            add_paragraphs(template._description, color=style.light_blue)
+        else:
+            dpg.add_text("<no description>", color=style.orange)
 
         # Open the source file
         dpg.add_button(label="Source", callback=open_template_source)
