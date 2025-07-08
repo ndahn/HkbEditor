@@ -18,6 +18,27 @@ def run(
     anim_end: Animation,
     gesture_id: int = 91,
 ):
+    """New Gesture
+
+    Generates new gesture states for a gesture consisting of a loop start, loop, and loop end. To use the gesture, fire the first event from hks. TODO more info, how to use, loop end, ...
+
+    Parameters
+    ----------
+    ctx : TemplateContext
+        The template context.
+    event1_name : str
+        Loop start event.
+    anim_start : Animation
+        Loop start animation.
+    event2_name : str
+        Loop event.
+    anim_loop : Animation
+        Loop animation.
+    anim_end : Animation
+        Loop end animation.
+    gesture_id : int, optional
+        The gesture ID, corresponds to TAE 400 + X.
+    """
     gesture_base_name = f"Gesture_{gesture_id:03}"
 
     gesture_sm = ctx.find("name:EventGesture_SM")

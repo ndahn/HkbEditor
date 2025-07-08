@@ -14,18 +14,39 @@ def run(
     ctx: TemplateContext,
     mode: Literal["oneshot", "enchant", "both"] = "oneshot",
     name: str = "MyItem",
-    animation: Animation = None,
-    enchant_backhandblade: Animation = None,
-    enchant_duelingshield: Animation = None,
+    normal_use_anim: Animation = None,
+    backhandsword_anim: Animation = None,
+    duelingshield_anim: Animation = None,
 ):
+    """New Usable Item
+
+    Creates a new usable item that can be used as a oneshot, for weapon enchants, or both. The item will be used like every other regular item. For weapon buff items, the 'W_ItemWeaponEnchant' (or 'W_ItemWeaponEnchant_Upper') event is responsible.
+
+    Oneshot items will only use the 'normal_use_anim'. Weapon buff items should also specify the 'backhandblade_anim' and 'duelingshield_ainm'. If not specified, the 'normal_use_anim' will be used instead.
+
+    Parameters
+    ----------
+    ctx : TemplateContext
+        The template context.
+    mode : Literal[&quot;oneshot&quot;, &quot;enchant&quot;, &quot;both&quot;], optional
+        The kind of item to generate.
+    name : str, optional
+        The name of your item, preferably in CamelCase.
+    normal_use_anim : Animation, optional
+        Animation used for oneshot items and regular weapons.
+    backhandsword_anim : Animation, optional
+        Animation used when enchanting backhand swords.
+    duelingshield_anim : Animation, optional
+        Animation used when enchanting dueling shields.
+    """
     ####
     # Self-transition
     ####
-    selftrans_clip = ctx.new_clip(animation)
+    selftrans_clip = ctx.new_clip(normal_use_anim)
 
     selftrans_blend, selftrans_cmsg = ctx.create_blend_chain(
         selftrans_clip,
-        animation,
+        normal_use_anim,
         name + "_CMSG02",
         enableScript=False,
         enableTae=False,
@@ -38,7 +59,7 @@ def run(
 
     selftrans_upper_blend, selftrans_upper_cmsg = ctx.create_blend_chain(
         selftrans_clip,
-        animation,
+        normal_use_anim,
         name + "_CMSG01",
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         animeEndEventType=AnimeEndEventType.NONE,
@@ -54,10 +75,10 @@ def run(
     # Oneshot
     ####
     if mode in ("oneshot", "both"):
-        oneshot_clip = ctx.new_clip(animation)
+        oneshot_clip = ctx.new_clip(normal_use_anim)
         oneshot_blend, oneshot_cmsg = ctx.create_blend_chain(
             oneshot_clip,
-            animation,
+            normal_use_anim,
             name + "_CMSG",
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -70,7 +91,7 @@ def run(
 
         oneshot_upper_blend, oneshot_upper_cmsg = ctx.create_blend_chain(
             oneshot_clip,
-            animation,
+            normal_use_anim,
             name + "_CMSG",
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -86,6 +107,12 @@ def run(
     # Weapon buff items
     ####
     if mode in ("enchant", "both"):
+        if backhandsword_anim is None:
+            backhandsword_anim = normal_use_anim
+
+        if duelingshield_anim is None:
+            duelingshield_anim = normal_use_anim
+
         enchant_event = ctx.get_event("W_ItemWeaponEnchant")
         weapon_type_var = ctx.get_variable("ItemWeaponType")
         transition_flags = TransitionFlags(3584)
@@ -102,13 +129,13 @@ def run(
         normalitem_sm = ctx.find("name:NormalItem_SM")
         ctx.array_add(normalitem_sm, "wildcardTransitions", normalitem_transition.object_id)
 
-        normalitem_clip00 = ctx.new_clip(animation)
-        normalitem_backhandsword_clip00 = ctx.new_clip(enchant_backhandblade)
-        normalitem_duelingshield_clip00 = ctx.new_clip(enchant_duelingshield)
+        normalitem_clip00 = ctx.new_clip(normal_use_anim)
+        normalitem_backhandsword_clip00 = ctx.new_clip(backhandsword_anim)
+        normalitem_duelingshield_clip00 = ctx.new_clip(duelingshield_anim)
 
         normalitem_cmsg00 = ctx.new_cmsg(
             name="ItemWeaponEnchant_CMSG00",
-            animId=animation,
+            animId=normal_use_anim,
             generators=[normalitem_clip00],
             enableScript=False,
             enableTae=False,
@@ -117,7 +144,7 @@ def run(
         )
         normalitem_backhandsword_cmsg00 = ctx.new_cmsg(
             name="ItemWeaponEnchant_BackhandSword_CMSG00",
-            animId=enchant_backhandblade,
+            animId=backhandsword_anim,
             generators=[normalitem_backhandsword_clip00],
             enableScript=False,
             enableTae=False,
@@ -126,7 +153,7 @@ def run(
         )
         normalitem_duelingshield_cmsg00 = ctx.new_cmsg(
             name="ItemWeaponEnchant_DuelingShield_CMSG00",
-            animId=enchant_duelingshield,
+            animId=duelingshield_anim,
             generators=[normalitem_duelingshield_clip00],
             enableScript=False,
             enableTae=False,
@@ -173,7 +200,7 @@ def run(
 
         normalitem_upper_cmsg00 = ctx.new_cmsg(
             name="ItemWeaponEnchant_CMSG",
-            animId=animation,
+            animId=normal_use_anim,
             generators=[normalitem_clip00],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -181,7 +208,7 @@ def run(
         )
         normalitem_upper_backhandsword_cmsg00 = ctx.new_cmsg(
             name="ItemWeaponEnchant_BackhandSword_CMSG",
-            animId=enchant_backhandblade,
+            animId=backhandsword_anim,
             generators=[normalitem_backhandsword_clip00],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -189,7 +216,7 @@ def run(
         )
         normalitem_upper_duelingshield_cmsg00 = ctx.new_cmsg(
             name="ItemWeaponEnchant_DuelingShield_CMSG",
-            animId=enchant_duelingshield,
+            animId=duelingshield_anim,
             generators=[normalitem_duelingshield_clip00],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
