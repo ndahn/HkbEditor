@@ -9,7 +9,6 @@ def run(
     ctx: TemplateContext,
     cmsg_name: str = "Throw40168_CMSG",
     animation: Animation = "a000_040168",
-    #throw_sm: HkbRecord = "name:ThrowAtk_Blend",
 ):
     """Throw Attack Behavior
 
@@ -32,7 +31,7 @@ def run(
 
     try:
         # Check if the throw ID is already in use somewhere
-        ctx.find(f"type_name:hkbBlenderGeneratorChild,weight:{throw_id}")
+        ctx.find(f"type_name:hkbBlenderGeneratorChild weight:{throw_id}")
         raise ValueError(f"throw_id {throw_id} already in use")
     except KeyError:
         pass
