@@ -44,6 +44,7 @@ def bind_variable(
     variable: str | int,
 ) -> None:
     binding_set_ptr: HkbPointer = hkb_object["variableBindingSet"]
+    
     if not binding_set_ptr.get_value():
         # Need to create a new variable binding set first
         binding_set_type_id = behavior.type_registry.find_first_type_by_name(
@@ -86,6 +87,11 @@ def bind_variable(
             }
         )
         bindings.append(bind)
+
+
+# FIXME are these useful?
+# Offer common defaults and highlight required settings, 
+# but also need an explicit behavior
 
 
 def new_cmsg(

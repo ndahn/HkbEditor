@@ -167,27 +167,6 @@ class TemplateContext:
             self._behavior.get_animation(idx, full_name=True)
         )
 
-    def create(
-        self,
-        object_type_name: str,
-        *,
-        object_id: str = None,
-        generate_id: bool = True,
-        **attributes: Any,
-    ) -> HkbRecord:
-        type_id = self._behavior.type_registry.find_first_type_by_name(object_type_name)
-        if generate_id:
-            object_id = self._behavior.new_id()
-
-        record = HkbRecord.new(
-            self._behavior, type_id, path_values=attributes, object_id=object_id
-        )
-        if record.object_id:
-            self._behavior.add_object(record)
-            undo_manager.on_create_object(self._behavior, record)
-
-        return record
-
     def get(
         self,
         record: HkbRecord | str,
@@ -238,3 +217,24 @@ class TemplateContext:
         ret = array.pop(index).get_value()
         undo_manager.on_update_array_item(array, index, ret, None)
         return ret
+
+    def create(
+        self,
+        object_type_name: str,
+        *,
+        object_id: str = None,
+        generate_id: bool = True,
+        **attributes: Any,
+    ) -> HkbRecord:
+        type_id = self._behavior.type_registry.find_first_type_by_name(object_type_name)
+        if generate_id:
+            object_id = self._behavior.new_id()
+
+        record = HkbRecord.new(
+            self._behavior, type_id, path_values=attributes, object_id=object_id
+        )
+        if record.object_id:
+            self._behavior.add_object(record)
+            undo_manager.on_create_object(self._behavior, record)
+
+        return record

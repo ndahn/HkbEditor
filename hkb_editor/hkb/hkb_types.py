@@ -406,11 +406,7 @@ class HkbRecord(XmlValueHandler):
         self._fields = tagfile.type_registry.get_field_types(type_id)
 
     def get_value(self) -> dict[str, XmlValueHandler]:
-        ret = {}
-        for fname in self._fields.keys():
-            ret[fname] = self[fname]
-
-        return ret
+        return {f: self[f] for f in self._fields.keys()}
 
     def set_value(self, values: dict[str, XmlValueHandler]) -> None:
         for key, val in values.items():
@@ -420,7 +416,7 @@ class HkbRecord(XmlValueHandler):
     def fields(self) -> Iterator[str]:
         yield from self._fields.keys()
 
-    def get_field_element(self, name: str) -> ET._Element:
+    def _get_field_element(self, name: str) -> ET._Element:
         # Avoid infinite recursions from __getattr__
         for elem in self.element.findall("field"):
             if elem.attrib["name"] == name:
@@ -471,7 +467,7 @@ class HkbRecord(XmlValueHandler):
                 return default
             raise AttributeError(f"No field '{name}'")
 
-        field_el = self.get_field_element(name)
+        field_el = self._get_field_element(name)
         wrap = wrap_element(self.tagfile, field_el, ftype)
 
         if resolve:
@@ -484,20 +480,22 @@ class HkbRecord(XmlValueHandler):
         if ftype is None:
             raise AttributeError(f"No field named '{name}'")
 
-        field_el = self.get_field_element(name)
+        field_el = self._get_field_element(name)
         if isinstance(value, XmlValueHandler):
             if value.type_id != ftype:
                 raise ValueError(
                     f"Tried to assign value with non-matching type {value.type_id} to field {name} ({ftype})"
                 )
 
-            # TODO should we fully replace the inner field element?
-            #field_el.remove(next(field_el))
-            #field_el.append(value.element)
-            value = value.get_value()
-
-        wrapped = wrap_element(self.tagfile, field_el, ftype)
-        wrapped.set_value(value)
+            # We fully replace the inner field element. This will invalidate any previous 
+            # references to values of this field, but I suspect that will be less surprising
+            # than modifying a previously applied value and seeing no effect.
+            field_el.remove(next(field_el))
+            field_el.append(value.element)
+            #value = value.get_value()
+        else:
+            wrapped = wrap_element(self.tagfile, field_el, ftype)
+            wrapped.set_value(value)
 
     def __getitem__(self, key: str) -> XmlValueHandler:
         return self.get_field(key)

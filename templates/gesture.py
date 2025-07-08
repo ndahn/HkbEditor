@@ -121,6 +121,7 @@ def run(
     state1, state1_cmsg, state1_clip = _make_state_chain(
         ctx, anim_start, event1, state1_id
     )
+    
     default_transition = ctx.find("name:DefaultTransition")
     transition_info = ctx.create(
         "hkbStateMachine::TransitionInfoArray",
