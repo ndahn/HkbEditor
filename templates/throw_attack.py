@@ -1,6 +1,6 @@
 from hkb_editor.templates import *
 from hkb_editor.hkb.hkb_enums import (
-    CustomManualSelectorGenerator_AnimeEndEventType as EndEventType,
+    CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
 
 
@@ -36,23 +36,23 @@ def run(
     except KeyError:
         pass
 
-    blender = ctx.create(
+    blender = ctx.new(
         "hkbBlenderGeneratorChild",
         weight=throw_id,
         worldFromModelWeight=1.0,
     )
-    cmsg = ctx.create(
+    cmsg = ctx.new(
         "CustomManualSelectorGenerator",
         name=cmsg_name,
         animId=throw_id,
         offsetType=18,
-        animeEndEventType=EndEventType.FIRE_IDLE_EVENT,
+        animeEndEventType=AnimeEndEventType.FIRE_IDLE_EVENT,
         enableScript=True,
         enableTae=True,
         changeTypeOfSelectedIndexAfterActivate=1,
         checkAnimEndSlotNo=-1,
     )
-    clip = ctx.create(
+    clip = ctx.new(
         "hkbClipGenerator",
         name=animation.name,
         animationName=animation.name,

@@ -3,9 +3,16 @@ from dataclasses import dataclass
 import ast
 from docstring_parser import parse as parse_docstring, DocstringParam
 
-from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
-from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.gui.workflows.undo import undo_manager
+from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
+from hkb_editor.hkb.hkb_enums import (
+    hkbVariableInfo_VariableType as VariableType,
+    CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
+    CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
+    hkbClipGenerator_PlaybackMode as PlaybackMode,
+)
+from hkb_editor.hkb.hkb_flags import hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags
+from hkb_editor.hkb.utils import get_object, get_next_state_id
 
 
 @dataclass
@@ -142,31 +149,6 @@ class TemplateContext:
 
             raise KeyError(f"No object matching '{query}'")
 
-    def new_variable(
-        self,
-        name: str,
-        data_type: VariableType = VariableType.INT32,
-        range_min: int = 0,
-        range_max: int = 0,
-    ) -> Variable:
-        idx = self._behavior.create_variable(name, data_type,  range_min, range_max)
-        undo_manager.on_create_variable(self._behavior, name)
-        return Variable(idx, name)
-
-    def new_event(self, event: str) -> Event:
-        idx = self._behavior.create_event(event)
-        undo_manager.on_create_event(self._behavior, event)
-        return Event(idx, event)
-
-    def new_animation(self, animation: str) -> Animation:
-        idx = self._behavior.create_animation(animation)
-        undo_manager.on_create_animation(self._behavior, animation)
-        return Animation(
-            idx,
-            self._behavior.get_animation(idx, full_name=False),
-            self._behavior.get_animation(idx, full_name=True)
-        )
-
     def get(
         self,
         record: HkbRecord | str,
@@ -178,9 +160,7 @@ class TemplateContext:
 
         return record.get_path_value(path, default=default, resolve=True)
 
-    def set(
-        self, record: HkbRecord | str, **attributes
-    ) -> None:
+    def set(self, record: HkbRecord | str, **attributes) -> None:
         if isinstance(record, str):
             record = self._behavior[record]
 
@@ -218,23 +198,200 @@ class TemplateContext:
         undo_manager.on_update_array_item(array, index, ret, None)
         return ret
 
-    def create(
+    def free_state_id(
+        self,
+        statemachine: HkbRecord | str
+    ) -> int:
+        statemachine = get_object(self._behavior, statemachine)
+        return get_next_state_id(statemachine)
+
+    def new_variable(
+        self,
+        name: str,
+        data_type: VariableType = VariableType.INT32,
+        range_min: int = 0,
+        range_max: int = 0,
+    ) -> Variable:
+        idx = self._behavior.create_variable(name, data_type, range_min, range_max)
+        undo_manager.on_create_variable(self._behavior, name)
+        return Variable(idx, name)
+
+    def new_event(self, event: str) -> Event:
+        idx = self._behavior.create_event(event)
+        undo_manager.on_create_event(self._behavior, event)
+        return Event(idx, event)
+
+    def new_animation(self, animation: str) -> Animation:
+        idx = self._behavior.create_animation(animation)
+        undo_manager.on_create_animation(self._behavior, animation)
+        return Animation(
+            idx,
+            self._behavior.get_animation(idx, full_name=False),
+            self._behavior.get_animation(idx, full_name=True),
+        )
+
+    def new(
         self,
         object_type_name: str,
         *,
-        object_id: str = None,
-        generate_id: bool = True,
-        **attributes: Any,
+        object_id: str = "<new>",
+        **kwargs: Any,
     ) -> HkbRecord:
         type_id = self._behavior.type_registry.find_first_type_by_name(object_type_name)
-        if generate_id:
+        if object_id == "<new>":
             object_id = self._behavior.new_id()
 
         record = HkbRecord.new(
-            self._behavior, type_id, path_values=attributes, object_id=object_id
+            self._behavior, type_id, path_values=kwargs, object_id=object_id
         )
         if record.object_id:
             self._behavior.add_object(record)
             undo_manager.on_create_object(self._behavior, record)
 
         return record
+
+    # Offer common defaults and highlight required settings for the most common objects
+
+    def new_cmsg(
+        self,
+        *,
+        object_id: str = "<new>",
+        name: str = "",
+        animId: int | str = 0,
+        generators: list[HkbRecord | str] = None,
+        offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
+        enableScript: bool = True,
+        enableTae: bool = True,
+        checkAnimEndSlotNo: int = -1,
+        animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
+        **kwargs,
+    ) -> HkbRecord:
+        if isinstance(animId, str):
+            # Assume it's an animation name
+            animId = int(animId.split("_")[-1])
+
+        if generators:
+            generators = [get_object(obj) for obj in generators]
+        else:
+            generators = []
+
+        return self.new(
+            "CustomManualSelectorGenerator",
+            object_id=object_id,
+            name=name,
+            generators=generators,
+            offsetType=offsetType.value,
+            animId=animId,
+            enableScript=enableScript,
+            enableTae=enableTae,
+            checkAnimEndSlotNo=checkAnimEndSlotNo,
+            animeEndEventType=animeEndEventType,
+            **kwargs,
+        )
+
+    def new_clip(
+        self,
+        animation: int | str,
+        *,
+        object_id: str = "<new>",
+        name: str = None,
+        playbackSpeed: int = 1,
+        mode: PlaybackMode = PlaybackMode.SINGLE_PLAY,
+        **kwargs,
+    ) -> HkbRecord:
+        if isinstance(animation, int):
+            anim_name = self._behavior.get_animation(animation)
+            anim_id = animation
+        else:
+            anim_name = animation
+            anim_id = self._behavior.find_animation(animation)
+
+        if name is None:
+            name = anim_name
+
+        return self.new(
+            "hkbClipGenerator",
+            object_id=object_id,
+            name=name,
+            animationName=anim_name,
+            playbackSpeed=playbackSpeed,
+            animationInternalId=anim_id,
+            **kwargs,
+        )
+
+    def new_statemachine_state(
+        self,
+        stateId: int,
+        *,
+        object_id: str = "<new>",
+        name: str = "",
+        transitions: HkbRecord | str = None,
+        generator: HkbRecord | str = None,
+        probability: float = 1.0,
+        enable: bool = True,
+        **kwargs,
+    ) -> HkbRecord:
+        transition = get_object(transition)
+        generator = get_object(generator)
+
+        return self.new(
+            "hkbStateMachine::StateInfo",
+            object_id=object_id,
+            stateId=stateId,
+            name=name,
+            transitions=transitions.object_id if transition else None,
+            generator=generator.object_id if generator else None,
+            probability=probability,
+            enable=enable,
+            **kwargs,
+        )
+
+    def new_transition_info(
+        self,
+        toStateId: int,
+        eventId: str | int,
+        *,
+        transition: HkbRecord | str = None,
+        flags: TransitionInfoFlags = 0,
+        **kwargs,
+    ) -> HkbRecord:
+        if transition is None:
+            transition = next(self._behavior.query("name:DefaultTransition"), None)
+
+        return self.new(
+            "hkbStateMachine::TransitionInfo",
+            toStateId=toStateId,
+            eventId=eventId,
+            transition=transition.object_id if transition else None,
+            flags=flags,
+            **kwargs,
+        )
+
+    def new_blender_generator_child(
+        self,
+        cmsg: HkbRecord | str,
+        *,
+        object_id: str = "<new>",
+        weight: float = 0.0,
+        worldFromModelWeight: int = 1,
+        **kwargs,
+    ) -> HkbRecord:
+        blender_child_type_id = self._behavior.type_registry.find_first_type_by_name(
+            "hkbBlenderGeneratorChild"
+        )
+
+        if transition is None:
+            transition = next(self._behavior.query("name:DefaultTransition"), None)
+            if transition:
+                transition = transition.object_id
+
+        cmsg = get_object(cmsg)
+
+        return self.new(
+            "hkbBlenderGeneratorChild",
+            object_id=object_id,
+            generator=cmsg.object_id if cmsg else None,
+            weight=weight,
+            worldFromModelWeight=worldFromModelWeight,
+            **kwargs,
+        )

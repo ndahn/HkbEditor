@@ -1,72 +1,13 @@
 from hkb_editor.templates import *
 from hkb_editor.hkb.hkb_enums import (
-    CustomManualSelectorGenerator_AnimeEndEventType as EndEventType,
+    CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
+    CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
+    hkbClipGenerator_PlaybackMode as PlaybackMode,
 )
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionFlags,
 )
 
-
-def _make_state_chain(
-    ctx: TemplateContext, anim: Animation, event: Event, state_id: int
-):
-    name = event.name.strip("W_")
-
-    clip = ctx.create(
-        "hkbClipGenerator",
-        name=anim.name,
-        animationName=anim.name,
-        playbackSpeed=1,
-        animationInternalId=anim.index,
-    )
-
-    cmsg = ctx.create(
-        "CustomManualSelectorGenerator",
-        name=name + "_CMSG",
-        generators=[clip.object_id],  # TODO verify this works
-        offsetType=11,
-        animId=int(anim.name.split("_")[1]),
-        enableScript=False,
-        enableTae=False,
-        checkAnimEndSlotNo=-1,
-    )
-
-    state = ctx.create(
-        "hkbStateMachine::StateInfo",
-        transitions=None,
-        generator=cmsg.object_id,
-        name=name,
-        stateId=state_id,
-        probability=1,
-        enable=True,
-    )
-
-    return state, cmsg, clip
-
-
-def _make_blender_chain(
-    ctx: TemplateContext, anim: Animation, common_clip: HkbRecord, gesture_id: int
-):
-    cmsg = ctx.create(
-        "CustomManualSelectorGenerator",
-        name=f"Gesture_{anim.name}_LoopStart",
-        generators=[common_clip.object_id],
-        offsetType=11,
-        animId=int(anim.name.split("_")[1]),
-        animeEndEventType=EndEventType.NONE,
-        enableScript=False,
-        enableTae=False,
-        checkAnimEndSlotNo=-1,
-    )
-
-    blend = ctx.create(
-        "hkbBlenderGeneratorChild",
-        generator=cmsg.object_id,
-        weight=gesture_id,
-        worldFromModelWeight=1,
-    )
-
-    return blend, cmsg
 
 
 def run(
@@ -78,8 +19,10 @@ def run(
     anim_end: Animation,
     gesture_id: int = 91,
 ):
+    gesture_base_name = f"Gesture_{gesture_id:03}"
+
     gesture_sm = ctx.find("name:EventGesture_SM")
-    state1_id = utils.get_next_state_id(gesture_sm)
+    state1_id = ctx.free_state_id(gesture_sm)
     state2_id = state1_id + 1
 
     # Setup new statemachine state transitions
@@ -91,24 +34,20 @@ def run(
     # Creates an automatic transition between the states
     transition_event = ctx.new_event(f"{event1_name}_to_{event2_name}")
 
-    flags = TransitionFlags(3584)
+    transition_flags = TransitionFlags(3584)
 
-    trans1 = ctx.create(
-        "hkbStateMachine::TransitionInfo",
-        generate_id=False,
-        transition="object9398",  # TODO
-        eventId=event1.index,
+    trans1 = ctx.new_transition_info(
         toStateId=state1_id,
-        flags=flags,
+        eventId=event1.index,
+        transition="object9398",  # TODO unknown pointer?
+        flags=transition_flags,
     )
 
-    trans2 = ctx.create(
-        "hkbStateMachine::TransitionInfo",
-        generate_id=False,
-        transition="object9398",  # TODO
-        eventId=event2.index,
+    trans2 = ctx.new_transition_info(
         toStateId=state2_id,
-        flags=flags,
+        eventId=event2.index,
+        transition="object9398",  # TODO
+        flags=transition_flags,
     )
 
     # add states to wildcard_transitions
@@ -118,76 +57,120 @@ def run(
     ####
     # Start to loop
     ####
-    state1, state1_cmsg, state1_clip = _make_state_chain(
-        ctx, anim_start, event1, state1_id
-    )
-    
     default_transition = ctx.find("name:DefaultTransition")
-    transition_info = ctx.create(
+    transitions = ctx.new(
         "hkbStateMachine::TransitionInfoArray",
-        transition=default_transition.object_id,
-        eventId=transition_event.index,
+    )
+    transition_info = ctx.new_transition_info(
         toStateId=state2_id,
+        eventId=transition_event.index,
+        transition=default_transition.object_id,
+    )
+    ctx.array_add(transitions, "transitions", transition_info.object_id)
+
+    state1_clip = ctx.new_clip(anim_start.index)
+    state1_cmsg = ctx.new_cmsg(
+        name=f"{event1_name}_CMSG",
+        animId=anim_start.name,
+        generators=[state1_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        enableScript=False,
+    )
+    state1 = ctx.new_statemachine_state(
+        stateId=state1_id,
+        name=event1_name,
+        generator=state1_cmsg,
+        transitions=transitions.object_id,
     )
 
-    ctx.set(state1, transitions=transition_info.object_id)
-    ctx.set(
-        state1_cmsg,
-        enableTae=True,
-        animeEndEventType=EndEventType.FIRE_NEXT_STATE_EVENT,
-    )
     ctx.array_add(gesture_sm, "states", state1)
 
     # Blending
-    start_blend_clip = ctx.create(
-        "hkbClipGenerator",
-        name=anim_start.name,
-        animationName=anim_start.name,
-        playbackSpeed=1,
-        animationInternalId=anim_start.index,
+    start_blend_common_clip = ctx.new_clip(anim_start.index)
+    
+    start_blend01_cmsg = ctx.new_cmsg(
+        name=f"{gesture_base_name}_LoopStart",
+        animId=anim_start.name,
+        generators=[start_blend_common_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        enableScript=False,
+        enableTae=False,
+        animeEndEventType=AnimeEndEventType.NONE,
     )
-
-    start_blend01, start_blend01_cmsg = _make_blender_chain(
-        ctx, anim_start, start_blend_clip, gesture_id
+    start_blend01 = ctx.new_blender_generator_child(
+        start_blend01_cmsg,
+        weight=gesture_id,
     )
     blend01_gen = ctx.find("name:GestureLoopStart Blend01")
     ctx.array_add(blend01_gen, "children", start_blend01.object_id)
 
-    start_blend00, start_blend00_cmsg = _make_blender_chain(
-        ctx, anim_start, start_blend_clip, gesture_id
+
+    start_blend00_cmsg = ctx.new_cmsg(
+        name=f"{gesture_base_name}_LoopStart00",
+        animId=anim_start.name,
+        generators=[start_blend_common_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        checkAnimEndSlotNo=1,
+        animeEndEventType=AnimeEndEventType.NONE,
     )
-    ctx.set(start_blend00_cmsg, enableScript=True, enableTae=True, checkAnimEndSlotNo=1)
+    start_blend00 = ctx.new_blender_generator_child(
+        start_blend00_cmsg,
+        weight=gesture_id,
+    )
     start_blend00_gen = ctx.find("name:GestureLoopStart Blend00")
-    ctx.array_add(start_blend00_gen, "children", start_blend01.object_id)
+    ctx.array_add(start_blend00_gen, "children", start_blend00.object_id)
 
     ####
     # Loop anim
     ####
-    state2, cmsg2, clip2 = _make_state_chain(ctx, anim_loop, event2, state2_id)
-    ctx.set(cmsg2, enableTae=True)
-    ctx.set(clip2, mode=1)  # Looping
+    state2_clip = ctx.new_clip(anim_loop.index, mode=PlaybackMode.LOOPING)
+    state2_cmsg = ctx.new_cmsg(
+        name=f"{event2_name}_CMSG",
+        animId=anim_loop.name,
+        generators=[state2_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        enableScript=False,
+    )
+    state2 = ctx.new_statemachine_state(
+        stateId=state2_id,
+        name=event2_name,
+        generator=state2_cmsg,
+        transitions=transitions.object_id,
+    )
+
     ctx.array_add(gesture_sm, "states", state2)
 
     # Blending
-    loop_blend_clip = ctx.create(
-        "hkbClipGenerator",
-        name=anim_loop.name,
-        animationName=anim_loop.name,
-        playbackSpeed=1,
-        animationInternalId=anim_loop.index,
-        mode=1,  # looping
+    loop_blend_common_clip = ctx.new_clip(anim_loop.index, mode=PlaybackMode.LOOPING)
+    
+    loop_blend00_cmsg = ctx.new_cmsg(
+        name=f"{gesture_base_name}_Loop",
+        animId=anim_loop.name,
+        generators=[loop_blend_common_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        enableScript=False,
+        enableTae=False,
+        animeEndEventType=AnimeEndEventType.NONE,
     )
-
-    loop_blend00, loop_blend00_cmsg = _make_blender_chain(
-        ctx, anim_loop, loop_blend_clip, gesture_id
+    loop_blend00 = ctx.new_blender_generator_child(
+        loop_blend00_cmsg,
+        weight=gesture_id,
     )
     loop_blend00_gen = ctx.find("name:GestureLoop Blend00")
     ctx.array_add(loop_blend00_gen, "children", loop_blend00.object_id)
 
-    loop_blend02, loop_blend02_cmsg = _make_blender_chain(
-        ctx, anim_loop, loop_blend_clip, gesture_id
+    loop_blend02_cmsg = ctx.new_cmsg(
+        name=f"{gesture_base_name}_Loop02",
+        animId=anim_loop.name,
+        generators=[loop_blend_common_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        checkAnimEndSlotNo=1,
+        animeEndEventType=AnimeEndEventType.NONE,
     )
-    ctx.set(loop_blend02_cmsg, enableScript=True, enableTae=True, checkAnimEndSlotNo=1)
+    loop_blend02 = ctx.new_blender_generator_child(
+        loop_blend02_cmsg,
+        weight=gesture_id,
+    )
     loop_blend02_gen = ctx.find("name:GestureLoop Blend02")
     ctx.array_add(loop_blend02_gen, "children", loop_blend02.object_id)
 
@@ -195,23 +178,35 @@ def run(
     ####
     # Loop end
     ####
-    end_blend_clip = ctx.create(
-        "hkbClipGenerator",
-        name=anim_end.name,
-        animationName=anim_end.name,
-        playbackSpeed=1,
-        animationInternalId=anim_end.index,
+    end_blend_common_clip = ctx.new_clip(anim_end.index)
+    
+    end_blend01_cmsg = ctx.new_cmsg(
+        name=f"{gesture_base_name}_LoopEnd",
+        animId=anim_end.name,
+        generators=[end_blend_common_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        enableScript=False,
+        enableTae=False,
+        animeEndEventType=AnimeEndEventType.NONE,
     )
-
-    end_blend01, end_blend01_cmsg = _make_blender_chain(
-        ctx, anim_end, end_blend_clip, gesture_id
+    end_blend01 = ctx.new_blender_generator_child(
+        end_blend01_cmsg,
+        weight=gesture_id,
     )
     end_blend01_gen = ctx.find("name:GestureLoopEnd Blend01")
     ctx.array_add(end_blend01_gen, "children", end_blend01.object_id)
 
-    end_blend00, end_blend00_cmsg = _make_blender_chain(
-        ctx, anim_end, end_blend_clip, gesture_id
+    end_blend00_cmsg = ctx.new_cmsg(
+        name=f"{gesture_base_name}_LoopEnd00",
+        animId=anim_end.name,
+        generators=[end_blend_common_clip],
+        offsetType=CmsgOffsetType.IDLE_CATEGORY,
+        checkAnimEndSlotNo=1,
+        animeEndEventType=AnimeEndEventType.NONE,
     )
-    ctx.set(end_blend00_cmsg, enableScript=True, enableTae=True, checkAnimEndSlotNo=1)
+    end_blend00 = ctx.new_blender_generator_child(
+        end_blend00_cmsg,
+        weight=gesture_id,
+    )
     end_blend00_gen = ctx.find("name:GestureLoopEnd Blend00")
     ctx.array_add(end_blend00_gen, "children", end_blend00.object_id)

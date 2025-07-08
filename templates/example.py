@@ -59,7 +59,7 @@ def run(
     # specify will default to their type default (i.e. 0 for int, 0.0 for float,
     # "" for str, False for bool, object0 for pointers, etc.). This includes
     # flags and enums.
-    cmsg = ctx.create(
+    cmsg = ctx.new(
         "CustomManualSelectorGenerator",
         name="My_CMSG",
         enableScript=True,

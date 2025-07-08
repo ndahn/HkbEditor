@@ -1,6 +1,6 @@
 from hkb_editor.templates import *
 from hkb_editor.hkb.hkb_enums import (
-    CustomManualSelectorGenerator_AnimeEndEventType as EndEventType,
+    CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
 
 
@@ -37,9 +37,9 @@ def run(
     throw_death_idle = ctx.find("name:ThrowDeathIdle")
 
     variations = [
-        (grab_anim, throw_def, "Throw", EndEventType.FIRE_IDLE_EVENT),
-        (death_anim, throw_death, "ThrowDeath", EndEventType.FIRE_NEXT_STATE_EVENT),
-        (death_idle_anim, throw_death_idle, "ThrowDeathIdle", EndEventType.NONE),
+        (grab_anim, throw_def, "Throw", AnimeEndEventType.FIRE_IDLE_EVENT),
+        (death_anim, throw_death, "ThrowDeath", AnimeEndEventType.FIRE_NEXT_STATE_EVENT),
+        (death_idle_anim, throw_death_idle, "ThrowDeathIdle", AnimeEndEventType.NONE),
     ]
 
     grab_id = int(grab_anim.name.split("_")[1])
@@ -47,13 +47,13 @@ def run(
     for anim, parent, prefix, end_event_type in variations:
         anim_id = int(anim.name.split("_")[1])
 
-        blender = ctx.create(
+        blender = ctx.new(
             "hkbBlenderGeneratorChild",
             weight=grab_id,
             worldFromModelWeight=1,
         )
 
-        cmsg = ctx.create(
+        cmsg = ctx.new(
             "CustomManualSelectorGenerator",
             name=f"{prefix}{base_name}_CMSG",
             offsetType=11,
@@ -64,7 +64,7 @@ def run(
             checkAnimEndSlotNo=-1,
         )
 
-        clip = ctx.create(
+        clip = ctx.new(
             "hkbClipGenerator",
             name=anim.name,
             animationName=anim.name,
