@@ -1,6 +1,7 @@
 from hkb_editor.templates import *
 from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
+    CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
 )
 
 
@@ -36,33 +37,20 @@ def run(
     except KeyError:
         pass
 
-    blender = ctx.new(
-        "hkbBlenderGeneratorChild",
-        weight=throw_id,
-        worldFromModelWeight=1.0,
-    )
-    cmsg = ctx.new(
-        "CustomManualSelectorGenerator",
+    clip = ctx.new_clip(animation.index)
+    cmsg = ctx.new_cmsg(
         name=cmsg_name,
         animId=throw_id,
-        offsetType=18,
+        generators=[clip],
+        offsetType=CmsgOffsetType.SWORD_ARTS_CATEGORY,
         animeEndEventType=AnimeEndEventType.FIRE_IDLE_EVENT,
-        enableScript=True,
-        enableTae=True,
         changeTypeOfSelectedIndexAfterActivate=1,
-        checkAnimEndSlotNo=-1,
     )
-    clip = ctx.new(
-        "hkbClipGenerator",
-        name=animation.name,
-        animationName=animation.name,
-        playbackSpeed=1,
-        animationInternalId=animation.index,
+    blender = ctx.new_blender_generator_child(
+        cmsg,
+        weight=throw_id,
     )
 
     # TODO only exists in Elden Ring, can this be used for Sekiro?
     parent = ctx.find("name:ThrowAtk_Blend")
-
-    ctx.set(blender, generator=cmsg.object_id)
-    ctx.array_add(cmsg, "generators", clip.object_id)
     ctx.array_add(parent, "children", blender.object_id)

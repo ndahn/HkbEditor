@@ -1,6 +1,7 @@
 from hkb_editor.templates import *
 from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
+    CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
 )
 
 
@@ -14,7 +15,7 @@ def run(
     """Grab Victim Behavior
 
     Creates a new grab victim behavior (i.e. being grabbed by an enemy).
-    
+
     TODO long description, how to use, etc.
 
     Author: FloppyDonuts
@@ -38,40 +39,29 @@ def run(
 
     variations = [
         (grab_anim, throw_def, "Throw", AnimeEndEventType.FIRE_IDLE_EVENT),
-        (death_anim, throw_death, "ThrowDeath", AnimeEndEventType.FIRE_NEXT_STATE_EVENT),
+        (
+            death_anim,
+            throw_death,
+            "ThrowDeath",
+            AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
+        ),
         (death_idle_anim, throw_death_idle, "ThrowDeathIdle", AnimeEndEventType.NONE),
     ]
 
     grab_id = int(grab_anim.name.split("_")[1])
 
     for anim, parent, prefix, end_event_type in variations:
-        anim_id = int(anim.name.split("_")[1])
-
-        blender = ctx.new(
-            "hkbBlenderGeneratorChild",
-            weight=grab_id,
-            worldFromModelWeight=1,
-        )
-
-        cmsg = ctx.new(
-            "CustomManualSelectorGenerator",
+        clip = ctx.new_clip(anim.index)
+        cmsg = ctx.new_cmsg(
             name=f"{prefix}{base_name}_CMSG",
-            offsetType=11,
-            animId=anim_id,
+            animId=anim.name,
+            generators=[clip],
+            offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=end_event_type,
-            enableScript=True,
-            enableTae=True,
-            checkAnimEndSlotNo=-1,
+        )
+        blender = ctx.new_blender_generator_child(
+            cmsg,
+            weight=grab_id,
         )
 
-        clip = ctx.new(
-            "hkbClipGenerator",
-            name=anim.name,
-            animationName=anim.name,
-            playbackSpeed=1,
-            animationInternalId=anim.index,
-        )
-
-        ctx.set(blender, generator=cmsg.object_id)
-        ctx.array_add(cmsg, "generators", clip.object_id)
         ctx.array_add(parent, "children", blender.object_id)
