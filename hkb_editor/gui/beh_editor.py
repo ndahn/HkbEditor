@@ -130,7 +130,7 @@ class BehaviorEditor(GraphEditor):
         self.alias_manager.clear()
         self.clear_attributes()
         self.remove_all_pinned_objects()
-        
+
         try:
             self.beh = HavokBehavior(file_path)
             filename = os.path.basename(file_path)
@@ -224,12 +224,26 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_separator()
 
-            with dpg.menu(label="Templates"):
-                for template_file, label in get_templates().items():
+            with dpg.menu(label="Templates", tag=f"{self.tag}_templates_menu"):
+                for template_file, (categories, template) in get_templates().items():
+                    parent = f"{self.tag}_templates_menu"
+                    # TODO dynamic submenus are nice, but they mess up the dpg layout when changed
+                    # for cat in categories:
+                    #     if not dpg.does_item_exist(f"{self.tag}_templates_menu_cat_{cat}"):
+                    #         parent = dpg.add_menu(label=cat, tag=f"{self.tag}_templates_menu_cat_{cat}", parent=parent)
+                    #     else:
+                    #         parent = f"{self.tag}_templates_menu_cat_{cat}"
+                    
+                    if categories:
+                        label = "/".join(categories) + "/" + template[:25]
+                    else:
+                        label = template[:25]
+
                     dpg.add_menu_item(
-                        label=label[:25],
+                        label=label,
                         callback=lambda s, a, u: self.open_apply_template_dialog(u),
                         user_data=template_file,
+                        parent=parent,
                     )
 
             dpg.add_separator()

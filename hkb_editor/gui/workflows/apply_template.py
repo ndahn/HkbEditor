@@ -280,7 +280,13 @@ def apply_template_dialog(
         tag=tag,
         on_close=lambda: dpg.delete_item(window),
     ) as window:
-        # Description first
+        # Parameters required to run the template
+        for arg in template._args.values():
+            create_widget(arg)
+
+        dpg.add_separator()
+
+        # Description
         if template._description:
             add_paragraphs(template._description, color=style.light_blue)
         else:
@@ -288,12 +294,6 @@ def apply_template_dialog(
 
         # Open the source file
         dpg.add_button(label="Source", callback=open_template_source)
-
-        dpg.add_separator()
-
-        # Parameters required to run the template
-        for arg in template._args.values():
-            create_widget(arg)
 
         dpg.add_separator()
 

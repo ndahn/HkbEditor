@@ -204,17 +204,29 @@ def create_flag_checkboxes(
 def add_paragraphs(
     text: str,
     line_width: int = 70,
-    paragraph_gap_adjust: int = 0,
+    *,
+    margin: tuple[int, int] = (3, 3),
+    line_gap: int = 5,
+    paragraph_gap_factor: float = 0.8,
     **textargs,
-):
-    with dpg.group():
+) -> str:
+    # Standard dpg font
+    line_height = 13
+
+    with dpg.child_window(
+        border=False, auto_resize_x=True, auto_resize_y=True
+    ) as container:
+        y = margin[1]
         for has_chars, fragments in groupby(
             text.splitlines(), lambda s: bool(s.strip())
         ):
             if not has_chars:
-                dpg.add_spacer(height=paragraph_gap_adjust)
+                y += (line_height + line_gap) * paragraph_gap_factor
                 continue
 
             paragraph = " ".join(fragments)
             for line in textwrap.wrap(paragraph, width=line_width):
-                dpg.add_text(line, **textargs)
+                dpg.add_text(line, pos=(margin[0], y), **textargs)
+                y += line_height + line_gap
+
+    return container
