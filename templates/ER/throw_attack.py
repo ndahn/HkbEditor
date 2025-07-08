@@ -51,6 +51,5 @@ def run(
         weight=throw_id,
     )
 
-    # TODO only exists in Elden Ring, can this be used for Sekiro?
     parent = ctx.find("name:ThrowAtk_Blend")
     ctx.array_add(parent, "children", blender.object_id)

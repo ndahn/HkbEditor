@@ -38,7 +38,7 @@ def main():
     if not os.path.isfile(default_layout):
         _logger.error("Layout not found")
     else:
-        if not os.path.isfile(user_layout):
+         if not os.path.isfile(user_layout):
             shutil.copy(default_layout, user_layout)
             _logger.info("Copied default layout to user layout")
 

@@ -56,8 +56,16 @@ def get_templates() -> dict[str, tuple[tuple[str, ...], str]]:
                 print(f"Loading template {file} failed: {e}")
                 continue
 
-    # Sort items with categories first
-    ret.sort(key=lambda x: (x[0] == (), x[0], x[1:]))
+    if ret:
+        # Remove cateogires if they are all the same
+        # cat0 = ret[0][0]
+        # if all(t[0] == cat0 for t in ret):
+        #     ret = [((), t[1], t[2]) for t in ret]
+        # else:
+
+        # Sort items with categories first
+        ret.sort(key=lambda x: (x[0] == (), x[0], x[1:]))
+
     return {path: (categories, template) for categories, template, path in ret}
 
 

@@ -135,6 +135,8 @@ class BehaviorEditor(GraphEditor):
             self.beh = HavokBehavior(file_path)
             filename = os.path.basename(file_path)
             dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
+
+            self._reload_templates()
             self._set_menus_enabled(True)
         except Exception as e:
             details = traceback.format_exception_only(e)
@@ -225,26 +227,10 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             with dpg.menu(label="Templates", tag=f"{self.tag}_templates_menu"):
-                for template_file, (categories, template) in get_templates().items():
-                    parent = f"{self.tag}_templates_menu"
-                    # TODO dynamic submenus are nice, but they mess up the dpg layout when changed
-                    # for cat in categories:
-                    #     if not dpg.does_item_exist(f"{self.tag}_templates_menu_cat_{cat}"):
-                    #         parent = dpg.add_menu(label=cat, tag=f"{self.tag}_templates_menu_cat_{cat}", parent=parent)
-                    #     else:
-                    #         parent = f"{self.tag}_templates_menu_cat_{cat}"
-                    
-                    if categories:
-                        label = "/".join(categories) + "/" + template[:25]
-                    else:
-                        label = template[:25]
-
-                    dpg.add_menu_item(
-                        label=label,
-                        callback=lambda s, a, u: self.open_apply_template_dialog(u),
-                        user_data=template_file,
-                        parent=parent,
-                    )
+                dpg.add_separator(tag=f"{self.tag}_templates_menu_bottom")
+                dpg.add_menu_item(
+                    label="Reload Templates", callback=self._reload_templates
+                )
 
             dpg.add_separator()
 
@@ -257,6 +243,37 @@ class BehaviorEditor(GraphEditor):
 
         dpg.add_separator()
         self._create_dpg_menu()
+
+    def _reload_templates(self) -> None:
+        menu = f"{self.tag}_templates_menu"
+        dpg.delete_item(menu, children_only=True)
+
+        for template_file, (categories, template) in get_templates().items():
+            parent = menu
+            path = ""
+            for cat in categories:
+                path += cat + "/"
+                if not dpg.does_item_exist(f"{self.tag}_templates_menu_cat_{path}"):
+                    parent = dpg.add_menu(
+                        label=cat,
+                        tag=f"{self.tag}_templates_menu_cat_{path}",
+                        parent=parent,
+                    )
+            
+            if path:
+                parent = f"{self.tag}_templates_menu_cat_{path}"
+
+            dpg.add_menu_item(
+                label=template,
+                callback=lambda s, a, u: self.open_apply_template_dialog(u),
+                user_data=template_file,
+                parent=parent,
+            )
+        
+        dpg.add_separator(tag=f"{self.tag}_templates_menu_bottom", parent=menu)
+        dpg.add_menu_item(
+            label="Reload Templates", parent=menu, callback=self._reload_templates
+        )
 
     def _on_key_press(self, sender, key: int) -> None:
         if dpg.is_key_down(dpg.mvKey_ModCtrl):
