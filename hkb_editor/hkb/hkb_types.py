@@ -295,18 +295,16 @@ class HkbArray(XmlValueHandler):
         if value.type_id == self.element_type_id:
             return True
         
-        # We might be an array of pointers instead
+        # NOTE could check for compatible types, but I have yet to see that in use
+        
+        val_type = self.tagfile.type_registry.get_name(value.type_id)
+        exp_type = self.tagfile.type_registry.get_name(self.element_type_id)
+        
+        # We might be an array of pointers, but even if the underlying type matches
+        # we still only can accept its object_id, not the object itself
         # TODO check format once we have a complete format map
         #fmt = self.tagfile.type_registry.get_format(self.element_type_id)
         #if fmt == TypeFormats.POINTER
-        #subtype = self.tagfile.type_registry.get_subtype(self.element_type_id)
-        #if value.type_id == subtype:
-        #    return True
-
-        # NOTE could check for compatible types, but I have yet to see that in use
-
-        val_type = self.tagfile.type_registry.get_name(value.type_id)
-        exp_type = self.tagfile.type_registry.get_name(self.element_type_id)
         
         raise ValueError(
             f"Non-matching value type {value.type_id} ({val_type}), expected {self.element_type_id} ({exp_type})"
