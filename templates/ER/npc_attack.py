@@ -32,6 +32,7 @@ def run(
         anim_id: int,
         state_id: int,
     ):
+        # TODO check if these already exist
         clips = [
             ctx.new_clip(f"a00{i}_{anim_id + i:06}")
             for i in range(6)
@@ -54,8 +55,7 @@ def run(
 
         return state
 
-    # TODO Which statemachine?
-    statemachine = ctx.find("")
+    statemachine = ctx.find("Attack_SM")
     base_state_id = ctx.free_state_id()
 
     for i in range(num_attacks):

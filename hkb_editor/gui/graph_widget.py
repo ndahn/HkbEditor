@@ -484,6 +484,10 @@ class GraphWidget:
         if not dpg.does_item_exist(tag):
             tag = f"{self.tag}_edge_{node_b}_TO_{node_a}"
 
+        if not dpg.does_item_exist(tag):
+            # Seems to happen sometimes on quick mouse movements or jump-to-object
+            return
+
         thickness = 2 if highlighted else 1
         dpg.configure_item(tag, thickness=thickness)
 
