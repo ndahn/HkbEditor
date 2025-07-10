@@ -151,7 +151,7 @@ class AttributesWidget:
                 dpg.add_table_column(label="Key", width_fixed=True)
 
     def _update_attributes(self) -> None:
-        self.set_title(self.record.object_id)
+        self.set_title(f"{self.record.object_id} ({self.record.type_name})")
 
         # Columns will be hidden if header_row=False and no rows exist initially
         for col in dpg.get_item_children(self.attributes_table, slot=0):

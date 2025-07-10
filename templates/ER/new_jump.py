@@ -14,7 +14,7 @@ from hkb_editor.hkb.hkb_enums import (
 def run(
     ctx: TemplateContext,
     name: str,
-    base_jump: Literal[f"Jump_N", "Jump_F", "Jump_D"] = "Jump_D",
+    base_jump: Literal["Jump_N", "Jump_F", "Jump_D"] = "Jump_D",
     enable_jump_attacks: bool = True,
     jump_front_anim: Animation = None,
     jump_back_anim: Animation = None,
