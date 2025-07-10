@@ -27,7 +27,7 @@ def run(
 
     If you define an animation for one of the directions it will be the only slot used for this direction. Otherwise the regular slots for this direction are used, taken from the "base_jump". These are in Elden Ring 202020 - 202023 (front, back, left, right). If jump attacks are enabled, the new jump behaviors will support all jump attacks already registered for the base jump.
 
-    Note that directional jumps are not available for "Jump_N" (neutral jumps). Use "Jump_F" (walking) or "Jump_D" (running) instead if you want those.
+    Note that directional jumps are not available for "Jump_N" (neutral jumps). Use "Jump_F" (walking) or "Jump_D" (running) instead if you want those. In vanilla ER there is no difference between walking and running jumps regarding what they enable.
 
     Author: Raster
 
@@ -72,11 +72,10 @@ def run(
 
     state_id = ctx.free_state_id(jump_sm)
     state = ctx.new_statemachine_state(
-        state_id,
+        state_id, # TODO raster used 39643 here, just an unused one?
         name=name,
         transitions=transitions,
         generator=None,  # set later
-        stateId=state_id,  # TODO raster used 39643 here, just an unused one?
     )
 
     # Helper functions
@@ -93,6 +92,8 @@ def run(
     # Jump with added attack
     ####
     if enable_jump_attacks:
+        # TODO make more use of ctx.make_copy
+
         # Normal/Hard Attack Right
         change_transition_blend = ctx.find("Selector_NormalAttack_Right")[
             "generatorChangedTransitionEffect"
@@ -354,7 +355,11 @@ def run(
         )
 
     # Assemble layers
-    all_layers = [layer1_jumpattack_add]
+    all_layers = []
+    
+    if enable_jump_attacks:
+        all_layers.append(layer1_jumpattack_add)
+
     if base_jump != "Jump_N":
         all_layers.append(layer2)
 
@@ -364,5 +369,3 @@ def run(
     )
 
     ctx.set(state, "generator", layer_gen.object_id)
-
-    # TODO make use of ctx.make_copy
