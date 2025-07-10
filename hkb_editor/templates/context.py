@@ -2,6 +2,7 @@ from typing import Any, Type, Literal
 from dataclasses import dataclass
 import ast
 from docstring_parser import parse as parse_docstring, DocstringParam
+import re
 
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
@@ -47,6 +48,17 @@ _undefined = object()
 
 
 class TemplateContext:
+    """Stores information and provides helper functions for temapltes.
+    
+    Templates are python scripts with a `run` function that takes a `TemplateContext` as their first argument. This object should be the main way of modifying the behavior from templates, primarily to give proper support for undo (or rollback in case of errors).
+
+    Raises
+    ------
+    SyntaxError
+        If the template does not contain valid python code.
+    ValueError
+        If the template is not a valid template file.
+    """
     @dataclass
     class _Arg:
         name: str
@@ -141,9 +153,40 @@ class TemplateContext:
         collect_args(func.args.kwonlyargs, func.args.kw_defaults)
 
     def find_all(self, query: str) -> list[HkbRecord]:
+        """Returns all objects matching the specified query. 
+        
+        Parameters
+        ----------
+        query : str
+            The query string. See :py:meth:`hkb.Tagfile.query` for details.
+
+        Returns
+        -------
+        list[HkbRecord]
+            A list of matching :py:class:`HkbRecord` objects.
+        """
         return list(self._behavior.query(query))
 
     def find(self, query: str, default: Any = _undefined) -> HkbRecord:
+        """Returns the first object matching the specified query. 
+        
+        Parameters
+        ----------
+        query : str
+            The query string. See :py:meth:`hkb.Tagfile.query` for details.
+        default : Any
+            The value to return if no match is found. 
+
+        Raises
+        ------
+        KeyError
+            If no match was found and no default was provided.
+
+        Returns
+        -------
+        HkbRecord
+            A matching :py:class:`HkbRecord` object.
+        """
         try:
             return next(self._behavior.query(query))
         except StopIteration:
@@ -152,18 +195,47 @@ class TemplateContext:
 
             raise KeyError(f"No object matching '{query}'")
 
+    # TODO remove?
     def get(
         self,
         record: HkbRecord | str,
         path: str,
         default: Any = None,
     ) -> Any:
-        if isinstance(record, str):
-            record = self._behavior[record]
+        """Retrieve a value from the specified :py:class:`HkbRecord`.
 
+        Parameters
+        ----------
+        record : HkbRecord | str
+            The record to retrieve a value from.
+        path : str
+            Member path to the value of interest with deeper levels separated by /.
+        default : Any, optional
+            A default to return if the path doesn't exist.
+
+        Raises
+        ------
+        KeyError
+            If the specified path does not exist.
+
+        Returns
+        -------
+        Any
+            The value resolved to a regular type (non-recursive).
+        """
+        record = get_object(self._behavior, record)
         return record.get_path_value(path, default=default, resolve=True)
 
     def set(self, record: HkbRecord | str, **attributes) -> None:
+        """Update a one or more fields of the specified :py:class:`HkbRecord`.
+
+        Parameters
+        ----------
+        record : HkbRecord | str
+            The record to update.
+        attributes : dict[str, Any]
+            Keyword arguments of fields and values to set.
+        """
         if isinstance(record, str):
             record = self._behavior[record]
 
@@ -174,6 +246,18 @@ class TemplateContext:
                 undo_manager.on_update_value(handler, handler.get_value(), value)
 
     def delete(self, record: HkbRecord | str) -> HkbRecord:
+        """Delete the specified :py:class:`HkbRecord` from the behavior.
+
+        Parameters
+        ----------
+        record : HkbRecord | str
+            The record to delete.
+
+        Returns
+        -------
+        HkbRecord
+            The record that was deleted.
+        """
         if isinstance(record, str):
             record = self._behavior[record]
 
@@ -185,6 +269,19 @@ class TemplateContext:
         return None
 
     def array_add(self, record: HkbRecord | str, path: str, item: Any) -> None:
+        """Append a value to an array field of the specified record.
+
+        Note that when appending to pointer arrays you need to pass an object ID, not an actual object.
+
+        Parameters
+        ----------
+        record : HkbRecord | str
+            The record holding the array.
+        path : str
+            Path to the array within the record, with deeper levels separated by /.
+        item : Any
+            The item to append to the array.
+        """
         if isinstance(record, str):
             record = self._behavior[record]
 
@@ -192,7 +289,23 @@ class TemplateContext:
         array.append(item)
         undo_manager.on_update_array_item(array, -1, None, item)
 
-    def array_pop(self, record: HkbRecord | str, path: str, index: int) -> Any:
+    def array_pop(self, record: HkbRecord | str, path: str, index: int = -1) -> Any:
+        """Remove a value from an array inside a record.
+
+        Parameters
+        ----------
+        record : HkbRecord | str
+            The record holding the array.
+        path : str
+            Path to the array within the record, with deeper levels separated by /.
+        index : int
+            The index of the item to pop.
+
+        Returns
+        -------
+        Any
+            The value that was removed from the array.
+        """
         if isinstance(record, str):
             record = self._behavior[record]
 
@@ -202,6 +315,18 @@ class TemplateContext:
         return ret
 
     def free_state_id(self, statemachine: HkbRecord | str) -> int:
+        """Find the next free stateId in a hkbStatemachine and return it.
+
+        Parameters
+        ----------
+        statemachine : HkbRecord | str
+            The hkbStatemachine to search.
+
+        Returns
+        -------
+        int
+            A state ID one higher than the largest stateId already in use.
+        """
         statemachine = get_object(self._behavior, self._behavior, statemachine)
         return get_next_state_id(statemachine)
 
@@ -210,31 +335,33 @@ class TemplateContext:
         obj: HkbRecord | str,
         path: str,
         variable: Variable | str | int,
-    ) -> None:
+    ) -> HkbRecord:
+        """Bind a record field to a variable. 
+        
+        This allows to control aspects of a behavior object through HKS or TAE. Most commonly used for ManualSelectorGenerators. Note that in HKS variables are referenced by their name, in all other places the variables' indices are used. 
+
+        If the record does not have a variableBindingSet yet it will be created. If the record already has a binding for the specified path it will be updated to the provided variable.
+
+        Parameters
+        ----------
+        obj : HkbRecord | str
+            The record which should be bound.
+        path : str
+            Path to the record's member to bind, with deeper levels separated by /.
+        variable : Variable | str | int
+            The variable to bind the field to.
+
+        Returns
+        -------
+        HkbRecord
+            The variable binding set to which the field was bound.
+        """
         obj = get_object(self._behavior, obj)
 
         if isinstance(variable, Variable):
             variable = variable.index
 
         return bind_variable(self._behavior, obj, path, variable)
-
-    def make_copy(
-        self,
-        source: HkbRecord | str,
-        *,
-        object_id: str = "<new>",
-        **overrides
-    ) -> HkbRecord:
-        source = get_object(source)
-
-        attributes = {k:v.get_value() for k,v in source.get_value().items()}
-        attributes.update(**overrides)
-
-        return self.new(
-            source.type_name,
-            object_id=object_id,
-            **attributes
-        )
 
     def new_variable(
         self,
@@ -243,22 +370,109 @@ class TemplateContext:
         range_min: int = 0,
         range_max: int = 0,
     ) -> Variable:
+        """Create a new variable. 
+        
+        Variables are typically used to control behaviors from other subsystems like HKS and TAE. See :py:meth:`bind_attribute` for the most common use case.
+
+        Parameters
+        ----------
+        name : str
+            The name of the variable. Must not exist yet.
+        data_type : VariableType, optional
+            The type of data that will be stored in the variable.
+        range_min : int, optional
+            Minimum allowed value.
+        range_max : int, optional
+            Maximum allowed value.
+
+        Returns
+        -------
+        Variable
+            Description of the generated variable.
+        """
         idx = self._behavior.create_variable(name, data_type, range_min, range_max)
         undo_manager.on_create_variable(self._behavior, name)
         return Variable(idx, name)
 
     def get_variable(self, name: str) -> Variable:
+        """Retrieve an already existing variable by name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the variable you are looking for.
+
+        Raises
+        ------
+        IndexError
+            If no variable with the specified name can be found.
+
+        Returns
+        -------
+        Variable
+            The variable with the specified name.
+        """
         return Variable(self._behavior.find_variable(name), name)
 
     def new_event(self, event: str) -> Event:
+        """Create a new event. 
+        
+        Events are typically used to trigger transitions between statemachine states. See :py:meth:`new_statemachine_state` for details.
+        TODO mention events.txt
+
+        Parameters
+        ----------
+        event : str
+            The name of the event to create. Typically starts with `W_`.
+
+        Returns
+        -------
+        Event
+            The generated event.
+        """
         idx = self._behavior.create_event(event)
         undo_manager.on_create_event(self._behavior, event)
         return Event(idx, event)
 
     def get_event(self, name: str) -> Event:
+        """Retrieve an event based on its name.
+
+        Parameters
+        ----------
+        name : str
+            The name of the event.
+
+        Raises
+        ------
+        IndexError
+            If no event with the specified name can be found.
+
+        Returns
+        -------
+        Event
+            The event with the specified name.
+        """
         return Event(self._behavior.find_event(name), name)
 
     def new_animation(self, animation: str) -> Animation:
+        """Generate a new entry for an animation slot.
+
+        Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
+        # TODO mention animations.txt
+
+        Parameters
+        ----------
+        animation : str
+            The name of the animation slot following the `aXXX_YYYYYY` pattern.
+
+        Returns
+        -------
+        Animation
+            The generated animation name. Note that the full name is almost never used.
+        """
+        if not re.fullmatch(r"a[0-9]{3}_[0-9]{6}"):
+            raise ValueError(f"Invalid animation name '{animation}'")
+
         idx = self._behavior.create_animation(animation)
         undo_manager.on_create_animation(self._behavior, animation)
         return Animation(
@@ -268,6 +482,18 @@ class TemplateContext:
         )
 
     def get_animation(self, short_name: str) -> Animation:
+        """Retrieve an animation slot based on its name.
+
+        Parameters
+        ----------
+        short_name : str
+            The name of the animation following the `aXXX_YYYYYY` pattern.
+
+        Returns
+        -------
+        Animation
+            The animation with the specified short name.
+        """
         idx = self._behavior.find_event(short_name)
         full_name = self._behavior.get_animation(idx, full_name=True)
         return Animation(idx, short_name, full_name)
@@ -279,6 +505,22 @@ class TemplateContext:
         object_id: str = "<new>",
         **kwargs: Any,
     ) -> HkbRecord:
+        """Create an arbitrary new hkb object. If an object ID is provided or generated, the object will also be added to the behavior.
+
+        Parameters
+        ----------
+        object_type_name : str
+            The type of the object to generate. In decompiled hkb this is usually the comment under the `<object id="..." typeid="...">` line.
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        kwargs:
+            Any fields you want to set for the generated object. Fields not specified will use their type default (e.g. int will be 0, str will be empty, etc.).
+
+        Returns
+        -------
+        HkbRecord
+            The generated object.
+        """
         type_id = self._behavior.type_registry.find_first_type_by_name(object_type_name)
         if object_id == "<new>":
             object_id = self._behavior.new_id()
@@ -291,6 +533,40 @@ class TemplateContext:
             undo_manager.on_create_object(self._behavior, record)
 
         return record
+
+    def make_copy(
+        self,
+        source: HkbRecord | str,
+        *,
+        object_id: str = "<new>",
+        **overrides
+    ) -> HkbRecord:
+        """Creates a copy of a record.
+
+        Parameters
+        ----------
+        source : HkbRecord | str
+            The record to copy.
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        overrides : dict[str, Any]
+            Values to change in the copy before returning it.
+
+        Returns
+        -------
+        HkbRecord
+            A copy of the source altered according to the specified overrides.
+        """
+        source = get_object(source)
+
+        attributes = {k:v.get_value() for k,v in source.get_value().items()}
+        attributes.update(**overrides)
+
+        return self.new(
+            source.type_name,
+            object_id=object_id,
+            **attributes
+        )
 
     # Offer common defaults and highlight required settings for the most common objects
 
