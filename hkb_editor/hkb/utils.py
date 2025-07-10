@@ -37,7 +37,7 @@ def bind_variable(
     hkb_object: HkbRecord,
     path: str,
     variable: str | int,
-) -> None:
+) -> HkbRecord:
     binding_set_ptr: HkbPointer = hkb_object["variableBindingSet"]
 
     with undo_manager.combine():
@@ -90,3 +90,5 @@ def bind_variable(
             )
             bindings.append(bind)
             undo_manager.on_update_array_item(bindings, -1, None, bind)
+
+    return binding_set

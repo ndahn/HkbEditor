@@ -492,6 +492,7 @@ class HkbRecord(XmlValueHandler):
             # We fully replace the inner field element. This will invalidate any previous 
             # references to values of this field, but I suspect that will be less surprising
             # than modifying a previously applied value and seeing no effect.
+            # TODO by doing this we might remove the value XML from another record
             field_el.remove(next(field_el))
             field_el.append(value.element)
             #value = value.get_value()

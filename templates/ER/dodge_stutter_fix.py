@@ -42,6 +42,7 @@ def run(
 
     for target in targets:
         normal_cmsg = ctx.find(f"name:{target}_CMSG* type_name:CustomManualSelectorGenerator")
+        
         if len(normal_cmsg["generators"]) < 2:
             continue
 

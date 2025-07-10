@@ -10,6 +10,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
     hkbClipGenerator_PlaybackMode as PlaybackMode,
+    hkbBlendCurveUtils_BlendCurve as BlendCurve,
 )
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
@@ -204,6 +205,37 @@ class TemplateContext:
         statemachine = get_object(self._behavior, self._behavior, statemachine)
         return get_next_state_id(statemachine)
 
+    def bind_variable(
+        self,
+        obj: HkbRecord | str,
+        path: str,
+        variable: Variable | str | int,
+    ) -> None:
+        obj = get_object(self._behavior, obj)
+
+        if isinstance(variable, Variable):
+            variable = variable.index
+
+        return bind_variable(self._behavior, obj, path, variable)
+
+    def make_copy(
+        self,
+        source: HkbRecord | str,
+        *,
+        object_id: str = "<new>",
+        **overrides
+    ) -> HkbRecord:
+        source = get_object(source)
+
+        attributes = {k:v.get_value() for k,v in source.get_value().items()}
+        attributes.update(**overrides)
+
+        return self.new(
+            source.type_name,
+            object_id=object_id,
+            **attributes
+        )
+
     def new_variable(
         self,
         name: str,
@@ -284,7 +316,9 @@ class TemplateContext:
             animId = int(animId.split("_")[-1])
 
         if generators:
-            generators = [get_object(self._behavior, obj).object_id for obj in generators]
+            generators = [
+                get_object(self._behavior, obj).object_id for obj in generators
+            ]
         else:
             generators = []
 
@@ -310,15 +344,19 @@ class TemplateContext:
         name: str = "",
         generators: list[HkbRecord | str] = None,
         variableBindingSet: HkbRecord | str = None,
+        generatorChangedTransitionEffect: HkbRecord | str = None,
         selectedIndexCanChangeAfterActivate: bool = False,
         **kwargs,
     ) -> HkbRecord:
         if generators:
-            generators = [get_object(self._behavior, obj) for obj in generators]
+            generators = [get_object(self._behavior, obj).object_id for obj in generators]
         else:
             generators = []
 
         variableBindingSet = get_object(self._behavior, variableBindingSet)
+        generatorChangedTransitionEffect = get_object(
+            self._behavior, generatorChangedTransitionEffect
+        )
 
         kwargs.setdefault("sentOnClipEnd/id", -1)
         kwargs.setdefault("endOfClipEventId", -1)
@@ -331,15 +369,22 @@ class TemplateContext:
             variableBindingSet=(
                 variableBindingSet.object_id if variableBindingSet else None
             ),
+            generatorChangedTransitionEffect=(
+                generatorChangedTransitionEffect.object_id
+                if generatorChangedTransitionEffect
+                else None
+            ),
             selectedIndexCanChangeAfterActivate=selectedIndexCanChangeAfterActivate,
             **kwargs,
         )
 
-        if isinstance(variable, Variable):
-            variable = variable.index
+        if variable is not None:
+            # Sometimes we may just want to reuse an existing binding set
+            if isinstance(variable, Variable):
+                variable = variable.index
 
-        # Will create a new binding set if necessary
-        bind_variable(self._behavior, selector, "selectedGeneratorIndex", variable)
+            # Will create a new binding set if necessary
+            bind_variable(self._behavior, selector, "selectedGeneratorIndex", variable)
 
         return selector
 
@@ -404,6 +449,18 @@ class TemplateContext:
             **kwargs,
         )
 
+    def new_transition_info_array(
+        self,
+        *,
+        object_id: str = "<new>",
+        transitions: list[HkbRecord] = None,
+    ) -> HkbRecord:
+        return self.new(
+            "hkbStateMachine::TransitionInfoArray",
+            object_id=object_id,
+            transitions=transitions or [],
+        )
+
     def new_transition_info(
         self,
         toStateId: int,
@@ -452,6 +509,78 @@ class TemplateContext:
             generator=cmsg.object_id if cmsg else None,
             weight=weight,
             worldFromModelWeight=worldFromModelWeight,
+            **kwargs,
+        )
+
+    def new_layer_generator(
+        self,
+        *,
+        object_id: str = "<new>",
+        name: str = "",
+        layers: list[HkbRecord | str] = None,
+        indexOfSyncMasterChild: int = -1,
+        flags: int = 0,  # TODO get proper flag type
+        **kwargs,
+    ) -> HkbRecord:
+        if layers:
+            layers = [get_object(self._behavior, l) for l in layers]
+        else:
+            layers = []
+
+        return self.new(
+            "hkbLayerGenerator",
+            object_id=object_id,
+            name=name,
+            layers=layers,
+            indexOfSyncMasterChild=indexOfSyncMasterChild,
+            flags=flags,
+            **kwargs,
+        )
+
+    def new_layer(
+        self,
+        *,
+        object_id: str = "<new>",
+        generator: HkbRecord | str = None,
+        boneWeights: HkbRecord | str = None,
+        useMotion: bool = False,
+        weight: float = 0.5,
+        fadeInDuration: float = 0.0,
+        fadeOutDuration: float = 0.0,
+        onEventId: Event | str | int = -1,
+        offEventId: Event | str | int = -1,
+        onByDefault: bool = False,
+        fadeInOutCurve: BlendCurve = BlendCurve.SMOOTH,
+        **kwargs,
+    ) -> HkbRecord:
+        generator = get_object(generator)
+        boneWeights = get_object(boneWeights)
+
+        if isinstance(onEventId, Event):
+            onEventId = onEventId.index
+        elif isinstance(onEventId, str):
+            onEventId = self._behavior.find_event(onEventId)
+
+        if isinstance(offEventId, Event):
+            offEventId = offEventId.index
+        elif isinstance(offEventId, str):
+            offEventId = self._behavior.find_event(offEventId)
+
+        blend_params = {
+            "blendingControlData/weight": weight,
+            "blendingControlData/fadeInDuration": fadeInDuration,
+            "blendingControlData/fadeOutDuration": fadeOutDuration,
+            "blendingControlData/onEventId": onEventId,
+            "blendingControlData/offEventId": offEventId,
+            "blendingControlData/onByDefault": onByDefault,
+            "blendingControlData/fadeInOutCurve": fadeInOutCurve,
+        }
+
+        return self.new(
+            "hkbLayer",
+            object_id=object_id,
+            useMotion=useMotion,
+            **blend_params,
             **kwargs,
         )
 
