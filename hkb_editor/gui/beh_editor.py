@@ -473,38 +473,6 @@ class BehaviorEditor(GraphEditor):
         if not obj:
             return []
 
-        # TODO more actions
-        # type_name = self.beh.type_registry.get_name(obj.type_id)
-        actions = [
-            "Copy ID",
-            # "Copy Node",
-            # "-",
-            # "Hide",
-        ]
-
-        if obj.get_field("name", None) is not None:
-            actions.append("Copy Name")
-
-        actions.extend(["Copy XML", "-", "Pin Object"])
-
-        def on_item_selected(sender, app_data, selected_item: str):
-            dpg.set_value(sender, False)
-            dpg.delete_item(f"{self.tag}_{node.id}_menu")
-
-            if selected_item == "Copy ID":
-                self._copy_to_clipboard(node.id)
-            elif selected_item == "Copy Name":
-                obj = self.beh.objects[node.id]
-                self._copy_to_clipboard(obj["name"])
-            elif selected_item == "Copy XML":
-                obj = self.beh.objects[node.id]
-                self._copy_to_clipboard(obj.xml())
-            elif selected_item == "Pin Object":
-                self.add_pinned_object(node.id)
-            else:
-                self.logger.warning("Not implemented yet")
-
-        # Node menu
         with dpg.window(
             popup=True,
             min_size=(100, 20),
@@ -514,13 +482,13 @@ class BehaviorEditor(GraphEditor):
             dpg.add_text(node.id, color=style.blue)
             dpg.add_separator()
 
-            for item in actions:
-                if item == "-":
-                    dpg.add_separator()
-                else:
-                    dpg.add_selectable(
-                        label=item, callback=on_item_selected, user_data=item
-                    )
+            make_copy_menu(obj)
+
+            dpg.add_selectable(
+                label="Pin Object",
+                callback=lambda s, a, u: self.add_pinned_object(u),
+                user_data=obj,
+            )
 
     def _copy_to_clipboard(self, data: str):
         try:
