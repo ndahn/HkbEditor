@@ -12,7 +12,7 @@ from hkb_editor.hkb.hkb_flags import (
 )
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_event, select_animation_name, select_object
-from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
+from hkb_editor.gui.helpers import center_window, create_flag_checkboxes, add_paragraphs
 from hkb_editor.gui import style
 
 
@@ -41,6 +41,8 @@ def create_cmsg_dialog(
         tag = dpg.generate_uuid()
 
     types = behavior.type_registry
+    selected_transition_effect: HkbRecord = None
+    selected_stateinfo_transition: HkbRecord = None
 
     def show_warning(msg: str) -> None:
         dpg.set_value(f"{tag}_notification", msg)
@@ -55,12 +57,10 @@ def create_cmsg_dialog(
         base_name: str = dpg.get_value(f"{tag}_base_name")
         animation_val: str = dpg.get_value(f"{tag}_animation")
         event_val: str = dpg.get_value(f"{tag}_event")
-        transition_val: str = dpg.get_value(f"{tag}_transition")
         playback_mode_val: str = dpg.get_value(f"{tag}_playback_mode")
         animation_end_event_type_val: str = dpg.get_value(
             f"{tag}_animation_end_event_type"
         )
-        stateinfo_transitions_val: str = dpg.get_value(f"{tag}_stateinfo_transitions")
 
         if not base_name:
             show_warning("Base name not set")
@@ -110,28 +110,20 @@ def create_cmsg_dialog(
 
         # Add entry to animations array. We also need the parts in some places
         anim_id = int(animation_val.split("_")[-1])
-        try:
-            anim_idx = behavior.find_animation(animation_val)
-        except IndexError:
-            anim_idx = behavior.create_animation(animation_val)
-            undo_manager.on_create_animation(behavior, animation_val)
-
+        anim_idx = behavior.find_animation(animation_val)
+        
         # Add event to the events array
-        try:
-            event_id = behavior.find_event(event_val)
-        except IndexError:
-            event_id = behavior.create_event(event_val)
-            undo_manager.on_create_event(behavior, event_val)
-
+        event_id = behavior.find_event(event_val)
+        
         playback_mode = PlaybackMode[playback_mode_val].value
         animation_end_event_type = AnimeEndEventType[animation_end_event_type_val].value
 
-        transition_type = types.find_first_type_by_name("hkbTransitionEffect")
-        transitions = behavior.find_objects_by_type(
-            transition_type, include_derived=True
+        transitioninfo_effect_id = (
+            selected_transition_effect.object_id if selected_transition_effect else None
         )
-        transition_id = next(
-            t.object_id for t in transitions if t["name"].get_value() == transition_val
+
+        stateinfo_transition_effect_id = (
+            selected_stateinfo_transition.object_id if selected_stateinfo_transition else None
         )
 
         transition_flags = 0
@@ -174,7 +166,7 @@ def create_cmsg_dialog(
             {
                 "name": base_name,
                 "generator": cmsg_id,
-                "transitions": stateinfo_transitions_val,
+                "transitions": stateinfo_transition_effect_id,
                 "stateId": new_state_id,
             },
             stateinfo_id,
@@ -183,7 +175,7 @@ def create_cmsg_dialog(
             behavior,
             transitioninfo_type,
             {
-                "transition": transition_id,
+                "transition": transitioninfo_effect_id,
                 "eventId": event_id,
                 "toStateId": new_state_id,
                 "flags": transition_flags,
@@ -219,8 +211,6 @@ def create_cmsg_dialog(
             undo_manager.on_update_array_item(
                 wildcard_transitions, -1, None, transitioninfo
             )
-
-        # TODO tell user where to place generated event(s)
 
         callback(dialog, (cmsg_id, clipgen_id, stateinfo_id), user_data)
         dpg.delete_item(dialog)
@@ -323,23 +313,46 @@ def create_cmsg_dialog(
 
         with dpg.tree_node(label="Advanced"):
             # TransitionInfo
-            transition_type = types.find_first_type_by_name("hkbTransitionEffect")
-            transitions = behavior.find_objects_by_type(
-                transition_type, include_derived=True
-            )
-            transition_items = [t["name"].get_value() for t in transitions]
-            default_transition = (
-                "TaeBlend" if "TaeBlend" in transition_items else transition_items[0]
-            )
+            with dpg.group(horizontal=True):
 
-            # TODO search dialog
-            dpg.add_combo(
-                items=transition_items,
-                default_value=default_transition,
-                label="Transition",
-                tag=f"{tag}_transition",
-            )
-            with dpg.tooltip(dpg.last_item()):
+                def on_transition_selected(
+                    sender: str, transition: HkbRecord, user_data: Any
+                ):
+                    nonlocal selected_transition_effect
+                    selected_transition_effect = transition
+                    dpg.set_value(
+                        f"{tag}_transition_effect",
+                        selected_transition_effect["name"].get_value(),
+                    )
+
+                transition_effect_type_id = behavior.type_registry.find_first_type_by_name(
+                    "hkbTransitionEffect"
+                )
+                default_transition = next(
+                    behavior.query(f"type_id:{transition_effect_type_id} TaeBlend"), None
+                )
+
+                dpg.add_input_text(
+                    readonly=True,
+                    default_value=(
+                        default_transition["name"].get_value()
+                        if default_transition
+                        else ""
+                    ),
+                    tag=f"{tag}_transition_effect",
+                )
+                dpg.add_button(
+                    arrow=True,
+                    direction=dpg.mvDir_Right,
+                    callback=lambda s, a, u: select_object(
+                        behavior,
+                        transition_effect_type_id,
+                        on_transition_selected,
+                    ),
+                )
+                dpg.add_text("Transition")
+
+            with dpg.tooltip(dpg.last_container()):
                 dpg.add_text(
                     "Decides how animations are blended when transitioning to the CMSG"
                 )
@@ -352,7 +365,7 @@ def create_cmsg_dialog(
                     base_tag=f"{tag}_transition_flags",
                     active_flags=0,
                 )
-                
+
             # AnimeEndEventType
             dpg.add_combo(
                 [e.name for e in AnimeEndEventType],
@@ -365,6 +378,8 @@ def create_cmsg_dialog(
             with dpg.group(horizontal=True):
 
                 def on_pointer_selected(sender: str, target: HkbRecord, user_data: Any):
+                    nonlocal selected_stateinfo_transition
+                    selected_stateinfo_transition = target
                     dpg.set_value(f"{tag}_stateinfo_transitions", target.object_id)
 
                 dpg.add_input_text(
@@ -377,18 +392,18 @@ def create_cmsg_dialog(
                     arrow=True,
                     direction=dpg.mvDir_Right,
                     callback=lambda s, a, u: select_object(*u),
-                    user_data=(behavior, transition_type, on_pointer_selected),
+                    user_data=(behavior, transition_effect_type_id, on_pointer_selected),
                 )
                 dpg.add_text("StateInfo Transitions")
 
         dpg.add_spacer(height=3)
 
-        instructions="""\
-Don't forget to place new events in eventinfo.txt!\
+        # TODO extend
+        instructions = """\
+Adds a new StateInfo, CMSG and Clip and adds them to a statemachine.
+This essentially allows you to create entirely new animation slots.
 """
-        with dpg.group():
-            for line in instructions.split("\n"):
-                dpg.add_text(line, color=style.light_blue)
+        add_paragraphs(instructions, 50, color=style.light_blue)
 
         # Main form done, now just some buttons and such
         dpg.add_separator()

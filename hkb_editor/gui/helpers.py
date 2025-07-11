@@ -224,7 +224,7 @@ def add_paragraphs(
                 y += (line_height + line_gap) * paragraph_gap_factor
                 continue
 
-            paragraph = " ".join(fragments)
+            paragraph = " ".join(fragments).replace("  ", " ")
             for line in textwrap.wrap(paragraph, width=line_width):
                 dpg.add_text(line, pos=(margin[0], y), **textargs)
                 y += line_height + line_gap

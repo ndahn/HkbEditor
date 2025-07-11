@@ -174,6 +174,7 @@ class BehaviorEditor(GraphEditor):
         self._create_file_menu()
         dpg.add_separator()
 
+        # Edit
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
             dpg.add_menu_item(
                 label="Undo (ctrl-z)", callback=lambda: self.attributes_widget.undo()
@@ -210,6 +211,7 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_menu_item(label="Find Object...", callback=self.open_search_dialog)
 
+        # Workflows
         with dpg.menu(
             label="Workflows", enabled=False, tag=f"{self.tag}_menu_workflows"
         ):
@@ -226,18 +228,17 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_separator()
 
-            with dpg.menu(label="Templates", tag=f"{self.tag}_templates_menu"):
-                dpg.add_separator(tag=f"{self.tag}_templates_menu_bottom")
-                dpg.add_menu_item(
-                    label="Reload Templates", callback=self._reload_templates
-                )
-
-            dpg.add_separator()
-
             dpg.add_menu_item(
                 label="Generate Bone Mirror Map...",
                 callback=self.open_bone_mirror_map_dialog,
             )
+
+        # Templates
+        with dpg.menu(
+            label="Templates", enabled=False, tag=f"{self.tag}_menu_templates"
+        ):
+            dpg.add_separator(tag=f"{self.tag}_menu_templates_bottom")
+            dpg.add_menu_item(label="Reload Templates", callback=self._reload_templates)
 
         self._create_settings_menu()
 
@@ -245,7 +246,7 @@ class BehaviorEditor(GraphEditor):
         self._create_dpg_menu()
 
     def _reload_templates(self) -> None:
-        menu = f"{self.tag}_templates_menu"
+        menu = f"{self.tag}_menu_templates"
         dpg.delete_item(menu, children_only=True)
 
         templates = get_templates()
@@ -255,15 +256,15 @@ class BehaviorEditor(GraphEditor):
             path = ""
             for cat in categories:
                 path += cat + "/"
-                if not dpg.does_item_exist(f"{self.tag}_templates_menu_cat_{path}"):
+                if not dpg.does_item_exist(f"{self.tag}_menu_templates_cat_{path}"):
                     parent = dpg.add_menu(
                         label=cat,
-                        tag=f"{self.tag}_templates_menu_cat_{path}",
+                        tag=f"{self.tag}_menu_templates_cat_{path}",
                         parent=parent,
                     )
-            
+
             if path:
-                parent = f"{self.tag}_templates_menu_cat_{path}"
+                parent = f"{self.tag}_menu_templates_cat_{path}"
 
             dpg.add_menu_item(
                 label=template,
@@ -271,8 +272,8 @@ class BehaviorEditor(GraphEditor):
                 user_data=template_file,
                 parent=parent,
             )
-        
-        dpg.add_separator(tag=f"{self.tag}_templates_menu_bottom", parent=menu)
+
+        dpg.add_separator(tag=f"{self.tag}_menu_templates_bottom", parent=menu)
         dpg.add_menu_item(
             label="Reload Templates", parent=menu, callback=self._reload_templates
         )
@@ -290,6 +291,7 @@ class BehaviorEditor(GraphEditor):
         func(f"{self.tag}_menu_file_save_as")
         func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_workflows")
+        func(f"{self.tag}_menu_templates")
 
         with dpg.handler_registry():
             dpg.add_key_press_handler(dpg.mvKey_None, callback=self._on_key_press)

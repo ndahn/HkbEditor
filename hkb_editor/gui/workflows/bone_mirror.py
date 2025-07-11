@@ -8,6 +8,7 @@ from hkb_editor.hkb.tagfile import Tagfile
 from hkb_editor.hkb.hkb_types import HkbArray, HkbRecord
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.gui.dialogs import open_file_dialog, save_file_dialog, find_dialog
+from hkb_editor.gui.helpers import add_paragraphs
 from hkb_editor.gui import style
 
 
@@ -268,9 +269,7 @@ or adjust manually as needed. You can also load pairings from a Character file
 
 Note that the object ID and type IDs may differ between characters and games.\
 """
-        with dpg.group():
-            for line in instructions.split("\n"):
-                dpg.add_text(line, color=style.light_blue)
+        add_paragraphs(instructions, 90, color=style.light_blue)
 
         dpg.add_button(label="Auto Mirror", callback=auto_mirror)
         dpg.add_separator()
