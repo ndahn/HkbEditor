@@ -209,9 +209,14 @@ def apply_template_dialog(
                     default = arg.value.query
                 else:
                     query = arg.value.query
+                    filt = None
                     if arg.value.type_name:
-                        query = f"type_name:{arg.value.type_name},{query}"
-                    match = next(behavior.query(query), None)
+                        type_id = behavior.type_registry.find_first_type_by_name(
+                            arg.value.type_name
+                        )
+                        filt = lambda o: o.type_id == type_id
+
+                    match = next(behavior.query(query, object_filter=filt), None)
                     if match:
                         default = match.object_id
                     # Update our args default

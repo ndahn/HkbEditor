@@ -5,6 +5,7 @@ import logging
 import textwrap
 from dearpygui import dearpygui as dpg
 import pyperclip
+from natsort import natsorted
 
 from hkb_editor.hkb.hkb_types import HkbRecord
 from . import style
@@ -212,22 +213,51 @@ def add_paragraphs(
 ) -> str:
     # Standard dpg font
     line_height = 13
+    paragraph = ""
+    y = margin[1]
+
+    def place_line(line, **textargs):
+        nonlocal y
+        dpg.add_text(line, pos=(margin[0], y), **textargs)
+        y += line_height + line_gap
+
+    def place_paragraph(**textargs):
+        nonlocal paragraph
+        for frag in textwrap.wrap(paragraph, width=line_width):
+            place_line(frag, **textargs)
+        paragraph = ""
 
     with dpg.child_window(
         border=False, auto_resize_x=True, auto_resize_y=True
     ) as container:
-        y = margin[1]
-        for has_chars, fragments in groupby(
-            text.splitlines(), lambda s: bool(s.strip())
-        ):
-            if not has_chars:
-                y += (line_height + line_gap) * paragraph_gap_factor
-                continue
+        for line in text.splitlines():
+            line = line.strip()
 
-            paragraph = " ".join(fragments).replace("  ", " ")
-            for line in textwrap.wrap(paragraph, width=line_width):
-                dpg.add_text(line, pos=(margin[0], y), **textargs)
-                y += line_height + line_gap
+            if not line or line.startswith(("-", "*")):
+                # Place all lines collected so far
+                place_paragraph(**textargs)
+
+                if not line:
+                    # Paragraph gap
+                    y += (line_height + line_gap) * paragraph_gap_factor
+
+                elif line.startswith(("- ", "* ")):
+                    # Bullet point
+                    fragments = textwrap.wrap(
+                        line,
+                        # 2 bullet chars + 3 whitespaces
+                        width=line_width - 5,
+                        initial_indent="   ",
+                        subsequent_indent="   ",
+                    )
+                    place_line(fragments[0][5:], bullet=True, **textargs)
+                    for frag in fragments[1:]:
+                        place_line(frag, **textargs)
+            else:
+                paragraph += line + " "
+
+        # Place any remaining lines
+        place_paragraph(**textargs)
 
     return container
 
@@ -246,14 +276,13 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
     if not sort_specs:
         return
 
-
     # column id -> index
     cols = dpg.get_item_children(sender, 0)
     col_idx = {cid: i for i, cid in enumerate(cols)}
 
     rows = list(dpg.get_item_children(sender, 1))
     row_values = {}
-    
+
     for row in rows:
         row_items = dpg.get_item_children(row, 1)
         values = []
@@ -277,7 +306,8 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
     # stable multi-column sort (last spec applied first)
     for col_id, direction in reversed(sort_specs):
         idx = col_idx[col_id]
-        rows.sort(
+        rows = natsorted(
+            rows,
             key=lambda r: row_values[r][idx],
             reverse=direction < 0,
         )

@@ -1,4 +1,4 @@
-from typing import Generator, Iterable, TYPE_CHECKING
+from typing import Generator, Callable, Iterable, TYPE_CHECKING
 import fnmatch
 from lark import Lark, Transformer, LarkError
 from rapidfuzz import fuzz
@@ -44,8 +44,7 @@ lucene_url = "https://lucene.apache.org/core/2_9_4/queryparsersyntax.html"
 lucene_help_text = """\
 Supports Lucene-style search queries (<field>:<value>). 
 
-- Fields are used verbatim, with the only excception that array indices 
-   may be replaced by a * wildcard.
+- Fields are used verbatim, with the only excception that array indices may be replaced by a * wildcard.
 - Values may be specified using fields, wildcards, fuzzy searches, ranges.
 - Terms may be combined using grouping, OR, NOT. 
 - Termas separated by a space are assumed to be AND.
@@ -137,13 +136,13 @@ class QueryTransformer(Transformer):
         return actual == token
 
 
-# TODO merge with Tagfile.query
 def query_objects(
-    query_str: str, tagfile: "Tagfile", subset: Iterable["HkbRecord"] = None
+    candidates: Iterable["HkbRecord"],
+    query_str: str,
+    object_filter: Callable[["HkbRecord"], bool] = None,
 ) -> Generator["HkbRecord", None, None]:
     try:
-        if not subset:
-            subset = tagfile.objects.values()
+        subset = filter(object_filter, candidates)
 
         if not query_str or query_str == "*":
             yield from subset

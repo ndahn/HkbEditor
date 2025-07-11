@@ -1,5 +1,6 @@
 from typing import Any, Generator
 from logging import getLogger
+from functools import cache
 from lxml import etree as ET
 
 
@@ -94,9 +95,11 @@ class TypeRegistry:
             if t["name"] == type_name:
                 yield tid
 
+    @cache
     def find_first_type_by_name(self, type_name: str) -> str:
         return next(self.find_types_by_name(type_name))
 
+    @cache
     def get_name(self, type_id: str) -> str:
         return self.types[type_id]["name"]
 
@@ -115,6 +118,7 @@ class TypeRegistry:
     def get_parent(self, type_id: str) -> str:
         return self.types[type_id].get("parent", None)
 
+    @cache
     def get_compatible_types(self, type_id: str) -> list[str]:
         parents = [type_id]
         res = []

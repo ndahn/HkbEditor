@@ -1,5 +1,5 @@
-from typing import Generator, TYPE_CHECKING, Any
-
+from typing import Callable, Generator, TYPE_CHECKING, Any
+from itertools import chain
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
 
@@ -108,12 +108,17 @@ class Tagfile:
 
         return None
 
-    def query(self, query_str: str) -> Generator["HkbRecord", None, None]:
-        yield from query_objects(query_str, self)
+    def query(
+        self,
+        query_str: str,
+        *,
+        object_filter: Callable[["HkbRecord"], bool] = None,
+    ) -> Generator["HkbRecord", None, None]:
+        yield from query_objects(self.objects.values(), query_str, object_filter)
 
     def new_id(self, offset: int = 0) -> str:
         new_id = self._next_object_id + offset
-        
+
         while new_id in self.objects:
             new_id += 1
 
@@ -140,7 +145,7 @@ class Tagfile:
 
     def remove_object(self, id: str) -> "HkbRecord":
         obj = self.objects.pop(id)
-        
+
         # Proper objects will have their <record> inside an <object> tag
         parent = obj.element.getparent()
         if parent is None:

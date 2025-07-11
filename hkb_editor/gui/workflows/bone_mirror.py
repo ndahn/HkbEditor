@@ -1,3 +1,4 @@
+from typing import Generator
 import os
 import io
 import csv
@@ -135,8 +136,14 @@ def bone_mirror_dialog(
             alt_bone = item[1]
             dpg.set_value(f"{tag}_alt_bone_{bone_idx}", alt_bone)
 
+        def find_bones(filt: str) -> Generator[str, None, None]:
+            filt = filt.lower()
+            for idx, bone in enumerate(bones):
+                if filt in bone.lower():
+                    yield (idx, bone)
+
         find_dialog(
-            lambda s: [(i, b) for i, b in enumerate(bones) if s in b],
+            find_bones,
             ["Index", "Bone"],
             lambda item: item,
             okay_callback=on_bone_selected,

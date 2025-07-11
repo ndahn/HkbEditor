@@ -1,11 +1,11 @@
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Generator
 import webbrowser
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbRecord
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.query import query_objects, lucene_help_text, lucene_url
-from hkb_editor.gui.helpers import make_copy_menu, table_sort
+from hkb_editor.gui.helpers import make_copy_menu, table_sort, add_paragraphs
 from hkb_editor.gui import style
 
 
@@ -14,7 +14,6 @@ def find_dialog(
     columns: list[str],
     item_to_row: Callable[[Any], tuple[str, ...] | str] = str,
     *,
-    sort_key: Callable = None,
     context_menu_func: Callable[[Any], None] = None,
     okay_callback: Callable[[str, Any, Any], None] = None,
     item_limit: int = None,
@@ -34,6 +33,8 @@ def find_dialog(
 
     if item_limit is None:
         item_limit = 2000 / len(columns)
+        # round to nearest hundred
+        item_limit = max(100, int(round(item_limit/100)) * 100)
 
     def on_filter_update(sender, filt, user_data):
         dpg.delete_item(table, children_only=True, slot=1)
@@ -42,15 +43,14 @@ def find_dialog(
         # TODO would be nice to have a nicer animation here, 
         # but the loading indicator has a fixed size
         dpg.set_value(f"{tag}_total", "(Searching...)")
-        matches = list(item_getter(filt))
+        matches = item_getter(filt)
+        idx = -1
 
-        if len(matches) > item_limit:
-            dpg.set_value(f"{tag}_total", f"({len(matches)} candidates, refine search!)")
-            return
-
-        dpg.set_value(f"{tag}_total", f"({len(matches)} candidates)")
-
-        for idx, item in enumerate(sorted(matches, key=sort_key)):
+        for idx, item in enumerate(matches):
+            if idx > item_limit:
+                dpg.set_value(f"{tag}_total", f"({item_limit}/? matches)")
+                break
+            
             cells = item_to_row(item)
             if isinstance(cells, str):
                 cells = (cells,)
@@ -71,6 +71,9 @@ def find_dialog(
 
                 for c in cells[1:]:
                     dpg.add_text(c)
+        else:
+            # Items fit into the search limit
+            dpg.set_value(f"{tag}_total", f"({idx + 1} matches)")
 
     def on_select(sender, is_selected: bool, item: Any):
         nonlocal selected_item
@@ -137,26 +140,7 @@ def find_dialog(
             if filter_help:
                 dpg.add_button(label="?", callback=on_filter_help_click)
                 with dpg.tooltip(dpg.last_item()):
-                    if isinstance(filter_help, str):
-                        help_text = filter_help.split("\n")
-                    elif isinstance(filter_help, tuple):
-                        text, color = filter_help
-                        help_text = [(line, color) for line in text.split("\n")]
-                    else:
-                        # Assume it's some kind of iterable
-                        help_text = filter_help
-
-                    for line in help_text:
-                        color = style.white
-                        if isinstance(line, tuple):
-                            line, color = line
-
-                        bullet = False
-                        if line.startswith("- "):
-                            line = line[2:]
-                            bullet = True
-
-                        dpg.add_text(line, bullet=bullet, color=color)
+                    add_paragraphs(filter_help, 70, color=style.yellow)
 
                     if on_filter_help_click:
                         dpg.add_text(
@@ -184,8 +168,8 @@ def find_dialog(
             if show_index:
                 dpg.add_table_column(label="Index")
 
-            for col in columns:
-                dpg.add_table_column(label=col)
+            for i, col in enumerate(columns):
+                dpg.add_table_column(label=col, default_sort=(i == 0))
 
         dpg.add_separator()
 
@@ -256,11 +240,10 @@ def search_objects_dialog(
         behavior.query,
         ["ID", "Name", "Type"],
         item_to_row,
-        sort_key=lambda o: o.object_id,
         context_menu_func=make_context_menu,
         okay_callback=None,
         initial_filter=initial_filter,
-        filter_help=(lucene_help_text, style.light_blue),
+        filter_help=lucene_help_text,
         on_filter_help_click=lambda: webbrowser.open(lucene_url),
         tag=tag,
         user_data=user_data,
@@ -292,7 +275,7 @@ def select_object(
         candidates = behavior.objects.values()
 
     def find_matches(filt: str) -> list[HkbRecord]:
-        return list(query_objects(filt, behavior, candidates))
+        return query_objects(candidates, filt)
         
     def item_to_row(item: HkbRecord):
         name = item.get_field("name", "", resolve=True)
@@ -310,7 +293,6 @@ def select_object(
         find_matches,
         ["ID", "Name", "Type"],
         item_to_row,
-        sort_key=lambda o: o.object_id,
         okay_callback=on_pointer_selected,
         initial_filter=initial_filter,
         title=title,
@@ -337,9 +319,11 @@ def select_variable(
         (idx, var) for idx, var in enumerate(behavior.get_variables(full_info=True))
     ]
 
-    def find_matches(filt: str) -> list[HkbVariable]:
-        # TODO search could be more fancy for variables
-        return [(idx, var) for idx, var in variables if filt in var.name]
+    def find_matches(filt: str) -> Generator[HkbVariable, None, None]:
+        filt = filt.lower()
+        for idx, var in variables:
+            if filt in var.name.lower():
+                yield (idx, var)
 
     def item_to_row(item: tuple[int, HkbVariable]) -> tuple[str, ...]:
         return (item[0], *item[1].astuple())
@@ -374,8 +358,11 @@ def select_event(
 
     events = [(idx, evt) for idx, evt in enumerate(behavior.get_events())]
 
-    def find_matches(filt: str) -> list[str]:
-        return [(idx, var) for idx, var in events if filt in var]
+    def find_matches(filt: str) -> Generator[str, None, None]:
+        filt = filt.lower()
+        for idx, evt in events:
+            if filt in evt.lower():
+                yield (idx, evt)
 
     def item_to_row(item: tuple[int, str]) -> tuple[str, ...]:
         return item
@@ -414,8 +401,11 @@ def select_animation_name(
         for idx, anim in enumerate(behavior.get_animations(full_names=full_names))
     ]
 
-    def find_matches(filt: str) -> list[str]:
-        return [(idx, var) for idx, var in animations if filt in var]
+    def find_matches(filt: str) -> Generator[str, None, None]:
+        filt = filt.lower()
+        for idx, anim in animations:
+            if filt in anim:
+                yield (idx, anim)
 
     def item_to_row(item: tuple[int, str]) -> tuple[str, ...]:
         return item

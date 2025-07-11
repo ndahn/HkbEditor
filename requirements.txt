@@ -8,3 +8,4 @@ pywin32; sys_platform == "windows"
 lark
 rapidfuzz
 docstring_parser
+natsort

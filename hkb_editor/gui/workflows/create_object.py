@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Callable, Generator
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import Tagfile, HkbRecord
@@ -46,12 +46,11 @@ def create_object_dialog(
             dpg.focus_item(dialog)
             return
 
-        def get_object_types(filt: str) -> list[tuple[str, ...]]:
-            return [
-                (type_id, type_name)
-                for type_id, type_name in record_types
-                if (filt in type_id or filt in type_name)
-            ]
+        def get_object_types(filt: str) -> Generator[tuple[str, ...], None, None]:
+            filt = filt.lower()
+            for type_id, type_name in record_types:
+                if filt in type_id or filt in type_name.lower():
+                    yield (type_id, type_name)
 
         find_dialog(
             get_object_types,
