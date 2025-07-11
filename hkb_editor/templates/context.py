@@ -569,6 +569,7 @@ class TemplateContext:
         )
 
     # Offer common defaults and highlight required settings for the most common objects
+    # TODO document functions and their arguments
 
     def new_cmsg(
         self,
@@ -584,34 +585,6 @@ class TemplateContext:
         checkAnimEndSlotNo: int = -1,
         **kwargs,
     ) -> HkbRecord:
-        """_summary_
-
-        Parameters
-        ----------
-        object_id : str, optional
-            _description_, by default "<new>"
-        name : str, optional
-            _description_, by default ""
-        animId : Animation | int | str, optional
-            _description_, by default 0
-        generators : list[HkbRecord  |  str], optional
-            _description_, by default None
-        enableScript : bool, optional
-            _description_, by default True
-        enableTae : bool, optional
-            _description_, by default True
-        offsetType : CmsgOffsetType, optional
-            _description_, by default CmsgOffsetType.NONE
-        animeEndEventType : AnimeEndEventType, optional
-            _description_, by default AnimeEndEventType.FIRE_NEXT_STATE_EVENT
-        checkAnimEndSlotNo : int, optional
-            _description_, by default -1
-
-        Returns
-        -------
-        HkbRecord
-            _description_
-        """
         if isinstance(animId, Animation):
             animId = animId.name
 
