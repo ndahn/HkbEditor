@@ -112,7 +112,7 @@ def register_clip_dialog(
                 # Find CMSGs with a matching animId
                 anim_id = animation_name.split("_")[1]
                 cmsg_candidates = list(
-                    behavior.query(f"type_id:{cmsg_type} AND animId:{anim_id}")
+                    behavior.query(f"type_id:{cmsg_type} animId:{anim_id}")
                 )
                 items = [c["name"].get_value() for c in cmsg_candidates]
 

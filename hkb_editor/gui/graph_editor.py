@@ -360,9 +360,11 @@ class GraphEditor:
         return nx.DiGraph()
 
     def _on_root_selected(self, sender: str, selected: bool, root_id: str):
-        if selected and root_id in self.selected_roots:
-            return
+        # NOTE for now we don't allow deselecting SMs
+        selected = True
+        dpg.set_value(f"{self.tag}_root_{root_id}_selectable", True)
 
+        # Rebuild the graph even if the root_id is already selected
         self.canvas.clear()
         self.clear_attributes()
         self.selected_node = None
@@ -379,7 +381,8 @@ class GraphEditor:
             graph: nx.DiGraph = self.get_graph(root_id)
             self.canvas.set_graph(graph)
         else:
-            self.selected_roots.pop(root_id)
+            if root_id in self.selected_roots:
+                self.selected_roots.remove(root_id)
             self.canvas.set_graph(None)
 
     def _update_roots(self) -> None:

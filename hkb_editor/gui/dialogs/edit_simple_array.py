@@ -1,7 +1,7 @@
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.gui.helpers import center_window, create_value_widget
+from hkb_editor.gui.helpers import center_window, create_value_widget, table_sort
 from hkb_editor.gui import style
 from .make_tuple import new_tuple_dialog
 
@@ -69,8 +69,6 @@ def edit_simple_array_dialog(
 
         del items[index]
         fill_table()
-
-    # TODO move
 
     def show_item_hint(sender: str, app_data: Any, index: int):
         # TODO can use this to show where items are referenced
@@ -147,6 +145,10 @@ def edit_simple_array_dialog(
             policy=dpg.mvTable_SizingStretchSame,
             scrollY=True,
             height=-spare_height,
+            sortable=True,
+            #sort_tristate=True,
+            sort_multi=True,
+            callback=table_sort,
             tag=f"{tag}_table",
         ) as table:
             dpg.add_table_column(label="Index")

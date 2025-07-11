@@ -85,7 +85,7 @@ def create_cmsg_dialog(
         # Resolve values
         statemachine_type = types.find_first_type_by_name("hkbStateMachine")
         statemachine_id = next(
-            behavior.query(f"type_id:{statemachine_type} AND name:{statemachine_val}")
+            behavior.query(f"type_id:{statemachine_type} name:{statemachine_val}")
         ).object_id
         statemachine = behavior.objects[statemachine_id]
 

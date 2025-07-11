@@ -249,7 +249,7 @@ class BehaviorEditor(GraphEditor):
         dpg.delete_item(menu, children_only=True)
 
         templates = get_templates()
-        
+
         for template_file, (categories, template) in templates.items():
             parent = menu
             path = ""

@@ -84,7 +84,11 @@ class HavokBehavior(Tagfile):
         self._event_infos.insert(
             idx, HkbRecord.new(self, self._event_infos.element_type_id)
         )
-        return len(self._events) - 1
+        
+        if idx < 0:
+            return len(self._variables) - idx
+
+        return idx
 
     def get_events(self) -> list[str]:
         return self._events.get_value()
@@ -141,7 +145,10 @@ class HavokBehavior(Tagfile):
             ),
         )
 
-        return len(self._variables) - 1
+        if idx < 0:
+            return len(self._variables) - idx
+
+        return idx
 
     def get_variables(self, full_info: bool = False) -> list[str] | list[HkbVariable]:
         if full_info:
@@ -205,7 +212,11 @@ class HavokBehavior(Tagfile):
     def create_animation(self, animation_name: str, idx: int = -1) -> int:
         full_anim_name = self.get_full_animation_name(animation_name)
         self._animations.insert(idx, full_anim_name)
-        return len(self._animations) - 1
+        
+        if idx < 0:
+            return len(self._animations) - idx
+
+        return idx
 
     def get_animations(self, full_names: bool = False) -> list[str]:
         if full_names:

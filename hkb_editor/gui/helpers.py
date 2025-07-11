@@ -230,3 +230,56 @@ def add_paragraphs(
                 y += line_height + line_gap
 
     return container
+
+
+def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
+    # See https://dearpygui.readthedocs.io/en/latest/documentation/tables.html#sorting
+    # Sort_specs scenarios:
+    #   1. no sorting -> sort_specs == None
+    #   2. single sorting -> sort_specs == [[column_id, direction]]
+    #   3. multi sorting -> sort_specs == [[column_id, direction], [column_id, direction], ...]
+    #
+    # Notes:
+    #   1. direction is ascending if == 1
+    #   2. direction is ascending if == -1
+
+    if not sort_specs:
+        return
+
+
+    # column id -> index
+    cols = dpg.get_item_children(sender, 0)
+    col_idx = {cid: i for i, cid in enumerate(cols)}
+
+    rows = list(dpg.get_item_children(sender, 1))
+    row_values = {}
+    
+    for row in rows:
+        row_items = dpg.get_item_children(row, 1)
+        values = []
+        for cell in row_items:
+            if dpg.get_item_configuration(cell).get("span_columns") == True:
+                # Selectables that span all columns should only be treated as text
+                value = dpg.get_item_label(cell)
+            else:
+                value = dpg.get_value(cell)
+
+            try:
+                # Values like indices and other numbers should not be treated as strings
+                value = float(value)
+            except:
+                pass
+
+            values.append(value)
+
+        row_values[row] = values
+
+    # stable multi-column sort (last spec applied first)
+    for col_id, direction in reversed(sort_specs):
+        idx = col_idx[col_id]
+        rows.sort(
+            key=lambda r: row_values[r][idx],
+            reverse=direction < 0,
+        )
+
+    dpg.reorder_items(sender, 1, rows)

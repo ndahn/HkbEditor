@@ -48,7 +48,8 @@ class CachedArray(HkbArray, Generic[T]):
 
     def __setitem__(self, index: int, value: XmlValueHandler | T) -> None:
         super().__setitem__(index, value)
-        self._cache[index] = self[index]
+        val = value.get_value() if isinstance(value, XmlValueHandler) else value
+        self._cache[index] = val
 
     def __delitem__(self, index: int) -> None:
         super().__delitem__(index)
@@ -67,11 +68,13 @@ class CachedArray(HkbArray, Generic[T]):
 
     def append(self, value: XmlValueHandler | T) -> None:
         super().append(value)
-        self._cache.append(self[-1])
+        val = value.get_value() if isinstance(value, XmlValueHandler) else value
+        self._cache.append(val)
 
     def insert(self, index: int, value: XmlValueHandler | T) -> None:
         super().insert(index, value)
-        self._cache.insert(index, self[-1])
+        val = value.get_value() if isinstance(value, XmlValueHandler) else value
+        self._cache.insert(index, val)
 
     def pop(self, index: int) -> T:
         super().__delitem__(index)

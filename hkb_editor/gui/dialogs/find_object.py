@@ -5,7 +5,7 @@ from dearpygui import dearpygui as dpg
 from hkb_editor.hkb.hkb_types import HkbRecord
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.query import query_objects, lucene_help_text, lucene_url
-from hkb_editor.gui.helpers import make_copy_menu
+from hkb_editor.gui.helpers import make_copy_menu, table_sort
 from hkb_editor.gui import style
 
 
@@ -170,6 +170,10 @@ def find_dialog(
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
             height=310,
+            sortable=True,
+            #sort_tristate=True,
+            sort_multi=True,
+            callback=table_sort,
             tag=f"{tag}_table",
         ) as table:
             if show_index:

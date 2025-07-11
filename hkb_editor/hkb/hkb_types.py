@@ -361,24 +361,18 @@ class HkbRecord(XmlValueHandler):
         record = HkbRecord(tagfile, elem, type_id, object_id)
 
         # Make sure the xml subtree contains all required fields
-        def create_fields(parent_elem: ET._Element, record_type_id: str):
-            for fname, ftype in tagfile.type_registry.get_field_types(
-                record_type_id
-            ).items():
+        for fname, ftype in tagfile.type_registry.get_field_types(type_id).items():
+            field_elem = ET.SubElement(elem, "field", name=fname)
 
-                field_elem = ET.SubElement(parent_elem, "field", name=fname)
-                Handler = get_value_handler(tagfile.type_registry, ftype)
-                field_val = Handler.new(tagfile, ftype)
+            # Handler.new will create all expected fields for the subelement
+            Handler = get_value_handler(tagfile.type_registry, ftype)
+            field_val = Handler.new(tagfile, ftype)
 
-                if isinstance(field_val, HkbRecord):
-                    create_fields(field_val.element, ftype)
-                elif fname == "userData":
-                    # Needs to be unique
-                    field_val.set_value(tagfile.new_userdata_value())
-
-                field_elem.append(field_val.element)
-
-        create_fields(elem, type_id)
+            if fname == "userData":
+                # Needs to be unique?
+                field_val.set_value(tagfile.new_userdata_value())
+            
+            field_elem.append(field_val.element)
 
         if path_values:
             for path, val in path_values.items():
