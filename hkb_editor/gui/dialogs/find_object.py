@@ -82,8 +82,8 @@ def find_dialog(
         # Deselect all other selectables
         if is_selected:
             for row in dpg.get_item_children(table, slot=1):
-                if dpg.get_item_user_data(row) != item:
-                    dpg.set_value(dpg.get_item_children(row, slot=1)[0], False)
+                row_selected = (dpg.get_item_user_data(row) == item)
+                dpg.set_value(dpg.get_item_children(row, slot=1)[0], row_selected)
 
     def on_okay():
         if selected_item is None:
@@ -94,8 +94,13 @@ def find_dialog(
 
     if context_menu_func:
 
-        def open_context_menu():
-            if selected_item is not None:
+        def open_context_menu(sender: str, app_data: tuple[int, int]):
+            _, row = app_data
+            item = dpg.get_item_user_data(row)
+            
+            if item is not None:
+                # Force select the right-clicked item
+                on_select(sender, True, item)
                 context_menu_func(selected_item)
 
         with dpg.item_handler_registry() as right_click_handler:
@@ -295,8 +300,11 @@ def select_object(
         return (item.object_id, name, type_name)
 
     if not title:
-        target_type_name = behavior.type_registry.get_name(target_type_id)
-        title = f"Select {target_type_name}"
+        if target_type_id:
+            target_type_name = behavior.type_registry.get_name(target_type_id)
+            title = f"Select {target_type_name}"
+        else:
+            title = "Select Object"
 
     return find_dialog(
         find_matches,
@@ -305,7 +313,7 @@ def select_object(
         sort_key=lambda o: o.object_id,
         okay_callback=on_pointer_selected,
         initial_filter=initial_filter,
-        title=title or "Select object",
+        title=title,
         filter_help=lucene_help_text,
         on_filter_help_click=lambda: webbrowser.open(lucene_url),
         tag=tag,

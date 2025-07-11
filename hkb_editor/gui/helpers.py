@@ -196,7 +196,7 @@ def create_flag_checkboxes(
             default_value=active,
             callback=on_flag_changed,
             label=flag.name,
-            tag=f"{base_tag}_{flag.value}",
+            tag=f"{base_tag}_{flag.name}",
             user_data=flag,
         )
 

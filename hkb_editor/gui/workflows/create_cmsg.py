@@ -109,7 +109,7 @@ def create_cmsg_dialog(
             cmsg_name += "_CMSG"
 
         # Add entry to animations array. We also need the parts in some places
-        _, anim_y = animation_val.split("_")
+        anim_id = int(animation_val.split("_")[-1])
         try:
             anim_idx = behavior.find_animation(animation_val)
         except IndexError:
@@ -136,7 +136,7 @@ def create_cmsg_dialog(
 
         transition_flags = 0
         for flag in TransitionInfoFlags:
-            if dpg.get_value(f"{tag}_transition_flags_{flag.value}"):
+            if dpg.get_value(f"{tag}_transition_flags_{flag.name}"):
                 transition_flags |= flag
 
         # Generate the new objects
@@ -149,11 +149,11 @@ def create_cmsg_dialog(
             cmsg_type,
             {
                 "name": cmsg_name,
-                "animId": anim_y,
+                "animId": anim_id,
                 "animeEndEventType": animation_end_event_type,
                 "enableScript": True,
                 "enableTae": True,
-                "generators": [clipgen_id],  # TODO probably won't work like this
+                "generators": [clipgen_id],
             },
             cmsg_id,
         )
@@ -332,7 +332,7 @@ def create_cmsg_dialog(
                 "TaeBlend" if "TaeBlend" in transition_items else transition_items[0]
             )
 
-            # TODO search dialog, option to create new -> general "new object" dialog
+            # TODO search dialog
             dpg.add_combo(
                 items=transition_items,
                 default_value=default_transition,
@@ -362,7 +362,6 @@ def create_cmsg_dialog(
             )
 
             # StateInfo transition pointer
-            # TODO we probably need a table to get a clean layout
             with dpg.group(horizontal=True):
 
                 def on_pointer_selected(sender: str, target: HkbRecord, user_data: Any):

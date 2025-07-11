@@ -1,11 +1,12 @@
 from typing import Any, Callable
+import re
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
-from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags
+from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags as ClipFlags
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.gui.dialogs import select_animation_name
+from hkb_editor.gui.dialogs import select_animation_name, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes
 
 
@@ -19,11 +20,49 @@ def register_clip_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-    cmsg_type = behavior.type_registry.find_first_type_by_name(
-        "CustomManualSelectorGenerator"
-    )
-    clipgen_type = behavior.type_registry.find_first_type_by_name("hkbClipGenerator")
-    cmsg_candidates: list[HkbRecord] = []
+    selected_cmsg: HkbRecord = None
+    cmsg_query: str = ""
+
+    def on_animation_selected(sender: str, animation_id: int, user_data: Any):
+        nonlocal cmsg_query
+        animation_name = behavior.get_animation(animation_id)
+        dpg.set_value(f"{tag}_animation", animation_name)
+
+        current_name = dpg.get_value(f"{tag}_name")
+        if not current_name or re.fullmatch(r"a[0-9]{3}_[0-9]{6}", current_name):
+            # Update the name only if it doesn't look as if the user changed it
+            dpg.set_value(f"{tag}_name", animation_name)
+
+        # Find CMSGs with a matching animation
+        anim_id = int(animation_name.split("_")[-1])
+        cmsg_query = f"animId:{anim_id}"
+        first_cmsg = next(
+            behavior.query("type_name:CustomManualSelectorGenerator " + cmsg_query),
+            None,
+        )
+        if first_cmsg:
+            on_cmsg_selected(sender, first_cmsg, user_data)
+
+        # Find a clip with the same animation ID to copy some other attributes
+        model_clip = next(
+            behavior.query(
+                f"type_name:hkbClipGenerator animationName:{animation_name}"
+            ),
+            None,
+        )
+        if model_clip:
+            playback_mode = PlaybackMode(model_clip["mode"].get_value())
+            dpg.set_value(f"{tag}_playback_mode", playback_mode.name)
+
+            clip_flags = ClipFlags(model_clip["flags"].get_value())
+            for flag in ClipFlags:
+                flag_enabled = flag in clip_flags
+                dpg.set_value(f"{tag}_clipflags_{flag.name}", flag_enabled)
+
+    def on_cmsg_selected(sender: str, cmsg: HkbRecord, user_data: Any):
+        nonlocal selected_cmsg
+        selected_cmsg = cmsg
+        dpg.set_value(f"{tag}_cmsg_name", cmsg["name"].get_value())
 
     def show_warning(msg: str) -> None:
         dpg.set_value(f"{tag}_notification", msg)
@@ -32,7 +71,6 @@ def register_clip_dialog(
     def on_okay():
         clip_name = dpg.get_value(f"{tag}_name")
         animation_name = dpg.get_value(f"{tag}_animation")
-        cmsg_name = dpg.get_value(f"{tag}_cmsg")
         playback_mode_name = dpg.get_value(f"{tag}_playback_mode")
 
         if not clip_name:
@@ -43,21 +81,23 @@ def register_clip_dialog(
             show_warning("Animation not set")
             return
 
-        if not cmsg_name:
+        if not selected_cmsg:
             show_warning("CMSG not set")
             return
 
         clipgen_id = behavior.new_id()
         # Unfortunately dpg combo only gives us the item, not the index
-        cmsg = next(c for c in cmsg_candidates if c["name"].get_value() == cmsg_name)
         playback_mode = PlaybackMode[playback_mode_name].value
         anim_idx = behavior.find_animation(animation_name)
 
         clip_flags = 0
-        for flag in hkbClipGenerator_Flags:
+        for flag in ClipFlags:
             if dpg.get_value(f"{tag}_clipflags_{flag.name}"):
                 clip_flags |= flag
 
+        clipgen_type = behavior.type_registry.find_first_type_by_name(
+            "hkbClipGenerator"
+        )
         clipgen = HkbRecord.new(
             behavior,
             clipgen_type,
@@ -76,11 +116,11 @@ def register_clip_dialog(
             behavior.add_object(clipgen)
             undo_manager.on_create_object(behavior, clipgen)
 
-            generators: HkbArray = cmsg["generators"]
+            generators: HkbArray = selected_cmsg["generators"]
             generators.append(clipgen_id)
             undo_manager.on_update_array_item(generators, -1, None, clipgen_id)
 
-        callback(dialog, (clipgen_id, cmsg.object_id), user_data)
+        callback(dialog, (clipgen_id, selected_cmsg.object_id), user_data)
         dpg.delete_item(dialog)
 
     # Dialog content
@@ -102,26 +142,6 @@ def register_clip_dialog(
 
         # Animation name
         with dpg.group(horizontal=True):
-
-            def on_animation_selected(sender: str, animation_id: int, user_data: Any):
-                nonlocal cmsg_candidates
-                animation_name = behavior.get_animation(animation_id)
-                dpg.set_value(f"{tag}_animation", animation_name)
-                dpg.set_value(f"{tag}_name", animation_name)
-
-                # Find CMSGs with a matching animId
-                anim_id = animation_name.split("_")[1]
-                cmsg_candidates = list(
-                    behavior.query(f"type_id:{cmsg_type} animId:{anim_id}")
-                )
-                items = [c["name"].get_value() for c in cmsg_candidates]
-
-                dpg.configure_item(
-                    f"{tag}_cmsg",
-                    items=items,
-                    default_value=items[0] if items else "",
-                )
-
             dpg.add_input_text(
                 default_value="",
                 hint="aXXX_YYYYYY",
@@ -131,17 +151,33 @@ def register_clip_dialog(
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,
-                # TODO allow creating new animations from selection dialog
                 callback=lambda s, a, u: select_animation_name(*u),
                 user_data=(behavior, on_animation_selected),
             )
             dpg.add_text("Animation")
 
         # CMSG to register the clip in (selected from animation name)
-        dpg.add_combo(
-            label="CMSG",
-            tag=f"{tag}_cmsg",
-        )
+        with dpg.group(horizontal=True):
+            cmsg_type_id = behavior.type_registry.find_first_type_by_name(
+                "CustomManualSelectorGenerator"
+            )
+            
+            dpg.add_input_text(
+                readonly=True,
+                default_value="",
+                tag=f"{tag}_cmsg_name",
+            )
+            dpg.add_button(
+                arrow=True,
+                direction=dpg.mvDir_Right,
+                callback=lambda s, a, u: select_object(
+                    behavior,
+                    cmsg_type_id,
+                    on_cmsg_selected,
+                    initial_filter=cmsg_query,
+                ),
+            )
+            dpg.add_text("CMSG")
 
         # Playback mode
         dpg.add_combo(
@@ -154,7 +190,7 @@ def register_clip_dialog(
         # Flags
         with dpg.tree_node(label="Flags"):
             create_flag_checkboxes(
-                hkbClipGenerator_Flags,
+                ClipFlags,
                 None,
                 base_tag=f"{tag}_clipflags",
                 active_flags=0,

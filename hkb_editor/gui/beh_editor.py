@@ -635,6 +635,10 @@ class BehaviorEditor(GraphEditor):
                     "A variable named '%s' already exists (%d)", new_value[0], idx
                 )
 
+            if idx not in (-1, len(self.beh._variables)):
+                # TODO show warning dialog listing affected variables
+                pass
+
             self.beh.create_variable(*new_value, idx)
             undo_manager.on_create_variable(self.beh, new_value, idx)
 
@@ -691,6 +695,10 @@ class BehaviorEditor(GraphEditor):
                 self.logger.warning(
                     "An event named '%s' already exists (%d)", new_value, idx
                 )
+
+            if idx not in (-1, len(self.beh._variables)):
+                # TODO show warning dialog listing affected variables
+                pass
 
             self.beh.create_event(new_value, idx)
             undo_manager.on_create_event(self.beh, new_value, idx)

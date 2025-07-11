@@ -137,6 +137,7 @@ class QueryTransformer(Transformer):
         return actual == token
 
 
+# TODO merge with Tagfile.query
 def query_objects(
     query_str: str, tagfile: "Tagfile", subset: Iterable["HkbRecord"] = None
 ) -> Generator["HkbRecord", None, None]:
