@@ -346,7 +346,10 @@ class BehaviorEditor(GraphEditor):
                 button=dpg.mvMouseButton_Right, callback=self.open_pin_menu
             )
 
-    def add_pinned_object(self, object_id: str) -> None:
+    def add_pinned_object(self, object_id: HkbRecord | str) -> None:
+        if isinstance(object_id, HkbRecord):
+            object_id = object_id.object_id
+            
         if dpg.does_item_exist(f"{self.tag}_pin_{object_id}"):
             # Already pinned
             return
@@ -397,14 +400,6 @@ class BehaviorEditor(GraphEditor):
             self.canvas.deselect()
             self.attributes_widget.set_record(pinned_obj)
 
-        popup = f"{self.tag}_pin_menu"
-
-        if dpg.does_item_exist(popup):
-            dpg.delete_item(popup)
-
-        # XXX Without this dpg sometimes has a segmentation fault!
-        dpg.split_frame()
-
         # Pin context menu
         with dpg.window(
             popup=True,
@@ -414,9 +409,7 @@ class BehaviorEditor(GraphEditor):
             no_move=True,
             no_saved_settings=True,
             autosize=True,
-            show=False,
-            tag=popup,
-        ):
+        ) as popup:
             dpg.add_selectable(
                 label="Unpin",
                 callback=lambda s, a, u: self.remove_pinned_object(u),
@@ -435,7 +428,6 @@ class BehaviorEditor(GraphEditor):
             make_copy_menu(pinned_obj)
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
-        dpg.show_item(popup)
 
     def get_root_ids(self) -> list[str]:
         sm_type = self.beh.type_registry.find_first_type_by_name("hkbStateMachine")
@@ -468,7 +460,7 @@ class BehaviorEditor(GraphEditor):
     def get_node_frontpage_short(self, node_id: str) -> str:
         return self.beh.objects[node_id]["name"].get_value()
 
-    def open_node_menu(self, node):
+    def open_node_menu(self, node: Node):
         obj = self.beh.objects.get(node.id)
         if not obj:
             return []
@@ -486,7 +478,7 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_selectable(
                 label="Pin Object",
-                callback=lambda s, a, u: self.add_pinned_object(u),
+                callback=lambda s, a, u: self.add_pinned_object(u.object_id),
                 user_data=obj,
             )
 

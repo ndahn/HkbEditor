@@ -206,21 +206,13 @@ def search_objects_dialog(
         return (item.object_id, name, type_name)
 
     def make_context_menu(item: HkbRecord):
-        popup = f"{tag}_popup"
-
-        if dpg.does_item_exist(popup):
-            dpg.delete_item(popup)
-
-        # XXX Without this dpg sometimes has a segmentation fault!
-        dpg.split_frame()
-
         with dpg.window(
             popup=True,
             min_size=(100, 20),
             no_saved_settings=True,
             autosize=True,
-            tag=popup,
-        ):
+            on_close=lambda: dpg.delete_item(popup),
+        ) as popup:
             if pin_callback:
                 dpg.add_selectable(
                     label="Pin",
@@ -234,7 +226,6 @@ def search_objects_dialog(
             make_copy_menu(item)
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
-        dpg.show_item(popup)
 
     return find_dialog(
         behavior.query,

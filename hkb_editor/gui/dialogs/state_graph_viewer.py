@@ -115,23 +115,14 @@ def open_state_graph_viewer(
         return None
 
     def open_context_menu(item: Node) -> None:
-        popup = f"{tag}_popup"
-
-        if dpg.does_item_exist(popup):
-            dpg.delete_item(popup)
-
-        # XXX Without this dpg sometimes has a segmentation fault!
-        dpg.split_frame()
-        
         with dpg.window(
             popup=True,
             min_size=(100, 20),
             autosize=True,
             no_saved_settings=True,
             on_close=lambda: dpg.delete_item(popup),
-            tag=popup,
-        ):
-            make_copy_menu(item)
+        ) as popup:
+            make_copy_menu(item.user_data)
             if jump_callback:
                 dpg.add_separator()
                 dpg.add_selectable(
