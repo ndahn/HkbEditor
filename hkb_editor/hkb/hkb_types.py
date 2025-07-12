@@ -214,6 +214,10 @@ class HkbArray(XmlValueHandler):
         super().__init__(tagfile, element, type_id)
         self.element_type_id = element.attrib["elementtypeid"]
 
+    @property
+    def element_type_name(self) -> str:
+        return self.tagfile.type_registry.get_name(self.element_type_id)
+
     # NOTE not for public use, just use len(array)
     @property
     def _count(self) -> int:
@@ -352,6 +356,9 @@ class HkbArray(XmlValueHandler):
         ret = self[index]
         del self[index]
         return ret
+
+    def __str__(self):
+        return f"HkbArray[{self.element_type_name}] (len={self._count})"
 
 
 class HkbRecord(XmlValueHandler):
@@ -517,6 +524,9 @@ class HkbRecord(XmlValueHandler):
         elem.append(self.element)
 
         return elem
+
+    def __str__(self) -> str:
+        return f"{self.type_name} (id={self.object_id})"
 
 
 def get_value_handler(type_registry: TypeRegistry, type_id: str) -> Type[XmlValueHandler]:

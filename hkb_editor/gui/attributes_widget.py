@@ -171,8 +171,6 @@ class AttributesWidget:
         *,
         before: str = 0,
     ):
-        self.logger.debug("Creating new attribute widget: %s", path)
-
         tag = f"{self.tag}_attribute_{path}"
         widget = tag
         is_simple = isinstance(value, (HkbString, HkbFloat, HkbInteger, HkbBool))
@@ -566,6 +564,7 @@ class AttributesWidget:
                     user_data=(widget, path, value),
                 )
 
+            # TODO use make_copy_menu
             dpg.add_selectable(
                 label="Copy",
                 callback=self._copy_value,

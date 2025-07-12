@@ -41,8 +41,8 @@ def create_cmsg_dialog(
         tag = dpg.generate_uuid()
 
     types = behavior.type_registry
-    selected_transition_effect: HkbRecord = None
-    selected_stateinfo_transition: HkbRecord = None
+    selected_transitioninfo_effect: HkbRecord = None
+    selected_stateinfo_effect: HkbRecord = None
 
     def show_warning(msg: str) -> None:
         dpg.set_value(f"{tag}_notification", msg)
@@ -119,11 +119,11 @@ def create_cmsg_dialog(
         animation_end_event_type = AnimeEndEventType[animation_end_event_type_val].value
 
         transitioninfo_effect_id = (
-            selected_transition_effect.object_id if selected_transition_effect else None
+            selected_transitioninfo_effect.object_id if selected_transitioninfo_effect else None
         )
 
         stateinfo_transition_effect_id = (
-            selected_stateinfo_transition.object_id if selected_stateinfo_transition else None
+            selected_stateinfo_effect.object_id if selected_stateinfo_effect else None
         )
 
         transition_flags = 0
@@ -320,11 +320,11 @@ def create_cmsg_dialog(
                 def on_transition_selected(
                     sender: str, transition: HkbRecord, user_data: Any
                 ):
-                    nonlocal selected_transition_effect
-                    selected_transition_effect = transition
+                    nonlocal selected_transitioninfo_effect
+                    selected_transitioninfo_effect = transition
                     dpg.set_value(
                         f"{tag}_transition_effect",
-                        selected_transition_effect["name"].get_value(),
+                        selected_transitioninfo_effect["name"].get_value(),
                     )
 
                 transition_effect_type_id = behavior.type_registry.find_first_type_by_name(
@@ -352,7 +352,7 @@ def create_cmsg_dialog(
                         on_transition_selected,
                     ),
                 )
-                dpg.add_text("Transition")
+                dpg.add_text("TransitionInfo Transition")
 
             with dpg.tooltip(dpg.last_container()):
                 dpg.add_text(
@@ -380,8 +380,8 @@ def create_cmsg_dialog(
             with dpg.group(horizontal=True):
 
                 def on_pointer_selected(sender: str, target: HkbRecord, user_data: Any):
-                    nonlocal selected_stateinfo_transition
-                    selected_stateinfo_transition = target
+                    nonlocal selected_stateinfo_effect
+                    selected_stateinfo_effect = target
                     dpg.set_value(f"{tag}_stateinfo_transitions", target.object_id)
 
                 dpg.add_input_text(

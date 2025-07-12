@@ -1,8 +1,10 @@
 from typing import Any, Type, Literal
 from dataclasses import dataclass
+import os
 import ast
-from docstring_parser import parse as parse_docstring, DocstringParam
+import logging
 import re
+from docstring_parser import parse as parse_docstring, DocstringParam
 
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
@@ -10,6 +12,7 @@ from hkb_editor.hkb.hkb_enums import (
     hkbVariableInfo_VariableType as VariableType,
     CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
+    CustomManualSelectorGenerator_ChangeTypeOfSelectedIndexAfterActivate as ChangeIndexType,
     hkbClipGenerator_PlaybackMode as PlaybackMode,
     hkbBlendCurveUtils_BlendCurve as BlendCurve,
 )
@@ -37,6 +40,10 @@ class Animation:
     name: str
     full_name: str
 
+    @property
+    def anim_id(self) -> int:
+        return int(self.name.split("_")[-1])
+
 
 @dataclass
 class HkbRecordSpec:
@@ -49,7 +56,7 @@ _undefined = object()
 
 class TemplateContext:
     """Stores information and provides helper functions for temapltes.
-    
+
     Templates are python scripts with a `run` function that takes a `TemplateContext` as their first argument. This object should be the main way of modifying the behavior from templates, primarily to give proper support for undo (or rollback in case of errors).
 
     Raises
@@ -59,6 +66,7 @@ class TemplateContext:
     ValueError
         If the template is not a valid template file.
     """
+
     @dataclass
     class _Arg:
         name: str
@@ -84,6 +92,8 @@ class TemplateContext:
                 break
         else:
             raise ValueError("Template does not contain a run() function")
+
+        self.logger = logging.getLogger(os.path.basename(template_file))
 
     def _parse_template_func(self, func: ast.FunctionDef):
         doc = parse_docstring(ast.get_docstring(func))
@@ -153,8 +163,8 @@ class TemplateContext:
         collect_args(func.args.kwonlyargs, func.args.kw_defaults)
 
     def find_all(self, query: str) -> list[HkbRecord]:
-        """Returns all objects matching the specified query. 
-        
+        """Returns all objects matching the specified query.
+
         Parameters
         ----------
         query : str
@@ -168,14 +178,14 @@ class TemplateContext:
         return list(self._behavior.query(query))
 
     def find(self, query: str, default: Any = _undefined) -> HkbRecord:
-        """Returns the first object matching the specified query. 
-        
+        """Returns the first object matching the specified query.
+
         Parameters
         ----------
         query : str
             The query string. See :py:meth:`hkb.Tagfile.query` for details.
         default : Any
-            The value to return if no match is found. 
+            The value to return if no match is found.
 
         Raises
         ------
@@ -244,6 +254,7 @@ class TemplateContext:
                 handler = record.get_path_value(path)
                 handler.set_value(value)
                 undo_manager.on_update_value(handler, handler.get_value(), value)
+                self.logger.debug(f"Updated {path}={value} of {record}")
 
     def delete(self, record: HkbRecord | str) -> HkbRecord:
         """Delete the specified :py:class:`HkbRecord` from the behavior.
@@ -264,6 +275,7 @@ class TemplateContext:
         if record.object_id:
             self._behavior.objects.pop(record.object_id)
             undo_manager.on_delete_object(record)
+            self.logger.debug(f"Deleted object {record}")
             return record
 
         return None
@@ -288,6 +300,7 @@ class TemplateContext:
         array: HkbArray = record.get_path_value(path)
         array.append(item)
         undo_manager.on_update_array_item(array, -1, None, item)
+        self.logger.debug(f"Appended {item} to {path} of {record}")
 
     def array_pop(self, record: HkbRecord | str, path: str, index: int = -1) -> Any:
         """Remove a value from an array inside a record.
@@ -312,6 +325,7 @@ class TemplateContext:
         array: HkbArray = record.get_path_value(path)
         ret = array.pop(index).get_value()
         undo_manager.on_update_array_item(array, index, ret, None)
+        self.logger.debug(f"Removed item {index} ({ret}) from {path} of {record}")
         return ret
 
     def free_state_id(self, statemachine: HkbRecord | str) -> int:
@@ -332,13 +346,13 @@ class TemplateContext:
 
     def bind_variable(
         self,
-        obj: HkbRecord | str,
+        record: HkbRecord | str,
         path: str,
         variable: Variable | str | int,
     ) -> HkbRecord:
-        """Bind a record field to a variable. 
-        
-        This allows to control aspects of a behavior object through HKS or TAE. Most commonly used for ManualSelectorGenerators. Note that in HKS variables are referenced by their name, in all other places the variables' indices are used. 
+        """Bind a record field to a variable.
+
+        This allows to control aspects of a behavior object through HKS or TAE. Most commonly used for ManualSelectorGenerators. Note that in HKS variables are referenced by their name, in all other places the variables' indices are used.
 
         If the record does not have a variableBindingSet yet it will be created. If the record already has a binding for the specified path it will be updated to the provided variable.
 
@@ -356,12 +370,15 @@ class TemplateContext:
         HkbRecord
             The variable binding set to which the field was bound.
         """
-        obj = get_object(self._behavior, obj)
+        record = get_object(self._behavior, record)
 
+        var = variable
         if isinstance(variable, Variable):
-            variable = variable.index
+            var = variable.index
 
-        return bind_variable(self._behavior, obj, path, variable)
+        binding_set = bind_variable(self._behavior, record, path, var)
+        self.logger.debug(f"Bound {path} of {record} to variable {variable.name}")
+        return binding_set
 
     def new_variable(
         self,
@@ -370,8 +387,8 @@ class TemplateContext:
         range_min: int = 0,
         range_max: int = 0,
     ) -> Variable:
-        """Create a new variable. 
-        
+        """Create a new variable.
+
         Variables are typically used to control behaviors from other subsystems like HKS and TAE. See :py:meth:`bind_attribute` for the most common use case.
 
         Parameters
@@ -392,6 +409,7 @@ class TemplateContext:
         """
         idx = self._behavior.create_variable(name, data_type, range_min, range_max)
         undo_manager.on_create_variable(self._behavior, name)
+        self.logger.debug(f"Created new variable {name} ({idx})")
         return Variable(idx, name)
 
     def get_variable(self, name: str) -> Variable:
@@ -404,7 +422,7 @@ class TemplateContext:
 
         Raises
         ------
-        IndexError
+        ValueError
             If no variable with the specified name can be found.
 
         Returns
@@ -415,8 +433,8 @@ class TemplateContext:
         return Variable(self._behavior.find_variable(name), name)
 
     def new_event(self, event: str) -> Event:
-        """Create a new event. 
-        
+        """Create a new event.
+
         Events are typically used to trigger transitions between statemachine states. See :py:meth:`new_statemachine_state` for details.
         TODO mention events.txt
 
@@ -432,6 +450,7 @@ class TemplateContext:
         """
         idx = self._behavior.create_event(event)
         undo_manager.on_create_event(self._behavior, event)
+        self.logger.debug(f"Created new event {event} ({idx})")
         return Event(idx, event)
 
     def get_event(self, name: str) -> Event:
@@ -444,7 +463,7 @@ class TemplateContext:
 
         Raises
         ------
-        IndexError
+        ValueError
             If no event with the specified name can be found.
 
         Returns
@@ -475,6 +494,7 @@ class TemplateContext:
 
         idx = self._behavior.create_animation(animation)
         undo_manager.on_create_animation(self._behavior, animation)
+        self.logger.debug(f"Created new animation {animation} ({idx})")
         return Animation(
             idx,
             self._behavior.get_animation(idx, full_name=False),
@@ -488,6 +508,11 @@ class TemplateContext:
         ----------
         short_name : str
             The name of the animation following the `aXXX_YYYYYY` pattern.
+
+        Raises
+        ------
+        ValueError
+            If the specified animation cannot be found.
 
         Returns
         -------
@@ -532,14 +557,12 @@ class TemplateContext:
             self._behavior.add_object(record)
             undo_manager.on_create_object(self._behavior, record)
 
+        self.logger.debug(f"Created new object {record}")
+
         return record
 
     def make_copy(
-        self,
-        source: HkbRecord | str,
-        *,
-        object_id: str = "<new>",
-        **overrides
+        self, source: HkbRecord | str, *, object_id: str = "<new>", **overrides
     ) -> HkbRecord:
         """Creates a copy of a record.
 
@@ -559,14 +582,10 @@ class TemplateContext:
         """
         source = get_object(source)
 
-        attributes = {k:v.get_value() for k,v in source.get_value().items()}
+        attributes = {k: v.get_value() for k, v in source.get_value().items()}
         attributes.update(**overrides)
 
-        return self.new(
-            source.type_name,
-            object_id=object_id,
-            **attributes
-        )
+        return self.new(source.type_name, object_id=object_id, **attributes)
 
     # Offer common defaults and highlight required settings for the most common objects
     # TODO document functions and their arguments
@@ -582,6 +601,7 @@ class TemplateContext:
         enableTae: bool = True,
         offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
         animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
+        changeTypeOfSelectedIndexAfterActivate: ChangeIndexType = ChangeIndexType.NONE,
         checkAnimEndSlotNo: int = -1,
         **kwargs,
     ) -> HkbRecord:
@@ -610,6 +630,7 @@ class TemplateContext:
             enableTae=enableTae,
             checkAnimEndSlotNo=checkAnimEndSlotNo,
             animeEndEventType=animeEndEventType,
+            changeTypeOfSelectedIndexAfterActivate=changeTypeOfSelectedIndexAfterActivate,
             **kwargs,
         )
 
@@ -626,7 +647,9 @@ class TemplateContext:
         **kwargs,
     ) -> HkbRecord:
         if generators:
-            generators = [get_object(self._behavior, obj).object_id for obj in generators]
+            generators = [
+                get_object(self._behavior, obj).object_id for obj in generators
+            ]
         else:
             generators = []
 
@@ -747,13 +770,19 @@ class TemplateContext:
         flags: TransitionInfoFlags = 0,
         **kwargs,
     ) -> HkbRecord:
-        if transition is None:
-            transition = next(self._behavior.query("name:DefaultTransition"), None)
-
         if isinstance(eventId, Event):
             eventId = eventId.index
         elif isinstance(eventId, str):
             eventId = self._behavior.find_event(eventId)
+
+        if transition is None:
+            transition = next(
+                self._behavior.query(
+                    "DefaultTransition type_name:CustomTransitionEffect"
+                ),
+                None,
+            )
+        transition = get_object(self._behavior, transition)
 
         kwargs.setdefault("triggerInterval/enterEventId", -1)
         kwargs.setdefault("triggerInterval/exitEventId", -1)

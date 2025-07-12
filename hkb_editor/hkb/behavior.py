@@ -98,7 +98,7 @@ class HavokBehavior(Tagfile):
     def find_event(self, event: str, default: Any = _undefined) -> int:
         try:
             return self._events.index(event)
-        except (IndexError, ValueError):
+        except ValueError:
             if default != _undefined:
                 return default
             raise
@@ -168,7 +168,7 @@ class HavokBehavior(Tagfile):
     def find_variable(self, variable: str, default: Any = _undefined) -> int:
         try:
             return self._variables.index(variable)
-        except (IndexError, ValueError):
+        except ValueError:
             if default != _undefined:
                 return default
             raise
@@ -235,7 +235,7 @@ class HavokBehavior(Tagfile):
         try:
             full_anim_name = self.get_full_animation_name(animation_name)
             return self._animations.index(full_anim_name)
-        except (IndexError, ValueError):
+        except ValueError:
             if default != _undefined:
                 return default
             raise
