@@ -395,4 +395,6 @@ This essentially allows you to create entirely new animation slots.
 
     dpg.split_frame()
     center_window(dialog)
+    
+    dpg.focus_item(f"{tag}_base_name")
     return dialog

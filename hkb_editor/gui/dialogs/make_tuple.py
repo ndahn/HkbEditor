@@ -15,7 +15,7 @@ def new_tuple_dialog(
 ) -> str:
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
-    
+
     new_val = [t() for t in columns.values()]
 
     def assemble(sender: str, new_value: Any, val_idx: int):
@@ -40,13 +40,17 @@ def new_tuple_dialog(
     ) as dialog:
         for idx, (col, subval) in enumerate(zip(columns.keys(), new_val)):
             create_value_widget(
-                idx, subval, callback=assemble, label=col, choices=choices
+                idx,
+                subval,
+                callback=assemble,
+                label=col,
+                choices=choices,
+                tag=f"{tag}_widget_{idx}",
             )
 
         with dpg.group(horizontal=True):
             dpg.add_button(label="Okay", callback=create_entry)
-            dpg.add_button(
-                label="Cancel", callback=lambda: dpg.delete_item(dialog)
-            )
+            dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(dialog))
 
+    dpg.focus_item(f"{tag}_widget_0")
     return tag

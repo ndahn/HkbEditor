@@ -213,6 +213,8 @@ def find_dialog(
     # Wait a frame so the size of our widgets is known
     dpg.split_frame()
     on_filter_update(f"{tag}_filter", initial_filter, None)
+
+    dpg.focus_item(f"{tag}_filter")
     return dialog
 
 

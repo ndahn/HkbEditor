@@ -131,6 +131,7 @@ def edit_simple_array_dialog(
         dpg.add_input_text(
             hint="Filter Entries",
             callback=lambda s, a, u: dpg.set_value(table, dpg.get_value(s)),
+            tag=f"{tag}_filter",
         )
 
         dpg.add_separator()
@@ -165,4 +166,5 @@ def edit_simple_array_dialog(
                 
                 dpg.add_text(line, color=color)
 
+    dpg.focus_item(f"{tag}_filter")
     fill_table()

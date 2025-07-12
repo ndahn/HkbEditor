@@ -138,6 +138,8 @@ class BehaviorEditor(GraphEditor):
 
             self._reload_templates()
             self._set_menus_enabled(True)
+            
+            dpg.focus_item(f"{self.tag}_roots_filter")
         except Exception as e:
             details = traceback.format_exception_only(e)
             self.logger.error(
@@ -500,7 +502,7 @@ class BehaviorEditor(GraphEditor):
             parent = next(self.canvas.graph.predecessors(record.object_id), None)
             if parent:
                 self.selected_node = self.canvas.nodes[parent]
-                
+
             self.regenerate_all()
             self.logger.warning(f"{record} removed, but references may still exist")
 

@@ -70,7 +70,7 @@ def create_object_dialog(
         type_name = tagfile.type_registry.get_name(new_type_id)
         dpg.set_value(f"{tag}_object_type", type_name)
 
-        # By having the record here all UI widgets can modify it directly and we don't
+        # By creating the record here all UI widgets can modify it directly and we don't
         # need to collect their attributes later
         oid = dpg.get_value(f"{tag}_object_id")
         record = HkbRecord.new(tagfile, new_type_id, object_id=oid)

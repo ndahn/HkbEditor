@@ -88,8 +88,11 @@ def apply_template_dialog(
 
         args[arg.name] = value
 
-    def create_widget(arg: TemplateContext._Arg) -> None:
+    # TODO use helpers.create_value_widget
+    def create_widget(arg: TemplateContext._Arg) -> str:
         # TODO make some of the AttributeWidget functions reusable for this
+
+        tag = f"{tag}_attribute_{arg.name}"
 
         # Simple types
         if arg.type == int:
@@ -97,7 +100,7 @@ def apply_template_dialog(
             widget = dpg.add_input_int(
                 label=arg.name,
                 default_value=default,
-                tag=f"{tag}_attribute_{arg.name}",
+                tag=tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -106,7 +109,7 @@ def apply_template_dialog(
             widget = dpg.add_input_float(
                 label=arg.name,
                 default_value=default,
-                tag=f"{tag}_attribute_{arg.name}",
+                tag=tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -115,7 +118,7 @@ def apply_template_dialog(
             widget = dpg.add_checkbox(
                 label=arg.name,
                 default_value=default,
-                tag=f"{tag}_attribute_{arg.name}",
+                tag=tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -124,7 +127,7 @@ def apply_template_dialog(
             widget = dpg.add_input_text(
                 label=arg.name,
                 default_value=default,
-                tag=f"{tag}_attribute_{arg.name}",
+                tag=tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -137,7 +140,7 @@ def apply_template_dialog(
                 choices,
                 label=arg.name,
                 default_value=default,
-                tag=f"{tag}_attribute_{arg.name}",
+                tag=tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -201,7 +204,7 @@ def apply_template_dialog(
                 dpg.add_input_text(
                     readonly=True,
                     default_value=default,
-                    tag=f"{tag}_attribute_{arg.name}",
+                    tag=tag,
                 )
                 dpg.add_button(
                     arrow=True,
@@ -238,7 +241,7 @@ def apply_template_dialog(
                 dpg.add_input_text(
                     readonly=True,
                     default_value=default,
-                    tag=f"{tag}_attribute_{arg.name}",
+                    tag=tag,
                 )
                 dpg.add_button(
                     arrow=True,
@@ -252,11 +255,13 @@ def apply_template_dialog(
 
         else:
             show_warning(f"Argument {arg.name} has unhandled type {arg.type.__name__}")
-            return
+            return None
 
         if arg.doc:
             with dpg.tooltip(widget):
                 dpg.add_text(arg.doc)
+
+        return tag
 
     def on_okay() -> None:
         dpg.hide_item(f"{tag}_notification")
@@ -311,6 +316,8 @@ def apply_template_dialog(
         finally:
             dpg.delete_item(loading_indicator)
 
+    widget_zero = None
+
     with dpg.window(
         label=template._title,
         width=400,
@@ -322,7 +329,9 @@ def apply_template_dialog(
     ) as window:
         # Parameters required to run the template
         for arg in template._args.values():
-            create_widget(arg)
+            widget = create_widget(arg)
+            if widget_zero is None:
+                widget_zero = widget
 
         dpg.add_separator()
 
@@ -355,4 +364,6 @@ def apply_template_dialog(
 
     dpg.split_frame()
     center_window(window)
+
+    dpg.focus_item(widget_zero)
     return window

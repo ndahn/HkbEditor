@@ -215,4 +215,6 @@ slot (that is, a TAE ID that is not used by the game yet).
 
     dpg.split_frame()
     center_window(dialog)
+
+    dpg.focus_item(f"{tag}_name")
     return dialog

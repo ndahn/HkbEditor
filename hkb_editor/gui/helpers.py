@@ -1,5 +1,4 @@
-from typing import Any, Callable, Type
-from itertools import groupby
+from typing import Any, Callable, Type, Literal
 from enum import IntFlag
 import logging
 import textwrap
@@ -38,11 +37,17 @@ def create_value_widget(
     callback: Callable[[str, Any, Any], None] = None,
     user_data: Any = None,
     on_enter: bool = False,
+    label: str = "",
+    tag: str = 0,
     **kwargs,
-):
+) -> str:
+    if tag in (None, 0, ""):
+        tag = dpg.generate_uuid()
+
     if user_data is None:
         user_data = val_idx
 
+    # TODO support for Literal, merge with function in apply_template
     if choices and val_idx in choices:
         items = choices[val_idx]
         dpg.add_combo(
@@ -50,6 +55,8 @@ def create_value_widget(
             callback=callback,
             user_data=user_data,
             default_value=items[val if val is not None else 0],
+            label=label,
+            tag=tag,
             **kwargs,
         )
     elif val is None or isinstance(val, str):
@@ -58,6 +65,8 @@ def create_value_widget(
             user_data=user_data,
             default_value=val or "",
             on_enter=on_enter,
+            label=label,
+            tag=tag,
             **kwargs,
         )
     elif isinstance(val, int):
@@ -66,6 +75,8 @@ def create_value_widget(
             user_data=user_data,
             default_value=val,
             on_enter=on_enter,
+            label=label,
+            tag=tag,
             **kwargs,
         )
     elif isinstance(val, float):
@@ -74,6 +85,8 @@ def create_value_widget(
             user_data=user_data,
             default_value=val,
             on_enter=on_enter,
+            label=label,
+            tag=tag,
             **kwargs,
         )
     elif isinstance(val, bool):
@@ -81,10 +94,17 @@ def create_value_widget(
             callback=callback,
             user_data=user_data,
             default_value=val,
+            label=label,
+            tag=tag,
             **kwargs,
         )
     else:
-        print(f"WARNING cannot handle value {val} with unknown type")
+        logging.getLogger().warning(
+            f"Cannot create widget for value {val} with unexpected type {type(val).__name__}"
+        )
+        return None
+
+    return tag
 
 
 def make_copy_menu(record_or_getter: HkbRecord | Callable[[], HkbRecord]) -> None:
@@ -181,7 +201,7 @@ def create_flag_checkboxes(
     def set_from_int(sender: str, new_value: int, user_data: Any):
         new_flags = flag_type(new_value)
         for flag in flag_type:
-            active = (flag in new_flags)
+            active = flag in new_flags
             if flag.value == 0 and new_flags > 0:
                 active = False
 

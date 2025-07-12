@@ -281,9 +281,9 @@ class GraphEditor:
         ):
             dpg.add_input_text(
                 hint="Filter",
-                tag=f"{self.tag}_roots_filter",
                 callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
                 user_data=f"{self.tag}_roots_table",
+                tag=f"{self.tag}_roots_filter",
                 width=-1,
             )
             dpg.add_separator()
