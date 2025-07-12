@@ -3,6 +3,7 @@ import re
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
+from hkb_editor.hkb.common import CommonActionsMixin
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
 from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags as ClipFlags
 from hkb_editor.gui.workflows.undo import undo_manager
@@ -21,6 +22,7 @@ def register_clip_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
+    util = CommonActionsMixin(behavior)
     selected_cmsg: HkbRecord = None
     cmsg_query: str = ""
 
@@ -87,43 +89,28 @@ def register_clip_dialog(
             show_warning("CMSG not set")
             return
 
-        clipgen_id = behavior.new_id()
-        # Unfortunately dpg combo only gives us the item, not the index
+        # dpg combo only gives us the item, not the index
         playback_mode = PlaybackMode[playback_mode_name].value
-        anim_idx = behavior.find_animation(animation_name)
 
         clip_flags = 0
         for flag in ClipFlags:
             if dpg.get_value(f"{tag}_clipflags_{flag.name}"):
                 clip_flags |= flag
 
-        clipgen_type = behavior.type_registry.find_first_type_by_name(
-            "hkbClipGenerator"
-        )
-        clipgen = HkbRecord.new(
-            behavior,
-            clipgen_type,
-            {
-                "name": clip_name,
-                "animationName": animation_name,
-                "mode": playback_mode,
-                "animationInternalId": anim_idx,
-                "flags": clip_flags,
-                "playbackSpeed": 1.0,
-            },
-            clipgen_id,
-        )
-
+        # Do the deed
         with undo_manager.combine():
-            # Add objects with IDs to behavior
-            behavior.add_object(clipgen)
-            undo_manager.on_create_object(behavior, clipgen)
+            clip = util.new_clip(
+                animation_name,
+                name=clip_name,
+                mode=playback_mode,
+                flags=clip_flags,
+            )
 
             generators: HkbArray = selected_cmsg["generators"]
-            generators.append(clipgen_id)
-            undo_manager.on_update_array_item(generators, -1, None, clipgen_id)
+            generators.append(clip.object_id)
+            undo_manager.on_update_array_item(generators, -1, None, clip.object_id)
 
-        callback(dialog, (clipgen_id, selected_cmsg.object_id), user_data)
+        callback(dialog, (selected_cmsg, clip), user_data)
         dpg.delete_item(dialog)
 
     # Dialog content

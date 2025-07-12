@@ -349,7 +349,7 @@ class BehaviorEditor(GraphEditor):
     def add_pinned_object(self, object_id: HkbRecord | str) -> None:
         if isinstance(object_id, HkbRecord):
             object_id = object_id.object_id
-            
+
         if dpg.does_item_exist(f"{self.tag}_pin_{object_id}"):
             # Already pinned
             return
@@ -593,6 +593,9 @@ class BehaviorEditor(GraphEditor):
         return None
 
     def jump_to_object(self, object_id: str):
+        if isinstance(object_id, HkbRecord):
+            object_id = object_id.object_id
+
         # Open the associated state machine
         root = self.get_active_statemachine(object_id)
 
@@ -821,15 +824,16 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_clip_registered(sender: str, ids: tuple[str, str], user_data: Any):
-            clip_id, cmsg_id = ids
-            self.jump_to_object(clip_id)
+        def on_clip_registered(sender: str, records: tuple[HkbRecord, HkbRecord], user_data: Any):
+            cmsg, clip = records
 
             # This is a bit ugly, but so is adding more stuff to ids
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
-                self.add_pinned_object(clip_id)
-                self.add_pinned_object(cmsg_id)
+                self.add_pinned_object(cmsg)
+                self.add_pinned_object(clip)
+            
+            self.jump_to_object(clip)
 
         register_clip_dialog(
             self.beh,
@@ -843,16 +847,21 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_cmsg_created(sender: str, ids: tuple[str, str, str], user_data: Any):
-            cmsg_id, clipgen_id, stateinfo_id = ids
-            self.jump_to_object(cmsg_id)
+        def on_cmsg_created(
+            sender: str,
+            records: tuple[HkbRecord, HkbRecord, HkbRecord],
+            user_data: Any,
+        ):
+            stateinfo, cmsg, clip = records
 
             # This is a bit ugly, but so is adding more stuff to ids
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
-                self.add_pinned_object(cmsg_id)
-                self.add_pinned_object(clipgen_id)
-                self.add_pinned_object(stateinfo_id)
+                self.add_pinned_object(stateinfo)
+                self.add_pinned_object(cmsg)
+                self.add_pinned_object(clip)
+
+            self.jump_to_object(cmsg)
 
         active_sm = self.get_active_statemachine()
         create_cmsg_dialog(

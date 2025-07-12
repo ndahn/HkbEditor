@@ -7,6 +7,7 @@ from hkb_editor.hkb.hkb_enums import (
     hkbClipGenerator_PlaybackMode as PlaybackMode,
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
+from hkb_editor.hkb.common import CommonActionsMixin
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
 )
@@ -40,6 +41,7 @@ def create_cmsg_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
+    util = CommonActionsMixin(behavior)
     types = behavior.type_registry
     selected_transitioninfo_effect: HkbRecord = None
     selected_stateinfo_effect: HkbRecord = None
@@ -73,14 +75,6 @@ def create_cmsg_dialog(
         if not event_val:
             show_warning("Event not set")
             return
-
-        # Look up the types we need
-        cmsg_type = types.find_first_type_by_name("CustomManualSelectorGenerator")
-        clipgen_type = types.find_first_type_by_name("hkbClipGenerator")
-        stateinfo_type = types.find_first_type_by_name("hkbStateMachine::StateInfo")
-        transitioninfo_type = types.find_first_type_by_name(
-            "hkbStateMachine::TransitionInfo"
-        )
 
         # Resolve values
         statemachine_type = types.find_first_type_by_name("hkbStateMachine")
@@ -133,92 +127,49 @@ def create_cmsg_dialog(
             if dpg.get_value(f"{tag}_transition_flags_{flag.name}"):
                 transition_flags |= flag
 
-        # Generate the new objects
-        cmsg_id = behavior.new_id()
-        clipgen_id = behavior.new_id()
-        stateinfo_id = behavior.new_id()
-
-        clipgen = HkbRecord.new(
-            behavior,
-            clipgen_type,
-            {
-                "name": f"{animation_val}_{base_name}",
-                "animationName": animation_val,
-                "mode": playback_mode,
-                "animationInternalId": anim_idx,
-                "playbackSpeed": 1.0,
-            },
-            clipgen_id,
-        )
-        cmsg = HkbRecord.new(
-            behavior,
-            cmsg_type,
-            {
-                "name": cmsg_name,
-                "animId": anim_id,
-                "generators": [clipgen_id],
-                "animeEndEventType": animation_end_event_type,
-                "enableScript": True,
-                "enableTae": True,
-                "checkAnimEndSlotNo": -1,
-            },
-            cmsg_id,
-        )
-        stateinfo = HkbRecord.new(
-            behavior,
-            stateinfo_type,
-            {
-                "name": base_name,
-                "generator": cmsg_id,
-                "transitions": stateinfo_transition_effect_id,
-                "stateId": new_state_id,
-                "probability": 1.0,
-                "enable": True,
-            },
-            stateinfo_id,
-        )
-        transitioninfo = HkbRecord.new(
-            behavior,
-            transitioninfo_type,
-            {
-                "transition": transitioninfo_effect_id,
-                "eventId": event_id,
-                "toStateId": new_state_id,
-                "flags": transition_flags,
-            },
-            # No object ID, this one lives inside an array
-        )
-
+        # Do the deed
         with undo_manager.combine():
-            # Add objects with IDs to behavior
-            behavior.add_object(cmsg)
-            undo_manager.on_create_object(behavior, cmsg)
+            clip = util.new_clip(
+                anim_idx,
+                name=f"{animation_val}_{base_name}",
+                mode=playback_mode,
 
-            behavior.add_object(clipgen)
-            undo_manager.on_create_object(behavior, clipgen)
-
-            behavior.add_object(stateinfo)
-            undo_manager.on_create_object(behavior, stateinfo)
+            )
+            cmsg = util.new_cmsg(
+                name=cmsg_name,
+                animId=anim_id,
+                generators=[clip],
+                animeEndEventType=animation_end_event_type,
+                enableScript=True,
+                enableTae=True,
+                checkAnimEndSlotNo=-1,
+            )
+            stateinfo = util.new_statemachine_state(
+                name=base_name,
+                generator=cmsg,
+                transitions=stateinfo_transition_effect_id,
+                stateId=new_state_id,
+            )
+            transitioninfo = util.new_transition_info(
+                transition=transitioninfo_effect_id,
+                eventId=event_id,
+                toStateId=new_state_id,
+                flags=transition_flags,
+            )
 
             # add stateinfo to statemachine/states array
-            sm_states: HkbArray = statemachine.get_field("states")
-            stateinfo_pointer = HkbPointer.new(
-                behavior, sm_states.element_type_id, stateinfo_id
-            )
-            sm_states.append(stateinfo_pointer)
-            undo_manager.on_update_array_item(sm_states, -1, None, stateinfo_pointer)
+            sm_states = statemachine["states"]
+            sm_states.append(stateinfo.object_id)
+            undo_manager.on_update_array_item(sm_states, -1, None, stateinfo.object_id)
 
             # Add transition info to statemachine
-            wildcard_transitions_obj = behavior.objects[
-                wildcard_transitions_ptr.get_value()
-            ]
-            wildcard_transitions: HkbArray = wildcard_transitions_obj["transitions"]
+            wildcard_transitions = wildcard_transitions_ptr.get_target()["transitions"]
             wildcard_transitions.append(transitioninfo)
             undo_manager.on_update_array_item(
                 wildcard_transitions, -1, None, transitioninfo
             )
 
-        callback(dialog, (cmsg_id, clipgen_id, stateinfo_id), user_data)
+        callback(dialog, (stateinfo, cmsg, clip), user_data)
         dpg.delete_item(dialog)
 
     # Dialog content

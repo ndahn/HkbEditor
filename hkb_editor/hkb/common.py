@@ -377,7 +377,7 @@ class CommonActionsMixin:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
-        transition = self.get_object(transition)
+        transitions = self.get_object(transitions)
         generator = self.get_object(generator)
 
         return self.new_record(
@@ -385,7 +385,7 @@ class CommonActionsMixin:
             object_id=object_id,
             stateId=stateId,
             name=name,
-            transitions=transitions.object_id if transition else None,
+            transitions=transitions.object_id if transitions else None,
             generator=generator.object_id if generator else None,
             probability=probability,
             enable=enable,
