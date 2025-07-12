@@ -14,6 +14,7 @@ class Tagfile:
     def __init__(self, xml_file: str):
         from .hkb_types import HkbRecord
 
+        self.file = xml_file
         self._tree: ET._ElementTree = ET.parse(
             # lxml keeps comments, which affect subelement counts and iterations.
             # TODO we should handle comments properly at some point so they are kept,

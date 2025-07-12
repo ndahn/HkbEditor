@@ -564,6 +564,7 @@ class BehaviorEditor(GraphEditor):
         )
 
     def find_lost_objects(self) -> list[str]:
+        # TODO open a dialog to select the object or SM to search from
         root_sm = next(self.beh.query("name:Root"), None)
         if not root_sm:
             self.logger.error("Could not locate Root SM")

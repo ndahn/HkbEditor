@@ -56,7 +56,7 @@ def run(
         return state
 
     statemachine = ctx.find("Attack_SM")
-    base_state_id = ctx.free_state_id()
+    base_state_id = ctx.get_next_state_id(statemachine)
 
     for i in range(num_attacks):
         anim_id = base_anim_id + i

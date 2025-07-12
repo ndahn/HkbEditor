@@ -44,7 +44,7 @@ def run(
     gesture_base_name = f"Gesture_{gesture_id:03}"
 
     gesture_sm = ctx.find("name:EventGesture_SM")
-    state1_id = ctx.free_state_id(gesture_sm)
+    state1_id = ctx.get_next_state_id(gesture_sm)
     state2_id = state1_id + 1
 
     # Setup new statemachine state transitions
@@ -80,7 +80,7 @@ def run(
     # Start to loop
     ####
     default_transition = ctx.find("name:DefaultTransition")
-    transitions = ctx.new(
+    transitions = ctx.new_record(
         "hkbStateMachine::TransitionInfoArray",
     )
     transition_info = ctx.new_transition_info(

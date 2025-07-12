@@ -174,7 +174,7 @@ def run(
             selectedIndexCanChangeAfterActivate=True,
         )
 
-        normalitem_state = ctx.new(
+        normalitem_state = ctx.new_record(
             "hkbStateMachine::StateInfo",
             name="ItemWeaponEnchant",
             generator=normalitem_selector.object_id,
@@ -236,7 +236,7 @@ def run(
             selectedIndexCanChangeAfterActivate=True,
         )
 
-        normalitem_upper_state = ctx.new(
+        normalitem_upper_state = ctx.new_record(
             "hkbStateMachine::StateInfo",
             name="ItemWeaponEnchant_Upper",
             generator=normalitem_upper_selector.object_id,

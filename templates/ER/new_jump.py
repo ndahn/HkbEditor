@@ -51,7 +51,7 @@ def run(
     jump_sm = ctx.find("NewJump StateMachine")
 
     # Transition
-    transition_effect = ctx.new(
+    transition_effect = ctx.new_record(
         "CustomTransitionEffect",
         name=f"{name}_to_Jump_Loop",
         duration=0.5,
@@ -70,7 +70,7 @@ def run(
     )
     transitions = ctx.new_transition_info_array(transitions=[trans])
 
-    state_id = ctx.free_state_id(jump_sm)
+    state_id = ctx.get_next_state_id(jump_sm)
     state = ctx.new_statemachine_state(
         state_id, # TODO raster used 39643 here, just an unused one?
         name=name,

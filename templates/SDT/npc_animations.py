@@ -49,7 +49,7 @@ def run(
 
     # NOTE Yes, Sekiro has a typo here
     sm = ctx.find("DefualtAttack_SM")
-    state_id = ctx.free_state_id(sm)
+    state_id = ctx.get_next_state_id(sm)
 
     default_transition = ctx.find("type_name:CustomTransitionEffect DefaultTransition")
 
