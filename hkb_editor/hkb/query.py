@@ -1,11 +1,10 @@
-from typing import Generator, Callable, Iterable, TYPE_CHECKING
+from typing import Any, Generator, Callable, Iterable, TYPE_CHECKING
 import fnmatch
 from lark import Lark, Transformer, LarkError
 from rapidfuzz import fuzz
 
 if TYPE_CHECKING:
-    from .tagfile import Tagfile
-    from .hkb_types import HkbRecord
+    from .hkb_types import HkbRecord, HkbArray
 
 
 # See https://lucene.apache.org/core/2_9_4/queryparsersyntax.html
@@ -98,6 +97,26 @@ class QueryTransformer(Transformer):
             for path in ("object_id", "type_id", "type_name", "name")
         )
 
+    def _is_matching(self, value: Any, token: str) -> bool:
+        # fuzzy
+        if token.startswith("~"):
+            return fuzz.partial_ratio(value, token[1:]) >= 50
+
+        # wildcard
+        if "*" in token:
+            return fnmatch.fnmatch(value, token)
+
+        # range
+        if token.startswith("[") and " TO " in token:
+            lo, hi = token.strip("[]").split(" TO ")
+            try:
+                return float(lo) <= float(value) <= float(hi)
+            except ValueError:
+                return False
+
+        # Exact match
+        return value == token
+
     # common matching function
     def _match(self, path: str, token: str) -> bool:
         if path.startswith('"') or path.startswith("'"):
@@ -108,32 +127,31 @@ class QueryTransformer(Transformer):
             path = "object_id"
 
         try:
-            actual = getattr(self.record, path)
-        except AttributeError:
-            try:
-                # Still need to match against a string!
-                actual = str(self.record.get_path_value(path, resolve=True))
-            except KeyError:
-                return False
+            if "/" in path:
+                # It's an actual item path
+                if ":*" in path:
+                    # Handle array item wildcard
+                    # TODO only supports a single array wildcard for now
+                    loc = path.index(":*")
+                    frags = path[:loc], path[loc + 2:]
+                    array: HkbArray = self.record.get_path_value(frags[0])
 
-        # fuzzy
-        if token.startswith("~"):
-            return fuzz.partial_ratio(actual, token[1:]) >= 50
+                    for i in range(len(array)):
+                        item_path = f"{frags[0]}:{i}{frags[1]}"
+                        if self._match(item_path, token):
+                            # Return True if any of the items match
+                            return True
+                    
+                    return False
+                else:
+                    # Still need to match against a string!
+                    actual = str(self.record.get_path_value(path, resolve=True))
+            else:
+                actual = self.record[path]
+        except (AttributeError, KeyError, ValueError) as e:
+            return False
 
-        # wildcard
-        if "*" in token:
-            return fnmatch.fnmatch(actual, token)
-
-        # range
-        if token.startswith("[") and " TO " in token:
-            lo, hi = token.strip("[]").split(" TO ")
-            try:
-                return float(lo) <= float(actual) <= float(hi)
-            except ValueError:
-                return False
-
-        # Exact match
-        return actual == token
+        return self._is_matching(actual, token)
 
 
 def query_objects(

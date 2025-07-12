@@ -265,6 +265,25 @@ def apply_template_dialog(
         last_obj_id = next(reversed(behavior.objects.keys()))
 
         try:
+            with dpg.window(
+                modal=True,
+                no_title_bar=True,
+                no_background=True,
+                no_close=True,
+                no_move=True,
+                no_resize=True,
+                no_collapse=True,
+                no_saved_settings=True,
+                no_scrollbar=True,
+                autosize=True,
+            ) as loading_indicator:
+                dpg.add_loading_indicator(radius=5)
+
+            dpg.split_frame()
+            center_window(loading_indicator, window)
+
+            logger.info(f"Executing template '{template._title}'")
+
             with undo_manager.combine():
                 execute_template(template, **args)
         except Exception as e:
@@ -275,6 +294,8 @@ def apply_template_dialog(
             logger.error(f"Template failed: {str(e)}", exc_info=e)
             show_warning(f"Template failed: {str(e)}")
         else:
+            logger.info(f"Template '{template._title}' finished successfully")
+
             # Dicts retain insertion order, so anything after the previous last key is new
             new_objects = []
             for oid in reversed(behavior.objects.keys()):
@@ -287,6 +308,8 @@ def apply_template_dialog(
                 callback(window, new_objects, user_data)
 
             dpg.delete_item(window)
+        finally:
+            dpg.delete_item(loading_indicator)
 
     with dpg.window(
         label=template._title,

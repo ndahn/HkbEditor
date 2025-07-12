@@ -272,7 +272,11 @@ class HkbArray(XmlValueHandler):
         if index < 0:
             index = len(self) + index
 
-        item = next(e for i, e in enumerate(self.element) if i == index)
+        try:
+            item = next(e for i, e in enumerate(self.element) if i == index)
+        except StopIteration:
+            raise IndexError(f"Invalid index {index}")
+
         return wrap_element(self.tagfile, item, self.element_type_id)
 
     def __setitem__(self, index: int, value: XmlValueHandler | Any) -> None:
@@ -453,7 +457,7 @@ class HkbRecord(XmlValueHandler):
                     obj = obj[k][int(idx)]
                 else:
                     obj = obj[k]
-        except (AttributeError, KeyError) as e:
+        except (AttributeError, KeyError, IndexError) as e:
             if default != _undefined:
                 return default
             raise KeyError(f"No field with path '{path}'") from e
