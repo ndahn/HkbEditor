@@ -484,7 +484,8 @@ class GraphEditor:
             return
 
         rainbow = style.HighContrastColorGenerator()
-        rainbow.hue_step = 0.1
+        rainbow.hue = 0.3
+        rainbow.hue_step = 0.15
 
         with dpg.window(
             width=300,
