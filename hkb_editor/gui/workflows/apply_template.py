@@ -365,5 +365,7 @@ def apply_template_dialog(
     dpg.split_frame()
     center_window(window)
 
-    dpg.focus_item(widget_zero)
+    if widget_zero is not None:
+        dpg.focus_item(widget_zero)
+    
     return window

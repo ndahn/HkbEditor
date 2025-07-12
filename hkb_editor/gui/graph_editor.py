@@ -480,6 +480,7 @@ class GraphEditor:
     def open_about_dialog(self) -> None:
         tag = f"{self.tag}_about_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -492,6 +493,7 @@ class GraphEditor:
             height=150,
             label="About",
             no_saved_settings=True,
+            on_close=lambda: dpg.delete_item(dialog),
             tag=tag,
         ) as dialog:
             from . import __version__

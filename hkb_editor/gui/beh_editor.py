@@ -130,6 +130,7 @@ class BehaviorEditor(GraphEditor):
         self.alias_manager.clear()
         self.clear_attributes()
         self.remove_all_pinned_objects()
+        self.close_all_dialogs()
 
         try:
             self.beh = HavokBehavior(file_path)
@@ -219,7 +220,7 @@ class BehaviorEditor(GraphEditor):
         ):
             dpg.add_menu_item(
                 label="Create Object...",
-                callback=self.create_object_dialog,
+                callback=self.open_create_object_dialog,
             )
             dpg.add_menu_item(
                 label="Register Clip...", callback=self.open_register_clip_dialog
@@ -619,6 +620,7 @@ class BehaviorEditor(GraphEditor):
     def open_variable_editor(self):
         tag = f"{self.tag}_edit_variables_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -679,6 +681,7 @@ class BehaviorEditor(GraphEditor):
     def open_event_editor(self):
         tag = f"{self.tag}_edit_events_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -732,6 +735,7 @@ class BehaviorEditor(GraphEditor):
     def open_animation_names_editor(self):
         tag = f"{self.tag}_edit_animation_names_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -781,6 +785,7 @@ class BehaviorEditor(GraphEditor):
     def open_search_dialog(self):
         tag = f"{self.tag}_search_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -794,6 +799,7 @@ class BehaviorEditor(GraphEditor):
     def open_stategraph_dialog(self):
         tag = f"{self.tag}_state_graph_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -805,9 +811,10 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
-    def create_object_dialog(self):
+    def open_create_object_dialog(self):
         tag = f"{self.tag}_create_object_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -827,6 +834,7 @@ class BehaviorEditor(GraphEditor):
     def open_register_clip_dialog(self):
         tag = f"{self.tag}_register_clip_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -850,6 +858,7 @@ class BehaviorEditor(GraphEditor):
     def open_create_cmsg_dialog(self):
         tag = f"{self.tag}_create_cmsg_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -910,6 +919,7 @@ class BehaviorEditor(GraphEditor):
     def open_bone_mirror_map_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -918,6 +928,7 @@ class BehaviorEditor(GraphEditor):
     def open_apply_template_dialog(self, template_file: str):
         tag = f"{self.tag}_apply_template_dialog"
         if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
@@ -936,3 +947,20 @@ class BehaviorEditor(GraphEditor):
             on_template_finished,
             tag=tag,
         )
+
+    def close_all_dialogs(self) -> None:
+        dialogs = [
+            "_edit_variables_dialog",
+            "_edit_events_dialog",
+            "_edit_animation_names_dialog",
+            "_search_dialog",
+            "_state_graph_dialog",
+            "_create_object_dialog",
+            "_register_clip_dialog",
+            "_create_cmsg_dialog",
+            "_bone_mirror_dialog",
+            "_apply_template_dialog",
+        ]
+
+        for dlg in dialogs:
+            dpg.delete_item(f"{self.tag}{dlg}")
