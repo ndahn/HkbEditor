@@ -93,7 +93,7 @@ class HkbFloat(XmlValueHandler):
     def float_to_ieee754(cls, value: float) -> str:
         # IEEE 754 representation for 64bit floats
         h = struct.unpack(">Q", struct.pack(">d", value))[0]
-        return f"#{h}:016x"
+        return f"#{h:016x}"
 
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "real":
@@ -107,8 +107,9 @@ class HkbFloat(XmlValueHandler):
 
     def set_value(self, value: float) -> None:
         # Behaviors use commas as decimal separators
-        self.element.attrib["dec"] = str(float(value)).replace(".", ",")
-        self.element.attrib["hex"] = self.float_to_ieee754(float(value))
+        value = float(value)
+        self.element.attrib["dec"] = str(value).replace(".", ",")
+        self.element.attrib["hex"] = self.float_to_ieee754(value)
 
 
 class HkbBool(XmlValueHandler):

@@ -1,5 +1,5 @@
 @echo off
-CALL "C:\Users\Managarm\miniforge3\Scripts\activate.bat"
+CALL "%userprofile%\miniforge3\Scripts\activate.bat"
 CALL conda activate hkbeditor
 
 REM "=== RUNNING PYINSTALLER ==="
@@ -11,3 +11,4 @@ REN dist\main.exe hkbeditor.exe
 COPY LICENSE dist\
 COPY README.md dist\
 COPY user_layout.ini dist\default_layout.ini
+ROBOCOPY templates dist\templates /E

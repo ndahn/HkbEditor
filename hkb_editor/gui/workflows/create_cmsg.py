@@ -157,6 +157,7 @@ def create_cmsg_dialog(
                 "animationName": animation_val,
                 "mode": playback_mode,
                 "animationInternalId": anim_idx,
+                "playbackSpeed": 1.0,
             },
             clipgen_id,
         )

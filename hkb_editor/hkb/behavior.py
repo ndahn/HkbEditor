@@ -25,7 +25,6 @@ class HkbVariable:
 
 
 class HavokBehavior(Tagfile):
-
     def __init__(self, xml_file: str):
         super().__init__(xml_file)
 
@@ -39,9 +38,9 @@ class HavokBehavior(Tagfile):
         # arrays with 10s of thousands of items. Caching these here will increase the 
         # initial file opening time by a few seconds, but in return the user won't have 
         # to sit idle every time they open a select dialog or similar
-        self._events = CachedArray[str].wrap(strings_obj["eventNames"])
-        self._variables = CachedArray[str].wrap(strings_obj["variableNames"])
-        self._animations = CachedArray[str].wrap(strings_obj["animationNames"])
+        self._events = CachedArray[str](strings_obj["eventNames"])
+        self._variables = CachedArray[str](strings_obj["variableNames"])
+        self._animations = CachedArray[str](strings_obj["animationNames"])
 
         graphdata_type_id = self.type_registry.find_first_type_by_name("hkbBehaviorGraphData")
         graphdata_obj = next(self.find_objects_by_type(graphdata_type_id))

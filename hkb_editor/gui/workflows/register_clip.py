@@ -108,6 +108,7 @@ def register_clip_dialog(
                 "mode": playback_mode,
                 "animationInternalId": anim_idx,
                 "flags": clip_flags,
+                "playbackSpeed": 1.0,
             },
             clipgen_id,
         )
