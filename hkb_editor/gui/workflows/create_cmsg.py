@@ -136,19 +136,6 @@ def create_cmsg_dialog(
         clipgen_id = behavior.new_id()
         stateinfo_id = behavior.new_id()
 
-        cmsg = HkbRecord.new(
-            behavior,
-            cmsg_type,
-            {
-                "name": cmsg_name,
-                "animId": anim_id,
-                "animeEndEventType": animation_end_event_type,
-                "enableScript": True,
-                "enableTae": True,
-                "generators": [clipgen_id],
-            },
-            cmsg_id,
-        )
         clipgen = HkbRecord.new(
             behavior,
             clipgen_type,
@@ -160,6 +147,20 @@ def create_cmsg_dialog(
                 "playbackSpeed": 1.0,
             },
             clipgen_id,
+        )
+        cmsg = HkbRecord.new(
+            behavior,
+            cmsg_type,
+            {
+                "name": cmsg_name,
+                "animId": anim_id,
+                "generators": [clipgen_id],
+                "animeEndEventType": animation_end_event_type,
+                "enableScript": True,
+                "enableTae": True,
+                "checkAnimEndSlotNo": -1,
+            },
+            cmsg_id,
         )
         stateinfo = HkbRecord.new(
             behavior,

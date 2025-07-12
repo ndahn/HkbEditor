@@ -106,9 +106,14 @@ class HkbFloat(XmlValueHandler):
         return float(self.element.attrib.get("dec", "0").replace(",", "."))
 
     def set_value(self, value: float) -> None:
-        # Behaviors use commas as decimal separators
         value = float(value)
-        self.element.attrib["dec"] = str(value).replace(".", ",")
+        
+        # Some older versions of HKLib seem to have decompiled floats with commas
+        str_value = str(value)
+        if self.tagfile.floats_use_commas:
+            str_value = str_value.replace(".", ",")
+
+        self.element.attrib["dec"] = str_value
         self.element.attrib["hex"] = self.float_to_ieee754(value)
 
 

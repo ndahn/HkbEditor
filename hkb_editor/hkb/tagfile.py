@@ -23,6 +23,9 @@ class Tagfile:
         )
         root: ET._Element = self._tree.getroot()
 
+        # Some versions of HKLib seem to decompile floats with commas
+        self.floats_use_commas = bool(root.xpath("(//real[contains(@dec, ',')])[1]"))
+        
         self.type_registry = TypeRegistry()
         self.type_registry.load_types(root)
 
