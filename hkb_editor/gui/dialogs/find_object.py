@@ -35,13 +35,13 @@ def find_dialog(
     if item_limit is None:
         item_limit = 2000 / len(columns)
         # round to nearest hundred
-        item_limit = max(100, int(round(item_limit/100)) * 100)
+        item_limit = max(100, int(round(item_limit / 100)) * 100)
 
     def on_filter_update(sender, filt, user_data):
         dpg.delete_item(table, children_only=True, slot=1)
 
         # Get matching items and update total count. May take a while depending on the filter func
-        # TODO would be nice to have a nicer animation here, 
+        # TODO would be nice to have a nicer animation here,
         # but the loading indicator has a fixed size
         dpg.set_value(f"{tag}_total", "(Searching...)")
         matches = item_getter(filt)
@@ -51,7 +51,7 @@ def find_dialog(
             if idx > item_limit:
                 dpg.set_value(f"{tag}_total", f"({item_limit}/? matches)")
                 break
-            
+
             cells = item_to_row(item)
             if isinstance(cells, str):
                 cells = (cells,)
@@ -86,7 +86,7 @@ def find_dialog(
         # Deselect all other selectables
         if is_selected:
             for row in dpg.get_item_children(table, slot=1):
-                row_selected = (dpg.get_item_user_data(row) == item)
+                row_selected = dpg.get_item_user_data(row) == item
                 dpg.set_value(dpg.get_item_children(row, slot=1)[0], row_selected)
 
     def on_okay():
@@ -105,7 +105,7 @@ def find_dialog(
         def open_context_menu(sender: str, app_data: tuple[int, int]):
             _, row = app_data
             item = dpg.get_item_user_data(row)
-            
+
             if item is not None:
                 # Force select the right-clicked item
                 on_select(sender, True, item)
@@ -165,7 +165,7 @@ def find_dialog(
             scrollY=True,
             height=310,
             sortable=True,
-            #sort_tristate=True,
+            # sort_tristate=True,
             sort_multi=True,
             callback=table_sort,
             tag=f"{tag}_table",
@@ -278,7 +278,7 @@ def select_object(
 
     def find_matches(filt: str) -> list[HkbRecord]:
         return query_objects(candidates, filt)
-        
+
     def item_to_row(item: HkbRecord):
         name = item.get_field("name", "", resolve=True)
         type_name = behavior.type_registry.get_name(item.type_id)
@@ -333,7 +333,11 @@ def select_variable(
         return (item[0], *item[1].astuple())
 
     def on_okay(sender: str, selected: tuple[int, HkbVariable], user_data: Any):
-        on_variable_selected(sender, selected[0], user_data)
+        on_variable_selected(
+            sender,
+            selected[0] if selected is not None else None,
+            user_data,
+        )
 
     return find_dialog(
         find_matches,
@@ -341,7 +345,7 @@ def select_variable(
         item_to_row,
         okay_callback=on_okay,
         allow_clear=allow_clear,
-        #item_limit=len(variables) * 1.1,
+        # item_limit=len(variables) * 1.1,
         initial_filter=initial_filter,
         title=title,
         tag=tag,
@@ -374,7 +378,11 @@ def select_event(
         return item
 
     def on_okay(sender: str, selected: tuple[int, str], user_data: Any):
-        on_event_selected(sender, selected[0], user_data)
+        on_event_selected(
+            sender,
+            selected[0] if selected is not None else None,
+            user_data,
+        )
 
     return find_dialog(
         find_matches,
@@ -382,7 +390,7 @@ def select_event(
         item_to_row,
         okay_callback=on_okay,
         allow_clear=allow_clear,
-        #item_limit=len(events) * 1.1,
+        # item_limit=len(events) * 1.1,
         initial_filter=initial_filter,
         title=title,
         tag=tag,
@@ -419,7 +427,11 @@ def select_animation(
         return item
 
     def on_okay(sender: str, selected: tuple[int, str], user_data: Any):
-        on_animation_name_selected(sender, selected[0], user_data)
+        on_animation_name_selected(
+            sender,
+            selected[0] if selected is not None else None,
+            user_data,
+        )
 
     return find_dialog(
         find_matches,
@@ -427,7 +439,7 @@ def select_animation(
         item_to_row,
         okay_callback=on_okay,
         allow_clear=allow_clear,
-        #item_limit=len(animations) * 1.1,
+        # item_limit=len(animations) * 1.1,
         initial_filter=initial_filter,
         title=title,
         tag=tag,

@@ -149,6 +149,8 @@ def bind_attribute(
     if binding_set is None:
         binding_id = create_variable_binding_set(behavior, record)
         binding_set = behavior.objects[binding_id]
+    else:
+        binding_id = binding_set.object_id
 
     bindings: HkbArray = binding_set["bindings"]
     bnd: HkbRecord
@@ -196,6 +198,7 @@ def unbind_attribute(
 
     for idx, bnd in enumerate(bindings):
         if bnd["memberPath"] == path:
+            # TODO not removing value?
             old_value = bindings.pop(idx)
             undo_manager.on_update_array_item(bindings, idx, old_value, None)
             break

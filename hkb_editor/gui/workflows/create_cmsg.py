@@ -173,6 +173,7 @@ def create_cmsg_dialog(
                 "transitions": stateinfo_transition_effect_id,
                 "stateId": new_state_id,
                 "probability": 1.0,
+                "enable": True,
             },
             stateinfo_id,
         )
