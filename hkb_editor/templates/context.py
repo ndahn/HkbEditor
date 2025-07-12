@@ -49,6 +49,8 @@ class TemplateContext(CommonActionsMixin):
 
     Templates are python scripts with a `run` function that takes a `TemplateContext` as their first argument. This object should be the main way of modifying the behavior from templates, primarily to give proper support for undo (or rollback in case of errors).
 
+    Note that this class inherits from :py:class:`CommonActionsMixin` and thus provides many convenience functions for common tasks like creating CMSGs and the likes.
+
     Raises
     ------
     SyntaxError
@@ -66,6 +68,7 @@ class TemplateContext(CommonActionsMixin):
 
     def __init__(self, behavior: HavokBehavior, template_file: str):
         super().__init__(behavior)
+        
         self._template_file = template_file
         self._template_func: ast.FunctionDef = None
 

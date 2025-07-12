@@ -146,6 +146,7 @@ def bind_attribute(
 ) -> str:
     binding_set = get_variable_binding_set(behavior, record)
 
+    # TODO make use of the CommonActionsMixin instead
     if binding_set is None:
         binding_id = create_variable_binding_set(behavior, record)
         binding_set = behavior.objects[binding_id]
