@@ -213,7 +213,7 @@ class GraphEditor:
 
     def _do_load_from_file(self, file_path: str) -> None:
         # Just some test data
-        g = self.graph = nx.DiGraph()
+        g = nx.DiGraph()
 
         g.add_node("A")
         g.add_node("AB1")

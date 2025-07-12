@@ -1,6 +1,7 @@
 from typing import Any
 from collections import deque
 from dataclasses import dataclass
+import logging
 from lxml import etree as ET
 import networkx as nx
 
@@ -34,15 +35,17 @@ class HavokBehavior(Tagfile):
         )
         strings_obj = next(self.find_objects_by_type(strings_type_id))
 
-        # Querying the actual values of a full array can be very slow, especially for 
-        # arrays with 10s of thousands of items. Caching these here will increase the 
-        # initial file opening time by a few seconds, but in return the user won't have 
+        # Querying the actual values of a full array can be very slow, especially for
+        # arrays with 10s of thousands of items. Caching these here will increase the
+        # initial file opening time by a few seconds, but in return the user won't have
         # to sit idle every time they open a select dialog or similar
         self._events = CachedArray[str](strings_obj["eventNames"])
         self._variables = CachedArray[str](strings_obj["variableNames"])
         self._animations = CachedArray[str](strings_obj["animationNames"])
 
-        graphdata_type_id = self.type_registry.find_first_type_by_name("hkbBehaviorGraphData")
+        graphdata_type_id = self.type_registry.find_first_type_by_name(
+            "hkbBehaviorGraphData"
+        )
         graphdata_obj = next(self.find_objects_by_type(graphdata_type_id))
 
         self._event_infos: HkbArray = graphdata_obj["eventInfos"]
@@ -65,14 +68,21 @@ class HavokBehavior(Tagfile):
         expand(root.element, root_id)
         g.add_node(root_id)
 
+        logger = logging.getLogger()
+
         while todo:
             # popleft: breadth first, pop(right): depth first
             parent_id, pointer_elem = todo.pop()
             pointer_id = pointer_elem.attrib["id"]
-            g.add_edge(parent_id, pointer_id)
 
-            obj = self.objects[pointer_id]
-            expand(obj.element, obj.object_id)
+            obj = self.objects.get(pointer_id)
+            if obj:
+                g.add_edge(parent_id, pointer_id)
+                expand(obj.element, obj.object_id)
+            else:
+                logger.warning(
+                    f"Object {parent_id} is referencing non-existing object {pointer_id}"
+                )
 
         return g
 
@@ -83,7 +93,7 @@ class HavokBehavior(Tagfile):
         self._event_infos.insert(
             idx, HkbRecord.new(self, self._event_infos.element_type_id)
         )
-        
+
         if idx < 0:
             return len(self._variables) - idx
 
@@ -152,7 +162,7 @@ class HavokBehavior(Tagfile):
     def get_variables(self, full_info: bool = False) -> list[str] | list[HkbVariable]:
         if full_info:
             return [self.get_variable(i) for i in range(len(self._variables))]
-        
+
         return self._variables.get_value()
 
     def get_variable_name(self, idx: int) -> str:
@@ -211,7 +221,7 @@ class HavokBehavior(Tagfile):
     def create_animation(self, animation_name: str, idx: int = -1) -> int:
         full_anim_name = self.get_full_animation_name(animation_name)
         self._animations.insert(idx, full_anim_name)
-        
+
         if idx < 0:
             return len(self._animations) - idx
 

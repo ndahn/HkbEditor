@@ -564,7 +564,6 @@ class AttributesWidget:
                     user_data=(widget, path, value),
                 )
 
-            # TODO use make_copy_menu
             dpg.add_selectable(
                 label="Copy",
                 callback=self._copy_value,
@@ -629,6 +628,9 @@ class AttributesWidget:
                 def _on_binding_established(
                     sender, data: tuple[int, str], user_data: Any
                 ):
+                    if data is None:
+                        return
+
                     # If a new binding set was created the graph will change
                     # binding_var, binding_set_id = data
                     if self.on_graph_changed:
@@ -753,6 +755,5 @@ class AttributesWidget:
     def _copy_to_clipboard(self, data: str):
         try:
             pyperclip.copy(data)
-            self.logger.debug("Copied value:\n%s", data)
         except Exception as e:
             self.logger.warning(f"Copying value failed: {e}", exc_info=e)

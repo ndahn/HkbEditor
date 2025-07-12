@@ -6,7 +6,7 @@ from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
 from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags as ClipFlags
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.gui.dialogs import select_animation_name, select_object
+from hkb_editor.gui.dialogs import select_animation, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes, add_paragraphs
 from hkb_editor.gui import style
 
@@ -63,7 +63,8 @@ def register_clip_dialog(
     def on_cmsg_selected(sender: str, cmsg: HkbRecord, user_data: Any):
         nonlocal selected_cmsg
         selected_cmsg = cmsg
-        dpg.set_value(f"{tag}_cmsg_name", cmsg["name"].get_value())
+        name = cmsg["name"].get_value() if cmsg else ""
+        dpg.set_value(f"{tag}_cmsg_name", name)
 
     def show_warning(msg: str) -> None:
         dpg.set_value(f"{tag}_notification", msg)
@@ -153,8 +154,9 @@ def register_clip_dialog(
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,
-                callback=lambda s, a, u: select_animation_name(*u),
-                user_data=(behavior, on_animation_selected),
+                callback=lambda: select_animation(
+                    behavior, on_animation_selected, allow_clear=False
+                ),
             )
             dpg.add_text("Animation")
 

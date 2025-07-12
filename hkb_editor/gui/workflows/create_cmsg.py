@@ -11,7 +11,7 @@ from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
 )
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.gui.dialogs import select_event, select_animation_name, select_object
+from hkb_editor.gui.dialogs import select_event, select_animation, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes, add_paragraphs
 from hkb_editor.gui import style
 
@@ -111,15 +111,17 @@ def create_cmsg_dialog(
         # Add entry to animations array. We also need the parts in some places
         anim_id = int(animation_val.split("_")[-1])
         anim_idx = behavior.find_animation(animation_val)
-        
+
         # Add event to the events array
         event_id = behavior.find_event(event_val)
-        
+
         playback_mode = PlaybackMode[playback_mode_val].value
         animation_end_event_type = AnimeEndEventType[animation_end_event_type_val].value
 
         transitioninfo_effect_id = (
-            selected_transitioninfo_effect.object_id if selected_transitioninfo_effect else None
+            selected_transitioninfo_effect.object_id
+            if selected_transitioninfo_effect
+            else None
         )
 
         stateinfo_transition_effect_id = (
@@ -170,6 +172,7 @@ def create_cmsg_dialog(
                 "generator": cmsg_id,
                 "transitions": stateinfo_transition_effect_id,
                 "stateId": new_state_id,
+                "probability": 1.0,
             },
             stateinfo_id,
         )
@@ -272,8 +275,9 @@ def create_cmsg_dialog(
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,
-                callback=lambda s, a, u: select_event(*u),
-                user_data=(behavior, on_event_selected),
+                callback=lambda: select_event(
+                    behavior, on_event_selected, allow_clear=False
+                ),
             )
 
             dpg.add_text("CMSG Event")
@@ -297,8 +301,9 @@ def create_cmsg_dialog(
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,
-                callback=lambda s, a, u: select_animation_name(*u),
-                user_data=(behavior, on_animation_selected),
+                callback=lambda: select_animation(
+                    behavior, on_animation_selected, allow_clear=False
+                ),
             )
 
             dpg.add_text("Clip Animation")
@@ -322,16 +327,17 @@ def create_cmsg_dialog(
                 ):
                     nonlocal selected_transitioninfo_effect
                     selected_transitioninfo_effect = transition
-                    dpg.set_value(
-                        f"{tag}_transition_effect",
-                        selected_transitioninfo_effect["name"].get_value(),
-                    )
+                    name = transition["name"].get_value() if transition else ""
+                    dpg.set_value(f"{tag}_transition_effect", name)
 
-                transition_effect_type_id = behavior.type_registry.find_first_type_by_name(
-                    "hkbTransitionEffect"
+                transition_effect_type_id = (
+                    behavior.type_registry.find_first_type_by_name(
+                        "hkbTransitionEffect"
+                    )
                 )
                 default_transition = next(
-                    behavior.query(f"type_id:{transition_effect_type_id} TaeBlend"), None
+                    behavior.query(f"type_id:{transition_effect_type_id} TaeBlend"),
+                    None,
                 )
 
                 dpg.add_input_text(
@@ -352,7 +358,7 @@ def create_cmsg_dialog(
                         on_transition_selected,
                     ),
                 )
-                dpg.add_text("TransitionInfo Transition")
+                dpg.add_text("Wildcard Transition")
 
             with dpg.tooltip(dpg.last_container()):
                 dpg.add_text(
@@ -361,6 +367,9 @@ def create_cmsg_dialog(
 
             # TransitionInfo flags
             with dpg.tree_node(label="Transition Flags"):
+                with dpg.tooltip(dpg.last_container()):
+                    dpg.add_text("Flags of the new wildcard transition")
+
                 create_flag_checkboxes(
                     TransitionInfoFlags,
                     None,
@@ -382,7 +391,8 @@ def create_cmsg_dialog(
                 def on_pointer_selected(sender: str, target: HkbRecord, user_data: Any):
                     nonlocal selected_stateinfo_effect
                     selected_stateinfo_effect = target
-                    dpg.set_value(f"{tag}_stateinfo_transitions", target.object_id)
+                    oid = target.object_id if target else ""
+                    dpg.set_value(f"{tag}_stateinfo_transitions", oid)
 
                 dpg.add_input_text(
                     default_value="",
@@ -394,9 +404,16 @@ def create_cmsg_dialog(
                     arrow=True,
                     direction=dpg.mvDir_Right,
                     callback=lambda s, a, u: select_object(*u),
-                    user_data=(behavior, transition_effect_type_id, on_pointer_selected),
+                    user_data=(
+                        behavior,
+                        transition_effect_type_id,
+                        on_pointer_selected,
+                    ),
                 )
-                dpg.add_text("StateInfo Transitions")
+                dpg.add_text("State Transitions")
+
+            with dpg.tooltip(dpg.last_container()):
+                dpg.add_text("Will be used by the new StateInfo")
 
         dpg.add_spacer(height=3)
 

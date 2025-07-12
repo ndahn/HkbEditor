@@ -145,6 +145,8 @@ def create_flag_checkboxes(
     if base_tag in (None, 0, ""):
         base_tag = dpg.generate_uuid()
 
+    zero_name = flag_type(0).name or "DISABLED"
+
     def on_flag_changed(sender: str, checked: bool, flag: IntFlag):
         nonlocal active_flags
 
@@ -157,24 +159,34 @@ def create_flag_checkboxes(
         else:
             # Prevent disabling 0
             if flag == 0:
-                dpg.set_value(f"{base_tag}_0", True)
+                dpg.set_value(f"{base_tag}_{zero_name}", True)
                 return
 
             active_flags &= ~flag
 
         # Flags are not required to have a 0 mapping
-        if dpg.does_item_exist(f"{base_tag}_0"):
+        if dpg.does_item_exist(f"{base_tag}_{zero_name}"):
             # 0 disables all other flags and enables 0
             if active_flags == 0:
                 for flag in flag_type:
-                    dpg.set_value(f"{base_tag}_{flag.value}", False)
-                dpg.set_value(f"{base_tag}_0", True)
+                    dpg.set_value(f"{base_tag}_{flag.name}", False)
+                dpg.set_value(f"{base_tag}_{zero_name}", True)
             # 0 is disabled by any other flag
             else:
-                dpg.set_value(f"{base_tag}_0", False)
+                dpg.set_value(f"{base_tag}_{zero_name}", False)
 
         if callback:
             callback(base_tag, active_flags, user_data)
+
+    def set_from_int(sender: str, new_value: int, user_data: Any):
+        new_flags = flag_type(new_value)
+        for flag in flag_type:
+            active = (flag in new_flags)
+            if flag.value == 0 and new_flags > 0:
+                active = False
+
+            dpg.set_value(f"{base_tag}_{flag.name}", active)
+            on_flag_changed(sender, active, flag)
 
     if not isinstance(active_flags, flag_type):
         try:
@@ -186,19 +198,28 @@ def create_flag_checkboxes(
             )
             active_flags = 0
 
-    for flag in flag_type:
-        if flag == 0:
-            # 0 is in every flag
-            active = active_flags == 0
-        else:
-            active = flag in active_flags
+    with dpg.group():
+        for flag in flag_type:
+            if flag == 0:
+                # 0 is in every flag
+                active = active_flags == 0
+            else:
+                active = flag in active_flags
 
-        dpg.add_checkbox(
-            default_value=active,
-            callback=on_flag_changed,
-            label=flag.name,
-            tag=f"{base_tag}_{flag.name}",
-            user_data=flag,
+            dpg.add_checkbox(
+                default_value=active,
+                callback=on_flag_changed,
+                label=flag.name,
+                tag=f"{base_tag}_{flag.name}",
+                user_data=flag,
+            )
+
+    with dpg.popup(dpg.last_container(), min_size=(50, 20)):
+        dpg.add_input_int(
+            label="from int",
+            default_value=active_flags,
+            on_enter=True,
+            callback=set_from_int,
         )
 
 

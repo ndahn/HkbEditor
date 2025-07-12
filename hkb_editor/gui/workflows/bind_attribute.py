@@ -63,17 +63,22 @@ def select_variable_to_bind(
     user_data: Any = None,
 ):
     def on_variable_selected(sender, selected_idx: int, user_data: Any):
-        with undo_manager.combine():
-            binding_id = bind_attribute(
-                behavior,
-                record,
-                bindable_attribute,
-                path,
-                selected_idx,
-            )
-
+        if selected_idx is None:
+            unbind_attribute(behavior, record, bindable_attribute, path)
             if on_bind:
-                on_bind(sender, [selected_idx, binding_id], user_data)
+                on_bind(sender, None, user_data)
+        else:
+            with undo_manager.combine():
+                binding_id = bind_attribute(
+                    behavior,
+                    record,
+                    bindable_attribute,
+                    path,
+                    selected_idx,
+                )
+
+                if on_bind:
+                    on_bind(sender, [selected_idx, binding_id], user_data)
 
     select_variable(
         behavior, on_variable_selected, user_data=user_data

@@ -183,7 +183,6 @@ class UndoManager:
         tagfile: Tagfile,
         new_object: HkbRecord,
     ) -> None:
-        assert new_object.object_id, "Trying to add an object without an ID"
         self.on_complex_action(
             lambda obj=new_object: tagfile.remove_object(obj.object_id),
             lambda obj=new_object: tagfile.add_object(obj),
@@ -194,7 +193,6 @@ class UndoManager:
         tagfile: Tagfile,
         obj: HkbRecord,
     ) -> None:
-        assert obj.object_id in tagfile.objects, "Trying to remove non-existing object"
         self.on_complex_action(
             lambda obj=obj: tagfile.add_object(obj),
             lambda obj=obj: tagfile.remove_object(obj.object_id),

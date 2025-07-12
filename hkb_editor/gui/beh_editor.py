@@ -477,10 +477,28 @@ class BehaviorEditor(GraphEditor):
             make_copy_menu(obj)
 
             dpg.add_selectable(
+                label="Delete",
+                callback=lambda s, a, u: self._delete_node(u),
+                user_data=node,
+            )
+
+            dpg.add_separator()
+
+            dpg.add_selectable(
                 label="Pin Object",
-                callback=lambda s, a, u: self.add_pinned_object(u.object_id),
+                callback=lambda s, a, u: self.add_pinned_object(u),
                 user_data=obj,
             )
+
+    def _delete_node(self, node: Node) -> None:
+        record = self.beh.objects.get(node.id)
+        if record:
+            # TODO remove all references to record
+            self.beh.remove_object(record.object_id)
+            undo_manager.on_delete_object(self.beh, record)
+            self.selected_node = None
+            self.regenerate_all()
+            self.logger.warning(f"{record} removed, but references may still exist")
 
     def _copy_to_clipboard(self, data: str):
         try:
@@ -506,11 +524,7 @@ class BehaviorEditor(GraphEditor):
             if new_value not in self.canvas.nodes:
                 # Edges have changed, previous node may not be connected anymore, new
                 # node may not be part of the current statemachine graph yet, ...
-                root_id = self.get_active_statemachine().object_id
-                selected = self.selected_node
-                self._on_root_selected(sender, True, root_id)
-                if selected:
-                    self.canvas.select(selected)
+                self.regenerate_all()
             else:
                 # Changing a pointer will change the rendered graph
                 self.canvas.regenerate()
@@ -518,6 +532,13 @@ class BehaviorEditor(GraphEditor):
     def _update_attributes(self, node):
         record = self.beh.objects[node.id]
         self.attributes_widget.set_record(record)
+
+    def regenerate_all(self) -> None:
+        root_id = self.get_active_statemachine().object_id
+        selected = self.selected_node
+        self._on_root_selected("", True, root_id)
+        if selected:
+            self.canvas.select(selected)
 
     def clear_attributes(self):
         self.attributes_widget.clear()
@@ -582,7 +603,7 @@ class BehaviorEditor(GraphEditor):
 
         # Reveal the node in the state machine graph
         path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
-        self.attributes_widget.clear()
+        self.clear_attributes()
         self.canvas.show_node_path(path)
 
     def open_variable_editor(self):

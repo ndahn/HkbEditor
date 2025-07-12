@@ -514,10 +514,11 @@ class GraphWidget:
         self._draw_node(node)
 
         for child_id in self.graph.successors(node.id):
-            child_node = self.nodes[child_id]
-            self._draw_node(child_node)
-            if self.draw_edges:
-                self._draw_edge(node, child_node)
+            child_node = self.nodes.get(child_id)
+            if child_node:
+                self._draw_node(child_node)
+                if self.draw_edges:
+                    self._draw_edge(node, child_node)
 
         node.unfolded = True
 

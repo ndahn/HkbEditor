@@ -16,6 +16,7 @@ def find_dialog(
     *,
     context_menu_func: Callable[[Any], None] = None,
     okay_callback: Callable[[str, Any, Any], None] = None,
+    allow_clear: bool = False,
     item_limit: int = None,
     initial_filter: str = "",
     show_index: bool = False,
@@ -93,6 +94,10 @@ def find_dialog(
             return
 
         okay_callback(dialog, selected_item, user_data)
+        dpg.delete_item(dialog)
+
+    def on_clear():
+        okay_callback(dialog, None, user_data)
         dpg.delete_item(dialog)
 
     if context_menu_func:
@@ -183,6 +188,11 @@ def find_dialog(
                     label="Cancel",
                     callback=lambda: dpg.delete_item(dialog),
                 )
+                if allow_clear:
+                    dpg.add_button(
+                        label="Clear",
+                        callback=on_clear,
+                    )
 
     on_filter_update(f"{tag}_filter", initial_filter, None)
     return dialog
@@ -248,6 +258,7 @@ def select_object(
     *,
     include_derived: bool = True,
     initial_filter: str = "",
+    allow_clear: bool = True,
     title: str = None,
     tag: str = None,
     user_data: Any = None,
@@ -285,6 +296,7 @@ def select_object(
         ["ID", "Name", "Type"],
         item_to_row,
         okay_callback=on_pointer_selected,
+        allow_clear=allow_clear,
         initial_filter=initial_filter,
         title=title,
         filter_help=lucene_help_text,
@@ -299,6 +311,7 @@ def select_variable(
     on_variable_selected: Callable[[str, int, Any], None],
     *,
     initial_filter: str = "",
+    allow_clear: bool = True,
     title: str = "Select Variable",
     tag: str = None,
     user_data: Any = None,
@@ -327,6 +340,7 @@ def select_variable(
         ["ID", "Variable", "Type", "Min", "Max"],
         item_to_row,
         okay_callback=on_okay,
+        allow_clear=allow_clear,
         #item_limit=len(variables) * 1.1,
         initial_filter=initial_filter,
         title=title,
@@ -340,6 +354,7 @@ def select_event(
     on_event_selected: Callable[[str, int, Any], None],
     *,
     initial_filter: str = "",
+    allow_clear: bool = True,
     title: str = "Select Event",
     tag: str = None,
     user_data: Any = None,
@@ -366,6 +381,7 @@ def select_event(
         ["ID", "Event"],
         item_to_row,
         okay_callback=on_okay,
+        allow_clear=allow_clear,
         #item_limit=len(events) * 1.1,
         initial_filter=initial_filter,
         title=title,
@@ -374,11 +390,12 @@ def select_event(
     )
 
 
-def select_animation_name(
+def select_animation(
     behavior: HavokBehavior,
     on_animation_name_selected: Callable[[str, int, Any], None],
     *,
     initial_filter: str = "",
+    allow_clear: bool = True,
     full_names: bool = False,
     title: str = "Select Animation Name",
     tag: str = None,
@@ -409,6 +426,7 @@ def select_animation_name(
         ["ID", "Animation"],
         item_to_row,
         okay_callback=on_okay,
+        allow_clear=allow_clear,
         #item_limit=len(animations) * 1.1,
         initial_filter=initial_filter,
         title=title,

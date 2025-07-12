@@ -16,7 +16,7 @@ from hkb_editor.hkb import Tagfile, HavokBehavior, HkbRecord
 from hkb_editor.gui.dialogs import (
     select_variable,
     select_event,
-    select_animation_name,
+    select_animation,
     select_object,
 )
 from hkb_editor.gui.workflows.undo import undo_manager
@@ -48,6 +48,9 @@ def apply_template_dialog(
 
     def set_arg(sender: str, value: Any, arg: TemplateContext._Arg) -> None:
         if get_origin(arg.type) == Literal:
+            if value is None:
+                return
+
             # Literal can hold types other than string, but the combo only supports strings
             for choice in get_choices(arg.type):
                 if str(choice) == value:
@@ -55,19 +58,28 @@ def apply_template_dialog(
                     break
 
         elif arg.type == Variable:
-            var_name = behavior.get_variable_name(value)
-            value = Variable(value, var_name)
+            if value:
+                var_name = behavior.get_variable_name(value)
+                value = Variable(value, var_name)
+            else:
+                var_name = ""
             dpg.set_value(f"{tag}_attribute_{arg.name}", var_name)
 
         elif arg.type == Event:
-            event = behavior.get_event(value)
-            value = Event(value, event)
+            if value:
+                event = behavior.get_event(value)
+                value = Event(value, event)
+            else:
+                event = ""
             dpg.set_value(f"{tag}_attribute_{arg.name}", event)
 
         elif arg.type == Animation:
-            anim_short = behavior.get_animation(value, full_name=False)
-            anim_long = behavior.get_animation(value, full_name=True)
-            value = Animation(value, anim_short, anim_long)
+            if value:
+                anim_short = behavior.get_animation(value, full_name=False)
+                anim_long = behavior.get_animation(value, full_name=True)
+                value = Animation(value, anim_short, anim_long)
+            else:
+                anim_short = ""
             dpg.set_value(f"{tag}_attribute_{arg.name}", anim_short)
 
         else:
@@ -183,7 +195,7 @@ def apply_template_dialog(
                         index = behavior.find_animation(default)
                         set_arg(None, index, arg)
 
-                selector = select_animation_name
+                selector = select_animation
 
             with dpg.group(horizontal=True) as widget:
                 dpg.add_input_text(
