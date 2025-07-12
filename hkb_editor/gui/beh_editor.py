@@ -496,7 +496,11 @@ class BehaviorEditor(GraphEditor):
             # TODO remove all references to record
             self.beh.remove_object(record.object_id)
             undo_manager.on_delete_object(self.beh, record)
-            self.selected_node = None
+
+            parent = next(self.canvas.graph.predecessors(record.object_id), None)
+            if parent:
+                self.selected_node = self.canvas.nodes[parent]
+                
             self.regenerate_all()
             self.logger.warning(f"{record} removed, but references may still exist")
 

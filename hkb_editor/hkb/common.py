@@ -137,7 +137,7 @@ class CommonActionsMixin:
                 )
 
                 self._behavior.add_object(binding_set)
-                undo_manager.on_create_object(binding_set)
+                undo_manager.on_create_object(self._behavior, binding_set)
 
                 binding_set_ptr.set_value(binding_set.object_id)
                 undo_manager.on_update_value(
@@ -167,13 +167,44 @@ class CommonActionsMixin:
                         "memberPath": path,
                         "variableIndex": variable,
                         "bitIndex": -1,
-                        "binding_type": 0,
+                        "bindingType": 0,
                     },
                 )
                 bindings.append(bind)
                 undo_manager.on_update_array_item(bindings, -1, None, bind)
 
         return binding_set
+
+    def clear_variable_binding(
+        self,
+        record: HkbRecord,
+        path: str,
+    ) -> None:
+        """Removes all variable bindings for the specified field path from this record. Will do nothing if the record in question does not (or can not) have a variable binding set.
+
+        Parameters
+        ----------
+        record : HkbRecord
+            The record to clear the variable binding set from. 
+        path : str
+            Path to the bound field.
+        """
+        # The record might not event support variableBindingSets, which is still fine
+        binding_set_ptr: HkbPointer = record.get_field("variableBindingSet", None)
+        if binding_set_ptr is None:
+            return
+
+        binding_set = binding_set_ptr.get_target()
+        if binding_set is None:
+            return
+
+        bindings: HkbArray = binding_set["bindings"]
+        bnd: HkbRecord
+
+        for idx, bnd in enumerate(bindings):
+            if bnd["memberPath"].get_value() == path:
+                old_value = bindings.pop(idx)
+                undo_manager.on_update_array_item(bindings, idx, old_value, None)
 
     def new_record(
         self,

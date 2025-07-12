@@ -5,6 +5,7 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.common import CommonActionsMixin
 from hkb_editor.gui.dialogs import select_variable
 from hkb_editor.gui import style
 from hkb_editor.gui.workflows.undo import undo_manager
@@ -40,51 +41,6 @@ def bindable_attribute(
         pass
 
 
-def set_bindable_attribute_state(
-    behavior: HavokBehavior, bindable_attribute: str, bound_var_idx: int = -1
-):
-    if bound_var_idx >= 0:
-        variable_name = behavior.get_variable_name(bound_var_idx)
-        dpg.set_value(f"{bindable_attribute}_bound", f"@{variable_name}")
-        dpg.show_item(f"{bindable_attribute}_bound")
-        dpg.hide_item(f"{bindable_attribute}_unbound")
-    else:
-        dpg.hide_item(f"{bindable_attribute}_bound")
-        dpg.show_item(f"{bindable_attribute}_unbound")
-
-
-def select_variable_to_bind(
-    behavior: HavokBehavior,
-    record: HkbRecord,
-    bindable_attribute: str,
-    path: str,
-    bound_var_idx: int = -1,
-    on_bind: Callable[[str, tuple[int, str], Any], None] = None,
-    user_data: Any = None,
-):
-    def on_variable_selected(sender, selected_idx: int, user_data: Any):
-        if selected_idx is None:
-            unbind_attribute(behavior, record, bindable_attribute, path)
-            if on_bind:
-                on_bind(sender, None, user_data)
-        else:
-            with undo_manager.combine():
-                binding_id = bind_attribute(
-                    behavior,
-                    record,
-                    bindable_attribute,
-                    path,
-                    selected_idx,
-                )
-
-                if on_bind:
-                    on_bind(sender, [selected_idx, binding_id], user_data)
-
-    select_variable(
-        behavior, on_variable_selected, user_data=user_data
-    )
-
-
 def get_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> HkbRecord:
     if not isinstance(record, HkbRecord):
         return None
@@ -118,87 +74,43 @@ def get_bound_attributes(behavior: HavokBehavior, record: HkbRecord) -> dict[str
     return ret
 
 
-def create_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> str:
-    ptr_type_id = record.get_field_type("variableBindingSet")
-    bindings_type_id = behavior.type_registry.get_subtype(ptr_type_id)
-    binding_id = behavior.new_id()
-    binding_set = HkbRecord.new(behavior, bindings_type_id, None, binding_id)
-
-    # Add the new binding set
-    behavior.add_object(binding_set)
-    undo_manager.on_create_object(behavior, binding_set)
-
-    # Assign pointer to source record
-    vbs = record["variableBindingSet"]
-    old_value = vbs.get_value()
-    vbs.set_value(binding_id)
-    undo_manager.on_update_value(vbs, old_value, binding_id)
-
-    return binding_id
+def set_bindable_attribute_state(
+    behavior: HavokBehavior, bindable_attribute: str, bound_var_idx: int = -1
+):
+    if bound_var_idx >= 0:
+        variable_name = behavior.get_variable_name(bound_var_idx)
+        dpg.set_value(f"{bindable_attribute}_bound", f"@{variable_name}")
+        dpg.show_item(f"{bindable_attribute}_bound")
+        dpg.hide_item(f"{bindable_attribute}_unbound")
+    else:
+        dpg.hide_item(f"{bindable_attribute}_bound")
+        dpg.show_item(f"{bindable_attribute}_unbound")
 
 
-def bind_attribute(
+def select_variable_to_bind(
     behavior: HavokBehavior,
     record: HkbRecord,
     bindable_attribute: str,
     path: str,
-    variable_idx: int,
-) -> str:
-    binding_set = get_variable_binding_set(behavior, record)
+    on_bind: Callable[[str, tuple[int, str], Any], None] = None,
+    user_data: Any = None,
+):
+    def on_variable_selected(sender, selected_idx: int, user_data: Any):
+        util = CommonActionsMixin(behavior)
 
-    # TODO make use of the CommonActionsMixin instead
-    if binding_set is None:
-        binding_id = create_variable_binding_set(behavior, record)
-        binding_set = behavior.objects[binding_id]
-    else:
-        binding_id = binding_set.object_id
+        if selected_idx is None:
+            set_bindable_attribute_state(behavior, bindable_attribute, -1)
+            util.clear_variable_binding(record, path)
 
-    bindings: HkbArray = binding_set["bindings"]
-    bnd: HkbRecord
+            if on_bind:
+                on_bind(sender, None, user_data)
+        else:
+            binding_set = util.bind_variable(record, path, selected_idx)
+            set_bindable_attribute_state(behavior, bindable_attribute, selected_idx)
 
-    for bnd in bindings:
-        if bnd["memberPath"] == path:
-            val = bnd["variableIndex"]
-            old_value = val.get_value()
-            val.set_value(variable_idx)
-            undo_manager.on_update_value(val, old_value, variable_idx)
-            break
-    else:
-        new_binding = HkbRecord.new(
-            behavior,
-            bindings.element_type_id,
-            {
-                "memberPath": path,
-                "variableIndex": variable_idx,
-                "bitIndex": -1,
-                "bindingType": 0,
-            },
-        )
-        bindings.append(new_binding)
-        undo_manager.on_update_array_item(bindings, -1, None, new_binding)
+            if on_bind:
+                on_bind(sender, [selected_idx, binding_set], user_data)
 
-    set_bindable_attribute_state(behavior, bindable_attribute, variable_idx)
-
-    return binding_id
-
-
-def unbind_attribute(
-    behavior: HavokBehavior,
-    record: HkbRecord,
-    bindable_attribute: str,
-    path: str,
-) -> None:
-    set_bindable_attribute_state(behavior, bindable_attribute, -1)
-
-    binding_set = get_variable_binding_set(behavior, record)
-    if binding_set is None:
-        return
-
-    bindings: HkbArray = binding_set["bindings"]
-    bnd: HkbRecord
-
-    for idx, bnd in enumerate(bindings):
-        if bnd["memberPath"].get_value() == path:
-            old_value = bindings.pop(idx)
-            undo_manager.on_update_array_item(bindings, idx, old_value, None)
-            break
+    select_variable(
+        behavior, on_variable_selected, user_data=user_data
+    )

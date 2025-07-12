@@ -18,6 +18,7 @@ from hkb_editor.hkb import (
     get_value_handler,
 )
 from hkb_editor.hkb import get_hkb_enum, get_hkb_flags
+from hkb_editor.hkb.common import CommonActionsMixin
 
 from .dialogs import select_object
 from .table_tree import (
@@ -31,7 +32,6 @@ from .workflows.bind_attribute import (
     select_variable_to_bind,
     get_bound_attributes,
     set_bindable_attribute_state,
-    unbind_attribute,
 )
 from .workflows.aliases import AliasManager
 from .workflows.undo import undo_manager
@@ -620,19 +620,26 @@ class AttributesWidget:
                     dpg.set_value(sender, False)
                     select_variable_to_bind(*user_data)
 
-                def _unbind_variable(sender, app_data, user_data):
+                def _unbind_variable(sender, app_data, data: tuple[HkbRecord, str, str]):
                     # deselect the selectable
                     dpg.set_value(sender, False)
-                    unbind_attribute(*user_data)
+
+                    record, path, bindable_attribute = data
+                    util = CommonActionsMixin(self.tagfile)
+                    util.clear_variable_binding(record, path)
+                    
+                    set_bindable_attribute_state(self.tagfile, bindable_attribute, -1)
 
                 def _on_binding_established(
-                    sender, data: tuple[int, str], user_data: Any
+                    sender, data: tuple[int, HkbRecord], user_data: Any
                 ):
                     if data is None:
                         return
 
+                    # No need to call set_bindable_attribute_state since we'll rebuild the 
+                    # attribute widgets anyways
+
                     # If a new binding set was created the graph will change
-                    # binding_var, binding_set_id = data
                     if self.on_graph_changed:
                         self.on_graph_changed()
 
@@ -649,7 +656,6 @@ class AttributesWidget:
                         self.record,
                         widget,
                         path,
-                        bound_var_idx,
                         _on_binding_established,
                     ),
                 )
@@ -657,7 +663,7 @@ class AttributesWidget:
                 dpg.add_selectable(
                     label="Clear binding",
                     callback=lambda s, a, u: _unbind_variable(s, a, u),
-                    user_data=(self.tagfile, self.record, widget, path),
+                    user_data=(self.record, path, widget),
                 )
 
     # Internal callbacks
