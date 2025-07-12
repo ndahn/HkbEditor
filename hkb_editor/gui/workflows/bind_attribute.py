@@ -198,8 +198,7 @@ def unbind_attribute(
     bnd: HkbRecord
 
     for idx, bnd in enumerate(bindings):
-        if bnd["memberPath"] == path:
-            # TODO not removing value?
+        if bnd["memberPath"].get_value() == path:
             old_value = bindings.pop(idx)
             undo_manager.on_update_array_item(bindings, idx, old_value, None)
             break
