@@ -48,7 +48,7 @@ def run(
     jump_right_anim : Animation, optional
         Animation slot to use for jumps to the right. Register clips from default slot if not specified.
     """
-    jump_sm = ctx.find("'NewJump Statemachine'")
+    jump_sm = ctx.find("'NewJump StateMachine'")
 
     # Transition
     transition_effect = ctx.new_record(
@@ -231,7 +231,7 @@ def run(
                 hand_nh_left_normal_both_selector,
                 hand_nh_left_hard_both_selector,
             ],
-            variableBindingSet=get_binding_set(f"'{base_jump} Selector_N-HAttack_BothLef't")
+            variableBindingSet=get_binding_set(f"'{base_jump} Selector_N-HAttack_BothLeft'")
         )
 
         # Top-level selector for jump attacks

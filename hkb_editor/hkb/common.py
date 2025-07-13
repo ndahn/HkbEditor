@@ -365,9 +365,7 @@ class CommonActionsMixin:
             generators = []
 
         variableBindingSet = self.get_object(variableBindingSet)
-        generatorChangedTransitionEffect = self.get_object(
-            self._behavior, generatorChangedTransitionEffect
-        )
+        generatorChangedTransitionEffect = self.get_object(generatorChangedTransitionEffect)
 
         kwargs.setdefault("sentOnClipEnd/id", -1)
         kwargs.setdefault("endOfClipEventId", -1)
