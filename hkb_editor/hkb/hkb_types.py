@@ -446,7 +446,7 @@ class HkbRecord(XmlValueHandler):
 
     def get_path_value(
         self, path: str, default: Any = _undefined, *, resolve: bool = False
-    ) -> XmlValueHandler:
+    ) -> XmlValueHandler | Any:
         keys = path.split("/")
         obj = self
 

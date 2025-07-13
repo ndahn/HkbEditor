@@ -94,7 +94,7 @@ class QueryTransformer(Transformer):
 
         return any(
             self._match(path, token)
-            for path in ("object_id", "type_id", "type_name", "name")
+            for path in ("object_id", "name", "type_name", "type_id")
         )
 
     def _is_matching(self, value: Any, token: str) -> bool:
@@ -119,6 +119,8 @@ class QueryTransformer(Transformer):
 
     # common matching function
     def _match(self, path: str, token: str) -> bool:
+        from hkb_editor.hkb.hkb_types import XmlValueHandler
+
         if path.startswith('"') or path.startswith("'"):
             path = path[1:-1]
 
@@ -147,9 +149,15 @@ class QueryTransformer(Transformer):
                     # Still need to match against a string!
                     actual = str(self.record.get_path_value(path, resolve=True))
             else:
-                actual = self.record[path]
+                actual = self.record.get_field(path)
         except (AttributeError, KeyError, ValueError) as e:
-            return False
+            # Will retrieve stuff like object_id, type_name, etc
+            actual = getattr(self.record, path, None)
+            if actual is None:
+                return False
+
+        if isinstance(actual, XmlValueHandler):
+            actual = actual.get_value()
 
         return self._is_matching(actual, token)
 
