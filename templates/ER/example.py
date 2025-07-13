@@ -67,7 +67,7 @@ def run(
     )
 
     # Uses our lucene search syntax. See hkb_editor.hkb.query for details
-    parent = ctx.find("name:Root_SM")
+    parent = ctx.find("name:'Root_SM'")
 
     # The object has already been added to the xml in create(), but it still 
     # needs to be linked to the hierarchy

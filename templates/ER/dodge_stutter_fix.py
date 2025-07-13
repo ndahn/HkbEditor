@@ -41,12 +41,12 @@ def run(
     ]
 
     for target in targets:
-        normal_cmsg = ctx.find(f"name:{target}_CMSG* type_name:CustomManualSelectorGenerator")
+        normal_cmsg = ctx.find(f"name:'{target}_CMSG*' type_name:CustomManualSelectorGenerator")
         
         if len(normal_cmsg["generators"]) < 2:
             continue
 
-        selftrans_cmsg = ctx.find(f"name:{target}_Self* type_name:CustomManualSelectorGenerator")
+        selftrans_cmsg = ctx.find(f"name:'{target}_Self*' type_name:CustomManualSelectorGenerator")
 
         for orig_ptr in normal_cmsg["generators"]:
             # Create a copy of the original clip so the selftrans CMSG can run it in parallel

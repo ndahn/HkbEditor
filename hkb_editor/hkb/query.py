@@ -24,7 +24,7 @@ lucene_grammar = r"""
     bare_value: VALUE_TOKEN                 -> value
 
     PATH_OR_STR: PATH | ESCAPED_STRING
-    VALUE_TOKEN: RANGE | FUZZY | WILDCARD | WORD
+    VALUE_TOKEN: RANGE | FUZZY | WILDCARD | WORD | ESCAPED_STRING
     PATH      : /[A-Za-z_][A-Za-z0-9_.]*/
     RANGE     : /\[[^\[\]]+ TO [^\[\]]+\]/
     FUZZY     : /~[^\s()]+/
@@ -124,8 +124,15 @@ class QueryTransformer(Transformer):
     def _match(self, path: str, token: str) -> bool:
         from hkb_editor.hkb.hkb_types import XmlValueHandler
 
-        if path.startswith('"') or path.startswith("'"):
+        if (path.startswith("'") and path.endswith("'")) or (
+            path.startswith('"') and path.endswith('"')
+        ):
             path = path[1:-1]
+
+        if (token.startswith("'") and token.endswith("'")) or (
+            token.startswith('"') and token.endswith('"')
+        ):
+            token = token[1:-1]
 
         # Alias
         if path == "id":
@@ -138,7 +145,7 @@ class QueryTransformer(Transformer):
                     # Handle array item wildcard
                     # TODO only supports a single array wildcard for now
                     loc = path.index(":*")
-                    frags = path[:loc], path[loc + 2:]
+                    frags = path[:loc], path[loc + 2 :]
                     array: HkbArray = self.record.get_path_value(frags[0])
 
                     for i in range(len(array)):
@@ -146,7 +153,7 @@ class QueryTransformer(Transformer):
                         if self._match(item_path, token):
                             # Return True if any of the items match
                             return True
-                    
+
                     return False
                 else:
                     # Still need to match against a string!
