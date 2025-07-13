@@ -95,7 +95,6 @@ class TemplateContext(CommonActionsMixin):
 
         def type_from_str(type_str: str) -> type:
             if type_str.startswith("Literal["):
-                # Python 3.9+
                 choices = ast.literal_eval(type_str[7:])
                 return Literal[tuple(choices)]
 
@@ -113,7 +112,7 @@ class TemplateContext(CommonActionsMixin):
                     TemplateContext,
                 )
             }
-            return valid[type_str]
+            return valid.get(type_str, type(None))
 
         def get_arg_type(arg: ast.arg, arg_doc: DocstringParam, default: Any):
             if arg.annotation:

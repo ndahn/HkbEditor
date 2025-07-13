@@ -254,8 +254,9 @@ def apply_template_dialog(
                 dpg.add_text(arg.name)
 
         else:
-            show_warning(f"Argument {arg.name} has unhandled type {arg.type.__name__}")
-            return None
+            # Refuse to handle the template
+            dpg.delete_item(window)
+            raise ValueError(f"Template argument {arg.name} has unhandled type {arg.type.__name__}")
 
         if arg.doc:
             with dpg.tooltip(widget):
