@@ -23,6 +23,9 @@ lucene_grammar = r"""
     field: PATH_OR_STR ":" VALUE_TOKEN      -> field
     bare_value: VALUE_TOKEN                 -> value
 
+    ESCAPED_STRING: SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING
+    SINGLE_QUOTED_STRING: "'" ( /[^'\\]/ | /\\./ )* "'"
+    DOUBLE_QUOTED_STRING: "\"" ( /[^"\\]/ | /\\./ )* "\""
     PATH_OR_STR: PATH | ESCAPED_STRING
     VALUE_TOKEN: RANGE | FUZZY | WILDCARD | WORD | ESCAPED_STRING
     PATH      : /[A-Za-z_][A-Za-z0-9_.]*/
@@ -31,7 +34,6 @@ lucene_grammar = r"""
     WILDCARD  : /[^\s()]+[*]/
     WORD      : /[^\s()]+/
 
-    %import common.ESCAPED_STRING
     %import common.WS
     %ignore WS
 """
