@@ -1,6 +1,7 @@
 from typing import Any
 import os
 import logging
+from dataclasses import dataclass
 
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray, HkbPointer
@@ -14,6 +15,35 @@ from hkb_editor.hkb.hkb_enums import (
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
 )
+
+
+@dataclass
+class Variable:
+    index: int
+    name: str
+
+
+@dataclass
+class Event:
+    index: int
+    name: str
+
+
+@dataclass
+class Animation:
+    index: int
+    name: str
+    full_name: str
+
+    @property
+    def anim_id(self) -> int:
+        return int(self.name.split("_")[-1])
+
+
+@dataclass
+class HkbRecordSpec:
+    query: str = None
+    type_name: str = None
 
 
 class CommonActionsMixin:

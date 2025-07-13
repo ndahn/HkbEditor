@@ -7,38 +7,9 @@ import re
 from docstring_parser import parse as parse_docstring, DocstringParam
 
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.hkb.common import CommonActionsMixin
+from hkb_editor.hkb.common import CommonActionsMixin, Variable, Event, Animation, HkbRecordSpec
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
-
-
-@dataclass
-class Variable:
-    index: int
-    name: str
-
-
-@dataclass
-class Event:
-    index: int
-    name: str
-
-
-@dataclass
-class Animation:
-    index: int
-    name: str
-    full_name: str
-
-    @property
-    def anim_id(self) -> int:
-        return int(self.name.split("_")[-1])
-
-
-@dataclass
-class HkbRecordSpec:
-    query: str = None
-    type_name: str = None
 
 
 _undefined = object()
