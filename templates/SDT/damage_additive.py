@@ -19,6 +19,8 @@ def run(
 
     Creates a transition to add an additive damage animation on top of another one.
 
+    Author: Igor
+
     Parameters
     ----------
     ctx : TemplateContext
