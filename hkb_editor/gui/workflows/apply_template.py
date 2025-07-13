@@ -92,7 +92,7 @@ def apply_template_dialog(
     def create_widget(arg: TemplateContext._Arg) -> str:
         # TODO make some of the AttributeWidget functions reusable for this
 
-        tag = f"{tag}_attribute_{arg.name}"
+        widget_tag = f"{tag}_attribute_{arg.name}"
 
         # Simple types
         if arg.type == int:
@@ -100,7 +100,7 @@ def apply_template_dialog(
             widget = dpg.add_input_int(
                 label=arg.name,
                 default_value=default,
-                tag=tag,
+                tag=widget_tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -109,7 +109,7 @@ def apply_template_dialog(
             widget = dpg.add_input_float(
                 label=arg.name,
                 default_value=default,
-                tag=tag,
+                tag=widget_tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -118,7 +118,7 @@ def apply_template_dialog(
             widget = dpg.add_checkbox(
                 label=arg.name,
                 default_value=default,
-                tag=tag,
+                tag=widget_tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -127,7 +127,7 @@ def apply_template_dialog(
             widget = dpg.add_input_text(
                 label=arg.name,
                 default_value=default,
-                tag=tag,
+                tag=widget_tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -140,7 +140,7 @@ def apply_template_dialog(
                 choices,
                 label=arg.name,
                 default_value=default,
-                tag=tag,
+                tag=widget_tag,
                 callback=set_arg,
                 user_data=arg,
             )
@@ -204,7 +204,7 @@ def apply_template_dialog(
                 dpg.add_input_text(
                     readonly=True,
                     default_value=default,
-                    tag=tag,
+                    tag=widget_tag,
                 )
                 dpg.add_button(
                     arrow=True,
@@ -241,7 +241,7 @@ def apply_template_dialog(
                 dpg.add_input_text(
                     readonly=True,
                     default_value=default,
-                    tag=tag,
+                    tag=widget_tag,
                 )
                 dpg.add_button(
                     arrow=True,
@@ -261,7 +261,7 @@ def apply_template_dialog(
             with dpg.tooltip(widget):
                 dpg.add_text(arg.doc)
 
-        return tag
+        return widget_tag
 
     def on_okay() -> None:
         dpg.hide_item(f"{tag}_notification")
