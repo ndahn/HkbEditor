@@ -80,7 +80,6 @@ def run(
             name=f"{base_name}{anim.anim_id}",
             generator=cmsg,
         )
-
         ctx.array_add(sm, "states", state.object_id)
 
         transition_flags = TransitionInfoFlags(3584)

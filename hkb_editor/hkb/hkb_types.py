@@ -107,7 +107,7 @@ class HkbFloat(XmlValueHandler):
 
     def set_value(self, value: float) -> None:
         value = float(value)
-        
+
         # Some older versions of HKLib seem to have decompiled floats with commas
         str_value = str(value)
         if self.tagfile.floats_use_commas:
@@ -142,16 +142,12 @@ class HkbBool(XmlValueHandler):
 
 class HkbPointer(XmlValueHandler):
     @classmethod
-    def new(
-        cls, tagfile: Tagfile, type_id: str, value: str = None
-    ) -> "HkbPointer":
+    def new(cls, tagfile: Tagfile, type_id: str, value: str = None) -> "HkbPointer":
         val = str(value) if value else "object0"
         elem = ET.Element("pointer", id=val)
         return HkbPointer(tagfile, elem, type_id)
 
-    def __init__(
-        self, tagfile: Tagfile, element: ET._Element, type_id: str
-    ):
+    def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "pointer":
             raise ValueError(f"Invalid element {element}")
 
@@ -234,14 +230,17 @@ class HkbArray(XmlValueHandler):
     def get_value(self) -> list[XmlValueHandler]:
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return [
-            Handler(self.tagfile, elem, self.element_type_id)
-            for elem in self.element
+            Handler(self.tagfile, elem, self.element_type_id) for elem in self.element
         ]
 
-    def set_value(self, values: list[XmlValueHandler | Any], autowrap: bool = True) -> None:
+    def set_value(
+        self, values: list[XmlValueHandler | Any], autowrap: bool = True
+    ) -> None:
         if autowrap:
             wrapped = []
-            ElemHandler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
+            ElemHandler = get_value_handler(
+                self.tagfile.type_registry, self.element_type_id
+            )
             for v in values:
                 if not isinstance(v, XmlValueHandler):
                     # Could use self._wrap_value, but this way we safe some lookups
@@ -282,7 +281,7 @@ class HkbArray(XmlValueHandler):
     def __setitem__(self, index: int, value: XmlValueHandler | Any) -> None:
         if index < 0:
             index = len(self) + index
-        
+
         if isinstance(value, XmlValueHandler):
             self._verify_compatible(value)
             value = value.get_value()
@@ -292,12 +291,8 @@ class HkbArray(XmlValueHandler):
     def __delitem__(self, index: int) -> None:
         if index < 0:
             index = len(self) + index
-        
-        self.element[:] = [
-            elem
-            for i, elem in enumerate(self.element)
-            if i != index
-        ]
+
+        self.element[:] = [elem for i, elem in enumerate(self.element) if i != index]
 
         self._count -= 1
 
@@ -308,18 +303,18 @@ class HkbArray(XmlValueHandler):
     def _verify_compatible(self, value: XmlValueHandler) -> None:
         if value.type_id == self.element_type_id:
             return True
-        
+
         # NOTE could check for compatible types, but I have yet to see that in use
-        
+
         val_type = self.tagfile.type_registry.get_name(value.type_id)
         exp_type = self.tagfile.type_registry.get_name(self.element_type_id)
-        
+
         # We might be an array of pointers, but even if the underlying type matches
         # we still only can accept its object_id, not the object itself
         # TODO check format once we have a complete format map
-        #fmt = self.tagfile.type_registry.get_format(self.element_type_id)
-        #if fmt == TypeFormats.POINTER
-        
+        # fmt = self.tagfile.type_registry.get_format(self.element_type_id)
+        # if fmt == TypeFormats.POINTER
+
         raise ValueError(
             f"Non-matching value type {value.type_id} ({val_type}), expected {self.element_type_id} ({exp_type})"
         )
@@ -347,7 +342,7 @@ class HkbArray(XmlValueHandler):
     def insert(self, index: int, value: XmlValueHandler | Any) -> None:
         if index < 0:
             index = len(self) + index
-        
+
         if isinstance(value, XmlValueHandler):
             self._verify_compatible(value)
         else:
@@ -388,7 +383,7 @@ class HkbRecord(XmlValueHandler):
             if fname == "userData":
                 # Needs to be unique?
                 field_val.set_value(tagfile.new_userdata_value())
-            
+
             field_elem.append(field_val.element)
 
         if path_values:
@@ -445,13 +440,21 @@ class HkbRecord(XmlValueHandler):
         return None
 
     def get_path_value(
-        self, path: str, default: Any = _undefined, *, resolve: bool = False
+        self,
+        path: str,
+        default: Any = _undefined,
+        *,
+        resolve: bool = False,
+        follow_pointers: bool = True,
     ) -> XmlValueHandler | Any:
         keys = path.split("/")
         obj = self
 
         try:
             for k in keys:
+                if follow_pointers and isinstance(obj, HkbPointer):
+                    obj = obj.get_target()
+                    
                 if ":" in k:
                     k, idx = k.split(":")
                     obj = obj[k][int(idx)]
@@ -500,13 +503,13 @@ class HkbRecord(XmlValueHandler):
                     f"Tried to assign value with non-matching type {value.type_id} to field {name} ({ftype})"
                 )
 
-            # We fully replace the inner field element. This will invalidate any previous 
+            # We fully replace the inner field element. This will invalidate any previous
             # references to values of this field, but I suspect that will be less surprising
             # than modifying a previously applied value and seeing no effect.
             # TODO by doing this we might remove the value XML from another record
             field_el.remove(next(field_el))
             field_el.append(value.element)
-            #value = value.get_value()
+            # value = value.get_value()
         else:
             wrapped = wrap_element(self.tagfile, field_el, ftype)
             wrapped.set_value(value)
@@ -533,7 +536,9 @@ class HkbRecord(XmlValueHandler):
         return f"{self.type_name} (id={self.object_id})"
 
 
-def get_value_handler(type_registry: TypeRegistry, type_id: str) -> Type[XmlValueHandler]:
+def get_value_handler(
+    type_registry: TypeRegistry, type_id: str
+) -> Type[XmlValueHandler]:
     # TODO don't hardcode these, should be derived from the behavior somehow
     # From a different file:
     # 0          void

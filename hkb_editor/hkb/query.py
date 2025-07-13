@@ -115,6 +115,9 @@ class QueryTransformer(Transformer):
                 return False
 
         # Exact match
+        if not isinstance(value, str):
+            value = str(value)
+
         return value == token
 
     # common matching function
@@ -159,7 +162,10 @@ class QueryTransformer(Transformer):
         if isinstance(actual, XmlValueHandler):
             actual = actual.get_value()
 
-        return self._is_matching(actual, token)
+        try:
+            return self._is_matching(actual, token)
+        except:
+            return False
 
 
 def query_objects(
