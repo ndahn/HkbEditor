@@ -6,6 +6,7 @@ from threading import Thread
 import textwrap
 import time
 import pyperclip
+import lxml.etree
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
@@ -139,7 +140,7 @@ class BehaviorEditor(GraphEditor):
 
             self._reload_templates()
             self._set_menus_enabled(True)
-            
+
             dpg.focus_item(f"{self.tag}_roots_filter")
         except Exception as e:
             details = traceback.format_exception_only(e)
@@ -477,15 +478,22 @@ class BehaviorEditor(GraphEditor):
             dpg.add_text(node.id, color=style.blue)
             dpg.add_separator()
 
-            make_copy_menu(obj)
+            copy_menu = make_copy_menu(obj)
+            dpg.add_separator(parent=copy_menu)
+            dpg.add_selectable(
+                label="Hierarchy",
+                callback=lambda s, a, u: self._copy_hierarchy(u),
+                user_data=node,
+                parent=copy_menu,
+            )
+
+            dpg.add_separator()
 
             dpg.add_selectable(
                 label="Delete",
                 callback=lambda s, a, u: self._delete_node(u),
                 user_data=node,
             )
-
-            dpg.add_separator()
 
             dpg.add_selectable(
                 label="Pin Object",
@@ -507,12 +515,31 @@ class BehaviorEditor(GraphEditor):
             self.regenerate_all()
             self.logger.warning(f"{record} removed, but references may still exist")
 
-    def _copy_to_clipboard(self, data: str):
+    def _copy_to_clipboard(self, data: str) -> None:
         try:
             pyperclip.copy(data)
-            self.logger.debug("Copied value:\n%s", data)
+            self.logger.info(f"Copied to clipboard")
         except Exception as e:
             self.logger.warning(f"Copying value failed: {e}", exc_info=e)
+
+    def _copy_hierarchy(self, node: Node) -> None:
+        g = self.beh.build_graph(node.id)
+        xml = ""
+        todo = [node.id]
+
+        while todo:
+            n = todo.pop()
+
+            obj = self.beh.objects.get(n)
+            if not obj:
+                continue
+
+            xml += lxml.etree.tostring(
+                obj.as_object(), pretty_print=True, encoding="unicode"
+            )
+            todo.extend(g.successors(n))
+
+        self._copy_to_clipboard(xml)
 
     def _on_value_changed(
         self,
@@ -838,7 +865,9 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_clip_registered(sender: str, records: tuple[HkbRecord, HkbRecord], user_data: Any):
+        def on_clip_registered(
+            sender: str, records: tuple[HkbRecord, HkbRecord], user_data: Any
+        ):
             cmsg, clip = records
 
             # This is a bit ugly, but so is adding more stuff to ids
@@ -846,7 +875,7 @@ class BehaviorEditor(GraphEditor):
             if pin_objects:
                 self.add_pinned_object(cmsg)
                 self.add_pinned_object(clip)
-            
+
             self.jump_to_object(clip)
 
         register_clip_dialog(

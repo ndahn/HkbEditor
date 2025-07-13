@@ -90,6 +90,36 @@ class CommonActionsMixin:
 
         return max_id + 1
 
+    def find_array_item(self, array: HkbArray, **conditions) -> HkbRecord:
+        """Find an item in an array with specific attributes. If it's an array of pointers they will be resolved to their target objects automatically.
+
+        Parameters
+        ----------
+        array : HkbArray
+            The array to search
+        conditions : dict[str, Any]
+            Only return items whose fields have the specified values.
+
+        Raises
+        ------
+        AttributeError
+            If the array items do not have any of the specified fields.
+
+        Returns
+        -------
+        HkbRecord
+            The first item in the array matching the conditions, or None if no items match.
+        """
+        for item in array:
+            if isinstance(item, HkbPointer):
+                item = item.get_target()
+        
+            if item:
+                if all(item[key].get_value() == val for key, val in conditions.items()):
+                    return item
+        
+        return None
+
     def bind_variable(
         self,
         record: HkbRecord,

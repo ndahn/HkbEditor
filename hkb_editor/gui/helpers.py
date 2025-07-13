@@ -107,13 +107,18 @@ def create_value_widget(
     return tag
 
 
-def make_copy_menu(record_or_getter: HkbRecord | Callable[[], HkbRecord]) -> None:
+def make_copy_menu(
+    record_or_getter: HkbRecord | Callable[[], HkbRecord], *, tag: str = 0
+) -> str:
+    if tag in (None, 0, ""):
+        tag = dpg.generate_uuid()
+
     if isinstance(record_or_getter, HkbRecord):
         getter_func = lambda: record_or_getter
     else:
         getter_func = record_or_getter
 
-    with dpg.menu(label="Copy"):
+    with dpg.menu(label="Copy", tag=tag):
         dpg.add_selectable(
             label="ID",
             callback=lambda: pyperclip.copy(getter_func().object_id),
@@ -136,6 +141,8 @@ def make_copy_menu(record_or_getter: HkbRecord | Callable[[], HkbRecord]) -> Non
             label="XML",
             callback=lambda: pyperclip.copy(getter_func().xml()),
         )
+
+    return tag
 
 
 def estimate_drawn_text_size(
