@@ -196,7 +196,7 @@ class TemplateContext(CommonActionsMixin):
         Any
             The value resolved to a regular type (non-recursive).
         """
-        record = self.get_object(record)
+        record = self.get_record(record)
         return record.get_path_value(path, default=default, resolve=True)
 
     def set(self, record: HkbRecord | str, **attributes) -> None:
