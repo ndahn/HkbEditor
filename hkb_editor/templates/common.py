@@ -42,13 +42,6 @@ class Animation:
         return int(self.name.split("_")[-1])
 
 
-@dataclass
-class HkbRecordSpec:
-    query: str = None
-    type_name: str = None
-    include_derived: bool = True
-
-
 class CommonActionsMixin:
     def __init__(self, behavior: HavokBehavior):
         """Provides convenience methods for common actions.
@@ -229,8 +222,6 @@ class CommonActionsMixin:
 
         if isinstance(reference, HkbRecord):
             return reference
-
-        # TODO HkbRecordSpec
 
         if reference in self._behavior.objects:
             # Is it an object ID?
@@ -500,12 +491,14 @@ class CommonActionsMixin:
         else:
             generators = []
 
+        
+
         return self.new_record(
             "CustomManualSelectorGenerator",
             object_id=object_id,
             name=name,
             generators=generators,
-            offsetType=offsetType.value,
+            offsetType=offsetType,
             animId=animId,
             enableScript=enableScript,
             enableTae=enableTae,
@@ -599,7 +592,9 @@ class CommonActionsMixin:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
-        transitions = self.resolve_object(transitions)
+        if transitions:
+            transitions = [self.resolve_object(t) for t in transitions]
+        
         generator = self.resolve_object(generator)
 
         return self.new_record(
@@ -691,7 +686,7 @@ class CommonActionsMixin:
         **kwargs,
     ) -> HkbRecord:
         if layers:
-            layers = [self.resolve_object(l) for l in layers]
+            layers = [self.resolve_object(l).object_id for l in layers]
         else:
             layers = []
 

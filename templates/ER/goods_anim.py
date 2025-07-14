@@ -120,16 +120,18 @@ def run(
         transition_flags = TransitionFlags(3584)
 
         hand_change_state = ctx.find("name:HandChangeStart")
-        hand_change_transition = hand_change_state["transitions"]
+        hand_change_transition_ptr = hand_change_state["transitions"]
         normalitem_transition = ctx.new_transition_info(
             0,
             enchant_event,
-            transition=hand_change_transition.object_id,
+            transition=hand_change_transition_ptr.get_value(),
             flags=transition_flags,
         )
 
         normalitem_sm = ctx.find("name:NormalItem_SM")
-        ctx.array_add(normalitem_sm, "wildcardTransitions", normalitem_transition.object_id)
+        ctx.array_add(
+            normalitem_sm, "wildcardTransitions/transitions", normalitem_transition
+        )
 
         normalitem_clip00 = ctx.new_clip(normal_use_anim)
         normalitem_backhandsword_clip00 = ctx.new_clip(backhandsword_anim)
@@ -196,8 +198,10 @@ def run(
         )
 
         normalitem_upper_sm = ctx.find("name:NormalItem_Upper_SM")
-        ctx.array_add.object_id(
-            normalitem_upper_sm, "wildcardTransitions", normalitem_upper_transition
+        ctx.array_add(
+            normalitem_upper_sm,
+            "wildcardTransitions/transitions",
+            normalitem_upper_transition,
         )
 
         normalitem_upper_cmsg00 = ctx.new_cmsg(

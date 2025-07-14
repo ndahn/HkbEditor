@@ -9,16 +9,9 @@ from hkb_editor.templates import (
     Variable,
     Event,
     Animation,
-    HkbRecordSpec,
 )
 from hkb_editor.templates.glue import execute_template
-from hkb_editor.hkb import Tagfile, HavokBehavior, HkbRecord
-from hkb_editor.gui.dialogs import (
-    select_variable,
-    select_event,
-    select_animation,
-    select_object,
-)
+from hkb_editor.hkb import HavokBehavior, HkbRecord
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.helpers import center_window, add_paragraphs, create_value_widget
 from hkb_editor.gui import style
@@ -106,7 +99,7 @@ def apply_template_dialog(
                 no_scrollbar=True,
                 autosize=True,
             ) as loading_indicator:
-                dpg.add_loading_indicator(radius=5)
+                dpg.add_loading_indicator(radius=5, color=style.yellow)
 
             dpg.split_frame()
             center_window(loading_indicator, window)
@@ -125,6 +118,8 @@ def apply_template_dialog(
                         arg.value = template.event(arg.value)
                     elif arg.type == Animation:
                         arg.value = template.animation(arg.value)
+                    elif arg.type == HkbRecord:
+                        arg.value = template.resolve_object(arg.value)
 
                 arg_values = {key: arg.value for key, arg in args.items()}
                 execute_template(template, **arg_values)

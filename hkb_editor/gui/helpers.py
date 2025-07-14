@@ -13,7 +13,6 @@ from hkb_editor.templates.common import (
     Variable,
     Event,
     Animation,
-    HkbRecordSpec,
 )
 
 from . import style
@@ -278,31 +277,19 @@ def create_value_widget(
             dpg.set_value(f"{tag}_input_helper", oid)
             callback(sender, record, user_data)
 
-        def open_object_selector(sender: str, app_data: str, spec: HkbRecordSpec):
-            if spec.type_name:
-                type_id = behavior.type_registry.find_first_type_by_name(spec.type_name)
-            else:
-                type_id = None
-
+        def open_object_selector(sender: str, app_data: str, user_data: Any):
             select_object(
                 behavior,
-                type_id,
+                None,
                 on_object_selected,
-                include_derived=spec.include_derived,
-                initial_filter=spec.query,
+                include_derived=True,
+                initial_filter="",
                 title=f"Select target for {label}",
             )
 
-        if isinstance(default, HkbRecordSpec):
-            spec = default
-            default = ""
-        else:
-            spec = HkbRecordSpec()
-
         with dpg.group(horizontal=True, tag=tag):
             dpg.add_input_text(
-                readonly=True,  # Must be an existing object!
-                enabled=False,
+                #readonly=True,
                 default_value=default if default is not None else "",
                 tag=f"{tag}_input_helper",
             )
@@ -310,7 +297,6 @@ def create_value_widget(
                 arrow=True,
                 direction=dpg.mvDir_Right,
                 callback=open_object_selector,
-                user_data=spec,
             )
             dpg.add_text(label)
 

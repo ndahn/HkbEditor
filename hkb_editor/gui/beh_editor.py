@@ -117,7 +117,7 @@ class BehaviorEditor(GraphEditor):
             no_scrollbar=True,
             no_saved_settings=True,
         ) as loading_screen:
-            dpg.add_loading_indicator()
+            dpg.add_loading_indicator(color=style.yellow)
             dpg.add_text(f"Loading {os.path.basename(file_path)}...")
             dpg.add_separator()
             dpg.add_text("Relax, get a coffee, breathe, maybe")

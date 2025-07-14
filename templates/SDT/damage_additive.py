@@ -10,10 +10,10 @@ from hkb_editor.hkb.hkb_flags import hkbStateMachine_TransitionInfo_Flags as Tra
 def run(
     ctx: TemplateContext,
     base_name: str,
-    origin_state: HkbRecord = HkbRecordSpec("", "hkbStateMachine::StateInfo"),
+    origin_state: HkbRecord,  # TODO restrict to StateInfo objects
     animation: Animation = None,
     event: Event = None,
-    offset_type: CmsgOffsetType = CmsgOffsetType.WEAPON_CATEGORY_RIGHT,  # TODO support in UI
+    offset_type: int = 15,  # TODO figure out how to use templates in the UI here, e.g. CmsgOffsetType.WEAPON_CATEGORY_RIGHT,
 ):
     """Damage Additive
 
@@ -34,7 +34,7 @@ def run(
     event : Event
         The event to trigger the damage animation.
     offset_type : CmsgOffsetType, optional
-        TODO
+        TODO I think this determines how a clip is selected (e.g. based on the right hand's TAE category).
     """
     sm = ctx.find("AddDamage_SM")
     state_id = ctx.get_next_state_id(sm)
@@ -46,7 +46,7 @@ def run(
         transition=default_transition,
         flags=TransitionInfoFlags(3584),
     )
-    ctx.array_add(sm, "wildcardTransitions", transition)
+    ctx.array_add(sm, "wildcardTransitions/transitions", transition)
 
     clip = ctx.new_clip(animation)
     cmsg = ctx.new_cmsg(
@@ -71,4 +71,4 @@ def run(
         generator=cmsg,
         transitions=transitioninfo_array,
     )
-    ctx.array_add(sm, "states", state)
+    ctx.array_add(sm, "states", state.object_id)

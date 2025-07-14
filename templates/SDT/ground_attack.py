@@ -40,7 +40,7 @@ def run(
         transition=default_transition,
         flags=TransitionInfoFlags(3584),
     )
-    ctx.array_add(sm, "wildcardTransitions", transition)
+    ctx.array_add(sm, "wildcardTransitions/transitions", transition)
 
     clip = ctx.new_clip(animation)
     cmsg = ctx.new_cmsg(
@@ -51,6 +51,6 @@ def run(
     state = ctx.new_statemachine_state(
         state_id,
         name=base_name,
-        generator=[cmsg],
+        generator=cmsg,
     )
-    ctx.array_add(sm, "states", state)
+    ctx.array_add(sm, "states", state.object_id)

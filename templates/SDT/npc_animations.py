@@ -92,7 +92,7 @@ def run(
                 transition=default_transition,
                 flags=transition_flags,
             )
-            ctx.array_add(sm, "wildcardTransitions", transition)
+            ctx.array_add(sm, "wildcardTransitions/transitions", transition)
 
         if create_regular_event:
             attack_event = ctx.event(f"W_Event{anim.anim_id}")
@@ -102,7 +102,7 @@ def run(
                 transition=default_transition,
                 flags=transition_flags,
             )
-            ctx.array_add(sm, "wildcardTransitions", transition)
+            ctx.array_add(sm, "wildcardTransitions/transitions", transition)
 
         # One state per animation
         state_id += 1

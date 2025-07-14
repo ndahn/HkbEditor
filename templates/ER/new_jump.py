@@ -318,12 +318,13 @@ def run(
         # Back
         if jump_back_anim:
             jump_back_clips = [ctx.new_clip(jump_back_anim)]
+            jump_back_anim_id = jump_back_anim.anim_id
         else:
             jump_back_clips = get_generators(f"'{base_jump}_Direction_Back_CMSG'")
-            jump_back_anim = 202021
+            jump_back_anim_id = 202021
 
         jump_back_cmsg = ctx.new_cmsg(
-            jump_back_anim.anim_id,
+            jump_back_anim_id,
             name=f"{name}_Direction_BackCMSG",
             generators=jump_back_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
@@ -333,12 +334,13 @@ def run(
         # Left
         if jump_left_anim:
             jump_left_clips = [ctx.new_clip(jump_left_anim)]
+            jump_left_anim_id = jump_left_anim.anim_id
         else:
             jump_left_clips = get_generators(f"'{base_jump}_Direction_Left_CMSG'")
-            jump_left_anim = 202022
+            jump_left_anim_id = 202022
 
         jump_left_cmsg = ctx.new_cmsg(
-            jump_left_anim.anim_id,
+            jump_left_anim_id,
             name=f"{name}_Direction_Left_CMSG",
             generators=jump_left_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
@@ -348,12 +350,13 @@ def run(
         # Right
         if jump_right_anim:
             jump_right_clips = [ctx.new_clip(jump_right_anim)]
+            jump_right_anim_id = jump_right_anim.anim_id
         else:
             jump_right_clips = get_generators(f"'{base_jump}_Direction_Right_CMSG'")
-            jump_right_anim = 202023
+            jump_right_anim_id = 202023
 
         jump_right_cmsg = ctx.new_cmsg(
-            jump_right_anim.anim_id,
+            jump_right_anim_id,
             name=f"{name}_Direction_Right_CMSG",
             generators=jump_right_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
@@ -403,4 +406,4 @@ def run(
         layers=all_layers,
     )
 
-    ctx.set(state, "generator", layer_gen.object_id)
+    ctx.set(state, generator=layer_gen.object_id)

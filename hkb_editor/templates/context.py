@@ -6,7 +6,7 @@ import logging
 import re
 from docstring_parser import parse as parse_docstring, DocstringParam
 
-from .common import CommonActionsMixin, Variable, Event, Animation, HkbRecordSpec
+from .common import CommonActionsMixin, Variable, Event, Animation
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
