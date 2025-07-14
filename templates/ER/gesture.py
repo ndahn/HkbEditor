@@ -86,7 +86,7 @@ def run(
         eventId=transition_event,
         transition=default_transition.object_id,
     )
-    ctx.array_add(transitions, "transitions", transition_info.object_id)
+    ctx.array_add(transitions, "transitions", transition_info)
 
     # TODO use?
     # state1, state1_cmsg, state1_clip = ctx.create_state_chain(
@@ -100,8 +100,8 @@ def run(
 
     state1_clip = ctx.new_clip(anim_start.index)
     state1_cmsg = ctx.new_cmsg(
+        anim_start.anim_id,
         name=f"{event1.name}_CMSG",
-        animId=anim_start,
         generators=[state1_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -113,7 +113,7 @@ def run(
         transitions=transitions.object_id,
     )
 
-    ctx.array_add(gesture_sm, "states", state1)
+    ctx.array_add(gesture_sm, "states", state1.object_id)
 
     # Blending
     start_blend_common_clip = ctx.new_clip(anim_start.index)
@@ -131,8 +131,8 @@ def run(
     # )
 
     start_blend01_cmsg = ctx.new_cmsg(
+        anim_start.anim_id,
         name=f"{gesture_base_name}_LoopStart",
-        animId=anim_start,
         generators=[start_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -148,8 +148,8 @@ def run(
 
 
     start_blend00_cmsg = ctx.new_cmsg(
+        anim_start.anim_id,
         name=f"{gesture_base_name}_LoopStart00",
-        animId=anim_start,
         generators=[start_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         checkAnimEndSlotNo=1,
@@ -167,8 +167,8 @@ def run(
     ####
     state2_clip = ctx.new_clip(anim_loop.index, mode=PlaybackMode.LOOPING)
     state2_cmsg = ctx.new_cmsg(
+        anim_loop.anim_id,
         name=f"{event2.name}_CMSG",
-        animId=anim_loop,
         generators=[state2_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -180,14 +180,14 @@ def run(
         transitions=transitions.object_id,
     )
 
-    ctx.array_add(gesture_sm, "states", state2)
+    ctx.array_add(gesture_sm, "states", state2.object_id)
 
     # Blending
     loop_blend_common_clip = ctx.new_clip(anim_loop.index, mode=PlaybackMode.LOOPING)
     
     loop_blend00_cmsg = ctx.new_cmsg(
+        anim_loop.anim_id,
         name=f"{gesture_base_name}_Loop",
-        animId=anim_loop,
         generators=[loop_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -202,8 +202,8 @@ def run(
     ctx.array_add(loop_blend00_gen, "children", loop_blend00.object_id)
 
     loop_blend02_cmsg = ctx.new_cmsg(
+        anim_loop.anim_id,
         name=f"{gesture_base_name}_Loop02",
-        animId=anim_loop,
         generators=[loop_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         checkAnimEndSlotNo=1,
@@ -223,8 +223,8 @@ def run(
     end_blend_common_clip = ctx.new_clip(anim_end.index)
     
     end_blend01_cmsg = ctx.new_cmsg(
+        anim_end.anim_id,
         name=f"{gesture_base_name}_LoopEnd",
-        animId=anim_end,
         generators=[end_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
@@ -239,8 +239,8 @@ def run(
     ctx.array_add(end_blend01_gen, "children", end_blend01.object_id)
 
     end_blend00_cmsg = ctx.new_cmsg(
+        anim_end.anim_id,
         name=f"{gesture_base_name}_LoopEnd00",
-        animId=anim_end,
         generators=[end_blend_common_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         checkAnimEndSlotNo=1,

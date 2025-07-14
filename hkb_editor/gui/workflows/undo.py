@@ -1,6 +1,7 @@
 from typing import Any, Callable
 from collections import deque
 import itertools
+import logging
 from contextlib import contextmanager
 
 from hkb_editor.hkb.hkb_types import XmlValueHandler, HkbArray, HkbRecord
@@ -24,8 +25,13 @@ class ComboAction(UndoAction):
         self.actions.append(action)
 
     def undo(self):
+        logger = logging.getLogger()
         for a in reversed(self.actions):
-            a.undo()
+            try:
+                a.undo()
+            except Exception as e:
+                # The show must go on!
+                logger.warning("Undo partially failed: {e}")
 
     def redo(self):
         for a in self.actions:

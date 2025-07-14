@@ -33,28 +33,39 @@ def run(
     base_name : str
         _description_
     """
-    throw_def = ctx.find("name:ThrowDef")
-    throw_death = ctx.find("name:ThrowDeath")
-    throw_death_idle = ctx.find("name:ThrowDeathIdle")
+    throw_def = ctx.find("name:ThrowDef_Blend")
+    throw_death = ctx.find("name:ThrowDeath_Blend")
+    throw_death_idle = ctx.find("name:ThrowDeathIdle_Blend")
 
     variations = [
-        (grab_anim, throw_def, "Throw", AnimeEndEventType.FIRE_IDLE_EVENT),
+        (
+            grab_anim,
+            throw_def,
+            "Throw",
+            AnimeEndEventType.FIRE_IDLE_EVENT,
+        ),
         (
             death_anim,
             throw_death,
             "ThrowDeath",
             AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
         ),
-        (death_idle_anim, throw_death_idle, "ThrowDeathIdle", AnimeEndEventType.NONE),
+        (
+            death_idle_anim,
+            throw_death_idle,
+            "ThrowDeathIdle",
+            AnimeEndEventType.NONE,
+        ),
     ]
 
     grab_id = int(grab_anim.name.split("_")[1])
 
     for anim, parent, prefix, end_event_type in variations:
         clip = ctx.new_clip(anim.index)
+        print("###", anim)
         cmsg = ctx.new_cmsg(
+            anim.anim_id,
             name=f"{prefix}{base_name}_CMSG",
-            animId=anim.name,
             generators=[clip],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=end_event_type,

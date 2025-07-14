@@ -35,12 +35,12 @@ def apply_template_dialog(
     if tag in (None, 0, ""):
         tag = dpg.generate_uuid()
 
-    logger = logging.getLogger(f"{tag}_template_{os.path.basename(template_file)}")
+    logger = logging.getLogger(os.path.splitext(os.path.basename(template_file))[0])
     template = TemplateContext(behavior, template_file)
     args = {arg.name: arg for arg in template._args.values()}
 
-    def show_warning(msg: str) -> None:
-        dpg.set_value(f"{tag}_notification", msg)
+    def show_status(msg: str, color: tuple = style.red) -> None:
+        dpg.configure_item(f"{tag}_notification", default_value=msg, color=color)
         dpg.show_item(f"{tag}_notification")
 
     def open_template_source() -> None:
@@ -130,7 +130,7 @@ def apply_template_dialog(
                 execute_template(template, **arg_values)
         except Exception as e:
             logger.error(f"Template failed: {str(e)}", exc_info=e)
-            show_warning(f"Template failed: {str(e)}")
+            show_status(f"Template failed: {str(e)}")
 
             # Undo any changes that might have already happened
             if undo_top != undo_manager.top():
@@ -151,7 +151,8 @@ def apply_template_dialog(
             if callback:
                 callback(window, new_objects, user_data)
 
-            dpg.delete_item(window)
+            #dpg.delete_item(window)
+            show_status("Success!", style.light_green)
         finally:
             dpg.delete_item(loading_indicator)
 

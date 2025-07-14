@@ -103,11 +103,10 @@ def create_cmsg_dialog(
             cmsg_name += "_CMSG"
 
         # Add entry to animations array. We also need the parts in some places
-        anim_id = int(animation_val.split("_")[-1])
-        anim_idx = behavior.find_animation(animation_val)
+        animation = util.animation(animation_val)
 
         # Add event to the events array
-        event_id = behavior.find_event(event_val)
+        event = util.event(event_val)
 
         playback_mode = PlaybackMode[playback_mode_val].value
         animation_end_event_type = AnimeEndEventType[animation_end_event_type_val].value
@@ -130,14 +129,14 @@ def create_cmsg_dialog(
         # Do the deed
         with undo_manager.combine():
             clip = util.new_clip(
-                anim_idx,
+                animation,
                 name=f"{animation_val}_{base_name}",
                 mode=playback_mode,
 
             )
             cmsg = util.new_cmsg(
+                animation.anim_id,
                 name=cmsg_name,
-                animId=anim_id,
                 generators=[clip],
                 animeEndEventType=animation_end_event_type,
                 enableScript=True,
@@ -152,7 +151,7 @@ def create_cmsg_dialog(
             )
             transitioninfo = util.new_transition_info(
                 transition=transitioninfo_effect_id,
-                eventId=event_id,
+                eventId=event,
                 toStateId=new_state_id,
                 flags=transition_flags,
             )

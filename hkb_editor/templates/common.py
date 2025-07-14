@@ -70,37 +70,144 @@ class CommonActionsMixin:
             return logger
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-    def _resolve_variable(self, variable: Variable | str | int) -> int:
-        if isinstance(variable, Variable):
-            return variable.index
-        elif isinstance(variable, str):
-            return self._behavior.find_variable(variable)
-        elif isinstance(variable, int):
-            return variable
+    def variable(
+        self,
+        variable: Variable | str | int,
+        *,
+        var_type: VariableType = VariableType.INT32,
+        range_min: int = 0,
+        range_max: int = 0,
+        allow_create: bool = True,
+    ) -> Variable:
+        """Get a variable by name, or create it if it doesn't exist yet.
 
-        raise ValueError(f"{variable} is not a valid variable")
-    
-    def _resolve_event(self, event: Event | str | int) -> int:
-        if isinstance(event, Event):
-            return event.index
-        elif isinstance(event, str):
-            return self._behavior.find_event(event)
-        elif isinstance(event, int):
-            return event
+        Variables are typically used to control behaviors from other subsystems like HKS and TAE. See :py:meth:`bind_attribute` for the most common use case.
 
-        raise ValueError(f"{event} is not a valid event")
+        Parameters
+        ----------
+        name : str
+            The name of the variable. Must not exist yet.
+        var_type : VariableType, optional
+            The type of data that will be stored in the variable.
+        range_min : int, optional
+            Minimum allowed value.
+        range_max : int, optional
+            Maximum allowed value.
+        allow_create : bool, optional
+            If True create a new variable if it cannot be resolved.
 
-    def _resolve_animation(self, animation: Animation | str | int) -> int:
-        if isinstance(animation, Animation):
-            return animation.index
-        elif isinstance(animation, str):
-            return self._behavior.find_animation(animation)
-        elif isinstance(animation, int):
-            return animation
+        Returns
+        -------
+        Variable
+            Description of the generated variable.
+        """
+        try:
+            if isinstance(variable, Variable):
+                return variable
+            elif isinstance(variable, str):
+                idx = self._behavior.find_variable(variable)
+            elif isinstance(variable, int):
+                idx = variable
+                variable = self._behavior.get_variable(idx)
+            else:
+                raise TypeError(f"Invalid variable type {variable}")
+        except ValueError:
+            if not allow_create:
+                raise
 
-        raise ValueError(f"{animation} is not a valid animation")
+            if not isinstance(variable, str):
+                raise ValueError(f"Cannot create new variable from {variable}")
 
-    def _resolve_object(self, reference: Any, default: Any = None) -> HkbRecord:
+            var_type = VariableType(var_type)
+            idx = self._behavior.create_variable(variable, var_type, range_min, range_max)
+            undo_manager.on_create_variable(self._behavior, variable)
+            self.logger.debug(f"Created new variable {variable} ({idx}) with type {var_type.name}")
+
+        return Variable(idx, variable)
+
+    def event(self, event: Event | str | int, *, allow_create: bool = True) -> Event:
+        """Get the event with the specified name, or create it if it doesn't exist yet.
+
+        Events are typically used to trigger transitions between statemachine states. See :py:meth:`new_statemachine_state` for details.
+        TODO mention events.txt
+
+        Parameters
+        ----------
+        event : str
+            The name of the event to create. Typically starts with `W_`.
+        allow_create : bool, optional
+            If True create a new variable if it cannot be resolved.
+
+        Returns
+        -------
+        Event
+            The generated event.
+        """
+        try:
+            if isinstance(event, Event):
+                return event
+            elif isinstance(event, str):
+                idx = self._behavior.find_event(event)
+            elif isinstance(event, int):
+                idx = event
+                event = self._behavior.get_event(idx)
+        except ValueError:
+            if not allow_create:
+                raise
+
+            if not isinstance(event, str):
+                raise ValueError(f"Cannot create new event from {event}")
+
+            idx = self._behavior.create_event(event)
+            undo_manager.on_create_event(self._behavior, event)
+            self.logger.debug(f"Created new event {event} ({idx})")
+
+        return Event(idx, event)
+
+    def animation(self, animation: Animation | str | int, allow_create: bool = True) -> Animation:
+        """Get the animation with the specified name, or create a new one if it doesn't exist yet.
+
+        Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
+        # TODO mention animations.txt
+
+        Parameters
+        ----------
+        animation : str
+            The name of the animation slot following the `aXXX_YYYYYY` pattern.
+        allow_create : bool, optional
+            If True create a new variable if it cannot be resolved.
+
+        Returns
+        -------
+        Animation
+            The generated animation name. Note that the full name is almost never used.
+        """
+        try:
+            if isinstance(animation, Animation):
+                return animation
+            elif isinstance(animation, str):
+                idx = self._behavior.find_animation(animation)
+            elif isinstance(animation, int):
+                idx = animation
+                animation = self._behavior.get_animation(idx)
+        except ValueError:
+            if not allow_create:
+                raise
+
+            if not isinstance(animation, str):
+                raise ValueError(f"Cannot create new animation from {animation}")
+
+            if not re.fullmatch(r"a[0-9]{3}_[0-9]{6}", animation):
+                raise ValueError(f"Invalid animation name '{animation}'")
+
+            idx = self._behavior.create_animation(animation)
+            undo_manager.on_create_animation(self._behavior, animation)
+            self.logger.debug(f"Created new animation {animation} ({idx})")
+
+        full_name = self._behavior.get_animation(idx, full_name=True)
+        return Animation(idx, animation, full_name)
+
+    def resolve_object(self, reference: Any, default: Any = None) -> HkbRecord:
         """Safely retrieve the record referenced by the input.
 
         If the input is None or already a HkbRecord, simply retrieve it. If it's the ID of an existing object, resolve it. In all other cases treat it as a query string and return the first matching object.
@@ -122,6 +229,8 @@ class CommonActionsMixin:
 
         if isinstance(reference, HkbRecord):
             return reference
+
+        # TODO HkbRecordSpec
 
         if reference in self._behavior.objects:
             # Is it an object ID?
@@ -210,7 +319,7 @@ class CommonActionsMixin:
             The variable binding set to which the field was bound.
         """
         binding_set_ptr: HkbPointer = record["variableBindingSet"]
-        var_idx = self._resolve_variable(variable)
+        var_idx = self.variable(variable).index
 
         with undo_manager.combine():
             if not binding_set_ptr.get_value():
@@ -361,7 +470,7 @@ class CommonActionsMixin:
         HkbRecord
             A copy of the source altered according to the specified overrides.
         """
-        source = self._resolve_object(source)
+        source = self.resolve_object(source)
 
         attributes = {k: v.get_value() for k, v in source.get_value().items()}
         attributes.update(**overrides)
@@ -373,10 +482,10 @@ class CommonActionsMixin:
 
     def new_cmsg(
         self,
+        animId: int,
         *,
         object_id: str = "<new>",
         name: str = "",
-        animId: Animation | str | int = 0,
         generators: list[HkbRecord | str] = None,
         enableScript: bool = True,
         enableTae: bool = True,
@@ -386,15 +495,8 @@ class CommonActionsMixin:
         checkAnimEndSlotNo: int = -1,
         **kwargs,
     ) -> HkbRecord:
-        if isinstance(animId, Animation):
-            animId = animId.name
-
-        if isinstance(animId, str):
-            # Assume it's an animation name
-            animId = int(animId.split("_")[-1])
-
         if generators:
-            generators = [self._resolve_object(obj).object_id for obj in generators]
+            generators = [self.resolve_object(obj).object_id for obj in generators]
         else:
             generators = []
 
@@ -426,12 +528,12 @@ class CommonActionsMixin:
         **kwargs,
     ) -> HkbRecord:
         if generators:
-            generators = [self._resolve_object(obj).object_id for obj in generators]
+            generators = [self.resolve_object(obj).object_id for obj in generators]
         else:
             generators = []
 
-        variableBindingSet = self._resolve_object(variableBindingSet)
-        generatorChangedTransitionEffect = self._resolve_object(generatorChangedTransitionEffect)
+        variableBindingSet = self.resolve_object(variableBindingSet)
+        generatorChangedTransitionEffect = self.resolve_object(generatorChangedTransitionEffect)
 
         kwargs.setdefault("sentOnClipEnd/id", -1)
         kwargs.setdefault("endOfClipEventId", -1)
@@ -469,19 +571,18 @@ class CommonActionsMixin:
         mode: PlaybackMode = PlaybackMode.SINGLE_PLAY,
         **kwargs,
     ) -> HkbRecord:
-        anim_id = self._resolve_animation(animation)
-        anim_name = self._behavior.get_animation(anim_id)
+        animation = self.animation(animation)
 
         if name is None:
-            name = anim_name
+            name = animation.name
 
         return self.new_record(
             "hkbClipGenerator",
             object_id=object_id,
             name=name,
-            animationName=anim_name,
+            animationName=animation.name,
             playbackSpeed=playbackSpeed,
-            animationInternalId=anim_id,
+            animationInternalId=animation.anim_id,
             mode=mode,
             **kwargs,
         )
@@ -498,8 +599,8 @@ class CommonActionsMixin:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
-        transitions = self._resolve_object(transitions)
-        generator = self._resolve_object(generator)
+        transitions = self.resolve_object(transitions)
+        generator = self.resolve_object(generator)
 
         return self.new_record(
             "hkbStateMachine::StateInfo",
@@ -534,7 +635,7 @@ class CommonActionsMixin:
         flags: TransitionInfoFlags = 0,
         **kwargs,
     ) -> HkbRecord:
-        eventId = self._resolve_event(eventId)
+        eventId = self.event(eventId)
 
         if transition is None:
             transition = next(
@@ -543,7 +644,7 @@ class CommonActionsMixin:
                 ),
                 None,
             )
-        transition = self._resolve_object(transition)
+        transition = self.resolve_object(transition)
 
         kwargs.setdefault("triggerInterval/enterEventId", -1)
         kwargs.setdefault("triggerInterval/exitEventId", -1)
@@ -553,7 +654,7 @@ class CommonActionsMixin:
         return self.new_record(
             "hkbStateMachine::TransitionInfo",
             toStateId=toStateId,
-            eventId=eventId,
+            eventId=eventId.index,
             transition=transition.object_id if transition else None,
             flags=flags,
             **kwargs,
@@ -568,7 +669,7 @@ class CommonActionsMixin:
         worldFromModelWeight: int = 1,
         **kwargs,
     ) -> HkbRecord:
-        cmsg = self._resolve_object(cmsg)
+        cmsg = self.resolve_object(cmsg)
 
         return self.new_record(
             "hkbBlenderGeneratorChild",
@@ -590,7 +691,7 @@ class CommonActionsMixin:
         **kwargs,
     ) -> HkbRecord:
         if layers:
-            layers = [self._resolve_object(l) for l in layers]
+            layers = [self.resolve_object(l) for l in layers]
         else:
             layers = []
 
@@ -620,17 +721,17 @@ class CommonActionsMixin:
         fadeInOutCurve: BlendCurve = BlendCurve.SMOOTH,
         **kwargs,
     ) -> HkbRecord:
-        generator = self._resolve_object(generator)
-        boneWeights = self._resolve_object(boneWeights)
-        onEventId = self._resolve_event(onEventId)
-        offEventId = self._resolve_event(offEventId)
+        generator = self.resolve_object(generator)
+        boneWeights = self.resolve_object(boneWeights)
+        onEventId = self.event(onEventId)
+        offEventId = self.event(offEventId)
 
         blend_params = {
             "blendingControlData/weight": weight,
             "blendingControlData/fadeInDuration": fadeInDuration,
             "blendingControlData/fadeOutDuration": fadeOutDuration,
-            "blendingControlData/onEventId": onEventId,
-            "blendingControlData/offEventId": offEventId,
+            "blendingControlData/onEventId": onEventId.index,
+            "blendingControlData/offEventId": offEventId.index,
             "blendingControlData/onByDefault": onByDefault,
             "blendingControlData/fadeInOutCurve": fadeInOutCurve,
         }
@@ -660,12 +761,12 @@ class CommonActionsMixin:
         checkAnimEndSlotNo: int = -1,
         **cmsg_kwargs,
     ) -> tuple[HkbRecord, HkbRecord, HkbRecord]:
-        transitions = self._resolve_object(state_transitions)
+        transitions = self.resolve_object(state_transitions)
 
         clip = self.new_clip(animation, mode=clip_mode)
         cmsg = self.new_cmsg(
+            animation.anim_id,
             name=cmsg_name or name + "_CMSG",
-            animId=animation,
             generators=[clip],
             enableScript=enableScript,
             enableTae=enableTae,
@@ -698,8 +799,8 @@ class CommonActionsMixin:
         **cmsg_kwargs,
     ) -> tuple[HkbRecord, HkbRecord]:
         cmsg = self.new_cmsg(
+            animation.anim_id,
             name=cmsg_name,
-            animId=animation,
             generators=[clip],
             enableScript=enableScript,
             enableTae=enableTae,

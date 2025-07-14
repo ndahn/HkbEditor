@@ -136,8 +136,8 @@ def run(
         normalitem_duelingshield_clip00 = ctx.new_clip(duelingshield_anim)
 
         normalitem_cmsg00 = ctx.new_cmsg(
+            normal_use_anim.anim_id,
             name="ItemWeaponEnchant_CMSG00",
-            animId=normal_use_anim,
             generators=[normalitem_clip00],
             enableScript=False,
             enableTae=False,
@@ -145,8 +145,8 @@ def run(
             animeEndEventType=AnimeEndEventType.NONE,
         )
         normalitem_backhandsword_cmsg00 = ctx.new_cmsg(
+            backhandsword_anim.anim_id,
             name="ItemWeaponEnchant_BackhandSword_CMSG00",
-            animId=backhandsword_anim,
             generators=[normalitem_backhandsword_clip00],
             enableScript=False,
             enableTae=False,
@@ -154,8 +154,8 @@ def run(
             animeEndEventType=AnimeEndEventType.NONE,
         )
         normalitem_duelingshield_cmsg00 = ctx.new_cmsg(
+            duelingshield_anim.anim_id,
             name="ItemWeaponEnchant_DuelingShield_CMSG00",
-            animId=duelingshield_anim,
             generators=[normalitem_duelingshield_clip00],
             enableScript=False,
             enableTae=False,
@@ -201,24 +201,24 @@ def run(
         )
 
         normalitem_upper_cmsg00 = ctx.new_cmsg(
+            normal_use_anim.anim_id,
             name="ItemWeaponEnchant_CMSG",
-            animId=normal_use_anim,
             generators=[normalitem_clip00],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
             checkAnimEndSlotNo=1,
         )
         normalitem_upper_backhandsword_cmsg00 = ctx.new_cmsg(
+            backhandsword_anim.anim_id,
             name="ItemWeaponEnchant_BackhandSword_CMSG",
-            animId=backhandsword_anim,
             generators=[normalitem_backhandsword_clip00],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
             checkAnimEndSlotNo=1,
         )
         normalitem_upper_duelingshield_cmsg00 = ctx.new_cmsg(
+            duelingshield_anim.anim_id,
             name="ItemWeaponEnchant_DuelingShield_CMSG",
-            animId=duelingshield_anim,
             generators=[normalitem_duelingshield_clip00],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,

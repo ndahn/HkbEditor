@@ -67,8 +67,8 @@ def run(
 
         clip = ctx.new_clip(anim)
         cmsg = ctx.new_cmsg(
+            animId=anim.anim_id,
             name=f"{base_name}{anim.anim_id}_CMSG",
-            animId=anim,
             generators=[clip],
             offsetType=CmsgOffsetType.ANIM_ID,
             animeEndEventType=AnimeEndEventType.NONE,

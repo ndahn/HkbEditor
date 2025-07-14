@@ -50,8 +50,8 @@ def run(
 
     clip = ctx.new_clip(animation)
     cmsg = ctx.new_cmsg(
+        animation.anim_id,
         name=f"{base_name}_CMSG",
-        animId=animation,
         generators=[clip],
         offsetType=offset_type,
     )

@@ -201,7 +201,7 @@ def create_value_widget(
         util = CommonActionsMixin(behavior)
         if value_type == Variable:
             try:
-                var_idx = util._resolve_variable(default)
+                var_idx = util.variable(default, allow_create=False)
                 default = behavior.get_variable(var_idx)
             except:
                 pass
@@ -219,7 +219,7 @@ def create_value_widget(
 
         elif value_type == Event:
             try:
-                event_idx = util._resolve_event(default)
+                event_idx = util.event(default, allow_create=False)
                 default = behavior.get_event(event_idx)
             except:
                 pass
@@ -237,7 +237,7 @@ def create_value_widget(
 
         elif value_type == Animation:
             try:
-                anim_idx = util._resolve_animation(default)
+                anim_idx = util.animation(default)
                 default = behavior.get_animation(anim_idx)
             except:
                 pass
@@ -441,7 +441,7 @@ def create_flag_checkboxes(
             )
             active_flags = 0
 
-    with dpg.group(tag=base_tag):
+    with dpg.group():
         for flag in flag_type:
             if flag == 0:
                 # 0 is in every flag

@@ -1,4 +1,4 @@
-from typing import Any, Type, Generator, Iterator
+from typing import Any, Type, Generator, Iterator, Mapping
 import struct
 from lxml import etree as ET
 
@@ -369,6 +369,11 @@ class HkbRecord(XmlValueHandler):
         path_values: dict[str, Any] = None,
         object_id: str = None,
     ) -> "HkbRecord":
+        if path_values and not isinstance(path_values, Mapping):
+            raise ValueError(
+                f"path_values must be a dict-like object, but got {path_values} ({type(path_values).__name__}) instead"
+            )
+
         elem = ET.Element("record")
         record = HkbRecord(tagfile, elem, type_id, object_id)
 
@@ -454,7 +459,7 @@ class HkbRecord(XmlValueHandler):
             for k in keys:
                 if follow_pointers and isinstance(obj, HkbPointer):
                     obj = obj.get_target()
-                    
+
                 if ":" in k:
                     k, idx = k.split(":")
                     obj = obj[k][int(idx)]

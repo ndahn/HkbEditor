@@ -28,33 +28,6 @@ def run(
     num_attacks : int, optional
         How many new CMSGs to generate.
     """
-    def create_attack_chain(
-        anim_id: int,
-        state_id: int,
-    ):
-        # TODO check if these already exist
-        clips = [
-            ctx.new_clip(f"a00{i}_{anim_id + i:06}")
-            for i in range(6)
-        ]
-
-        cmsg = ctx.new_cmsg(
-            name=f"Attack{anim_id}_CMSG",
-            animId=f"a000_{anim_id:06}",
-            generators=clips,
-            offsetType=CmsgOffsetType.ANIM_ID,
-            animeEndEventType=AnimeEndEventType.FIRE_IDLE_EVENT,
-            changeTypeOfSelectedIndexAfterActivate=ChangeIndexType.SELF_TRANSITION,
-        )
-
-        state = ctx.new_statemachine_state(
-            stateId=state_id,
-            name=f"Attack{anim_id}",
-            generator=cmsg,
-        )
-
-        return state
-
     statemachine = ctx.find("Attack_SM")
     base_state_id = ctx.get_next_state_id(statemachine)
 
@@ -62,6 +35,23 @@ def run(
         anim_id = base_anim_id + i
         state_id = base_state_id + i
 
-        attack_state = create_attack_chain(anim_id, state_id)
-        ctx.array_add(statemachine, "states", attack_state)
+        # TODO check if these already exist
+        clips = [
+            ctx.new_clip(f"a00{i}_{anim_id + i:06}")
+            for i in range(6)
+        ]
+        cmsg = ctx.new_cmsg(
+            anim_id,
+            name=f"Attack{anim_id}_CMSG",
+            generators=clips,
+            offsetType=CmsgOffsetType.ANIM_ID,
+            animeEndEventType=AnimeEndEventType.FIRE_IDLE_EVENT,
+            changeTypeOfSelectedIndexAfterActivate=ChangeIndexType.SELF_TRANSITION,
+        )
+        state = ctx.new_statemachine_state(
+            stateId=state_id,
+            name=f"Attack{anim_id}",
+            generator=cmsg,
+        )
 
+        ctx.array_add(statemachine, "states", state.object_id)

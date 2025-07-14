@@ -38,8 +38,8 @@ def run(
 
     clip = ctx.new_clip(animation.index)
     cmsg = ctx.new_cmsg(
+        throw_id,
         name=cmsg_name,
-        animId=throw_id,
         generators=[clip],
         offsetType=CmsgOffsetType.SWORD_ARTS_CATEGORY,
         animeEndEventType=AnimeEndEventType.FIRE_IDLE_EVENT,

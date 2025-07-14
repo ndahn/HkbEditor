@@ -196,7 +196,7 @@ class TemplateContext(CommonActionsMixin):
         Any
             The value resolved to a regular type (non-recursive).
         """
-        record = self._resolve_object(record)
+        record = self.resolve_object(record)
         return record.get_path_value(path, default=default, resolve=True)
 
     def set(self, record: HkbRecord | str, **attributes) -> None:
@@ -290,95 +290,3 @@ class TemplateContext(CommonActionsMixin):
         undo_manager.on_update_array_item(array, index, ret, None)
         self.logger.debug(f"Removed item {index} ({ret}) from {path} of {record}")
         return ret
-
-    def variable(
-        self,
-        name: str,
-        *,
-        var_type: VariableType = VariableType.INT32,
-        range_min: int = 0,
-        range_max: int = 0,
-    ) -> Variable:
-        """Get a variable by name, or create it if it doesn't exist yet.
-
-        Variables are typically used to control behaviors from other subsystems like HKS and TAE. See :py:meth:`bind_attribute` for the most common use case.
-
-        Parameters
-        ----------
-        name : str
-            The name of the variable. Must not exist yet.
-        var_type : VariableType, optional
-            The type of data that will be stored in the variable.
-        range_min : int, optional
-            Minimum allowed value.
-        range_max : int, optional
-            Maximum allowed value.
-
-        Returns
-        -------
-        Variable
-            Description of the generated variable.
-        """
-        try:
-            idx = self._behavior.find_variable(name)
-        except ValueError:
-            var_type = VariableType(var_type)
-            idx = self._behavior.create_variable(name, var_type, range_min, range_max)
-            undo_manager.on_create_variable(self._behavior, name)
-            self.logger.debug(f"Created new variable {name} ({idx}) with type {var_type.name}")
-
-        return Variable(idx, name)
-
-    def event(self, event: str) -> Event:
-        """Get the event with the specified name, or create it if it doesn't exist yet.
-
-        Events are typically used to trigger transitions between statemachine states. See :py:meth:`new_statemachine_state` for details.
-        TODO mention events.txt
-
-        Parameters
-        ----------
-        event : str
-            The name of the event to create. Typically starts with `W_`.
-
-        Returns
-        -------
-        Event
-            The generated event.
-        """
-        try:
-            idx = self._behavior.find_event(event)
-        except ValueError:
-            idx = self._behavior.create_event(event)
-            undo_manager.on_create_event(self._behavior, event)
-            self.logger.debug(f"Created new event {event} ({idx})")
-
-        return Event(idx, event)
-
-    def animation(self, animation: str) -> Animation:
-        """Get the animation with the specified name, or create a new one if it doesn't exist yet.
-
-        Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
-        # TODO mention animations.txt
-
-        Parameters
-        ----------
-        animation : str
-            The name of the animation slot following the `aXXX_YYYYYY` pattern.
-
-        Returns
-        -------
-        Animation
-            The generated animation name. Note that the full name is almost never used.
-        """
-        try:
-            idx = self._behavior.find_animation(animation)
-        except ValueError:
-            if not re.fullmatch(r"a[0-9]{3}_[0-9]{6}", animation):
-                raise ValueError(f"Invalid animation name '{animation}'")
-
-            idx = self._behavior.create_animation(animation)
-            undo_manager.on_create_animation(self._behavior, animation)
-            self.logger.debug(f"Created new animation {animation} ({idx})")
-
-        full_name = self._behavior.get_animation(idx, full_name=True)
-        return Animation(idx, animation, full_name)
