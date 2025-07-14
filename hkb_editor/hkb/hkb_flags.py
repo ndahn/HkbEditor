@@ -84,6 +84,11 @@ class hkbDockingGenerator_Flags(IntFlag):
     OVERRIDE_MOTION = 2
 
 
+class hkbLayerGenerator_Flags(IntFlag):
+    NONE = 0  # added
+    SYNC = 1
+
+
 @cache
 def get_hkb_flags(
     type_registry: TypeRegistry, record_type_id: str, field: str

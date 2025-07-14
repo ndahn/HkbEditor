@@ -124,7 +124,7 @@ class QueryTransformer(Transformer):
 
     # common matching function
     def _match(self, path: str, token: str) -> bool:
-        from hkb_editor.hkb.hkb_types import XmlValueHandler
+        from hkb_editor.hkb.hkb_types import XmlValueHandler, HkbArray
 
         if (path.startswith("'") and path.endswith("'")) or (
             path.startswith('"') and path.endswith('"')
@@ -148,7 +148,10 @@ class QueryTransformer(Transformer):
                     # TODO only supports a single array wildcard for now
                     loc = path.index(":*")
                     frags = path[:loc], path[loc + 2 :]
-                    array: HkbArray = self.record.get_path_value(frags[0])
+                    array = self.record.get_path_value(frags[0])
+                    
+                    if not isinstance(array, HkbArray):
+                        return False
 
                     for i in range(len(array)):
                         item_path = f"{frags[0]}:{i}{frags[1]}"

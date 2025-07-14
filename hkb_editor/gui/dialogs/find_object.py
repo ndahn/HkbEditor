@@ -52,10 +52,16 @@ def find_dialog(
         dpg.show_item(f"{tag}_loading")
 
         dpg.set_value(f"{tag}_total", "(Searching...)")
+
+        # TODO find a way to cancel this early
         matches = item_getter(filt)
         idx = -1
 
         for idx, item in enumerate(matches):
+            if filt != dpg.get_value(sender):
+                # Crude attempt to return early
+                break
+
             if idx > item_limit:
                 # Item limit reached, indicate that we are done but more matches exist
                 dpg.set_value(f"{tag}_total", f"({item_limit}/? matches)")

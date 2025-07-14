@@ -16,6 +16,7 @@ from hkb_editor.hkb.hkb_enums import (
 )
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
+    hkbLayerGenerator_Flags as LayerGeneratorFlags,
 )
 
 
@@ -40,6 +41,11 @@ class Animation:
     @property
     def anim_id(self) -> int:
         return int(self.name.split("_")[-1])
+
+
+# TODO record spec like this maybe?
+#from typing import Annotated
+#HkbRecordSpec = Annotated[HkbRecord, "type_name:CMSG"]
 
 
 class CommonActionsMixin:
@@ -144,6 +150,8 @@ class CommonActionsMixin:
             elif isinstance(event, int):
                 idx = event
                 event = self._behavior.get_event(idx)
+            else:
+                raise TypeError(f"Invalid event type {event}")
         except ValueError:
             if not allow_create:
                 raise
@@ -183,6 +191,8 @@ class CommonActionsMixin:
             elif isinstance(animation, int):
                 idx = animation
                 animation = self._behavior.get_animation(idx)
+            else:
+                raise TypeError(f"Invalid animation type {animation}")
         except ValueError:
             if not allow_create:
                 raise
@@ -682,7 +692,7 @@ class CommonActionsMixin:
         name: str = "",
         layers: list[HkbRecord | str] = None,
         indexOfSyncMasterChild: int = -1,
-        flags: int = 0,  # TODO get proper flag type
+        flags: LayerGeneratorFlags = LayerGeneratorFlags.NONE,
         **kwargs,
     ) -> HkbRecord:
         if layers:

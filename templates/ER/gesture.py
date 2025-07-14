@@ -48,7 +48,6 @@ def run(
     state2_id = state1_id + 1
 
     # Setup new statemachine state transitions
-    wildcard_transitions = gesture_sm["wildcardTransitions"].get_target()
 
     # State 1: start, state 2: loop
     # Creates an automatic transition between the states
@@ -71,8 +70,8 @@ def run(
     )
 
     # add states to wildcard_transitions
-    ctx.array_add(wildcard_transitions, "transitions", trans1)
-    ctx.array_add(wildcard_transitions, "transitions", trans2)
+    ctx.array_add(gesture_sm, "wildcardTransitions/transitions", trans1)
+    ctx.array_add(gesture_sm, "wildcardTransitions/transitions", trans2)
 
     ####
     # Start to loop

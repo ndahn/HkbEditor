@@ -9,11 +9,13 @@ from hkb_editor.hkb.hkb_enums import (
     hkbBlendingTransitionEffect_EndMode as EndMode,
     hkbBlendCurveUtils_BlendCurve as BlendCurve,
 )
+from hkb_editor.hkb.hkb_flags import hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags
 
 
 def run(
     ctx: TemplateContext,
-    name: str,
+    base_name: str,
+    event: Event,
     base_jump: Literal["Jump_N", "Jump_F", "Jump_D"] = "Jump_D",
     enable_jump_attacks: bool = True,
     jump_front_anim: Animation = None,
@@ -48,37 +50,6 @@ def run(
     jump_right_anim : Animation, optional
         Animation slot to use for jumps to the right. Register clips from default slot if not specified.
     """
-    jump_sm = ctx.find("'NewJump StateMachine'")
-
-    # Transition
-    transition_effect = ctx.new_record(
-        "CustomTransitionEffect",
-        "<new>",
-        name=f"{name}_to_Jump_Loop",
-        duration=0.5,
-        selfTransitionMode=SelfTransitionMode.CONTINUE_IF_CYCLIC_BLEND_IF_ACYCLIC,
-        eventMode=EventMode.DEFAULT,
-        endMode=EndMode.NONE,
-        blendCurve=BlendCurve.SMOOTH,
-        alignmentBone=-1,
-    )
-
-    jump_loop_state = ctx.find("Jump_Loop type_name:hkbStateMachine::StateInfo")
-    trans = ctx.new_transition_info(
-        jump_loop_state["stateId"].get_value(),
-        "W_RideJump",
-        transition=transition_effect,
-    )
-    transitions = ctx.new_transition_info_array(transitions=[trans])
-
-    state_id = ctx.get_next_state_id(jump_sm)
-    state = ctx.new_statemachine_state(
-        state_id,  # TODO raster used 39643 here, just an unused one?
-        name=name,
-        transitions=transitions,
-        generator=None,  # set later
-    )
-
     # Helper functions
     def get_binding_set(model_query: str) -> str:
         model_obj = ctx.find(model_query)
@@ -102,51 +73,51 @@ def run(
 
         hand_nh_right_normal_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_NormalAttack_Right",
+            name=f"{base_name} Selector_NormalAttack_Right",
             generators=get_generators(f"'{base_jump} Selector_NormalAttack_BothLeft'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_NormalAttack_BothLeft'"
             ),
-            selectedIndexCanChangeAfterActivate=True,
+            selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
         )
 
         hand_nh_right_hard_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_HardAttack_Right",
+            name=f"{base_name} Selector_HardAttack_Right",
             generators=get_generators(f"'{base_jump} Selector_NormalAttack_BothLeft'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_NormalAttack_BothLeft'"
             ),
-            selectedIndexCanChangeAfterActivate=True,
+            selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
         )
 
         hand_nh_right_normal_dual_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_NormalAttack_Dual",
+            name=f"{base_name} Selector_NormalAttack_Dual",
             generators=get_generators(f"'{base_jump} Selector_NormalAttack_Right'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_NormalAttack_Right'"
             ),
-            selectedIndexCanChangeAfterActivate=True,
+            selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
         )
 
         hand_nh_right_magic_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_N-HAttack_Right",
+            name=f"{base_name} Selector_N-HAttack_Right",
             generators=get_generators(f"'{base_jump} Selector_NormalAttack_Right'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_NormalAttack_Right'"
             ),
-            selectedIndexCanChangeAfterActivate=True,
+            selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
         )
 
         hand_nh_right_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttackFormRequest
-            name=f"{name} Selector_N-HAttack_Right",
+            name=f"{base_name} Selector_N-HAttack_Right",
             generators=[
                 hand_nh_right_normal_selector,
                 hand_nh_right_hard_selector,
@@ -161,40 +132,44 @@ def run(
         ### Hard Attack Both
         hand_nh_right_normal_both_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_NormalAttack_Both",
+            name=f"{base_name} Selector_NormalAttack_Both",
             generators=get_generators(f"'{base_jump} Selector_NormalAttack_Both'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_NormalAttack_Both'"
             ),
-            selectedIndexCanChangeAfterActivate=True,
+            selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
         )
         hand_nh_right_hard_both_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_HardAttack_Both",
+            name=f"{base_name} Selector_HardAttack_Both",
             generators=get_generators(f"'{base_jump} Selector_HardAttack_Both'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_HardAttack_Both'"
             ),
-            selectedIndexCanChangeAfterActivate=True,
+            selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
         )
         hand_nh_both_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_N-HAttack_Both",
+            name=f"{base_name} Selector_N-HAttack_Both",
             generators=[
                 hand_nh_right_normal_both_selector,
                 hand_nh_right_hard_both_selector,
             ],
+            # TODO bindingSet
         )
 
+        # TODO Selector_Magic_Right
+
         # Magic Left
+        # TODO compare to vanilla one
         hand_magic_left_anim_id = ctx.find("JumpMagic_N_Left_CMSG")[
             "animId"
         ].get_value()
         hand_magic_left_cmsg = ctx.new_cmsg(
             hand_magic_left_anim_id,
-            name=f"{name}_Left_CMSG",
+            name=f"{base_name}_Left_CMSG",
             generators=get_generators("JumpMagic_N_Left_CMSG"),
             offsetType=CmsgOffsetType.MAGIC_CATEGORY,
         )
@@ -204,7 +179,7 @@ def run(
         )["animId"].get_value()
         hand_magic_left_start_land_cmsg = ctx.new_cmsg(
             hand_magic_left_start_land_anim_id,
-            name=f"{name}_Left_Start_LandCMSG",
+            name=f"{base_name}_Left_Start_LandCMSG",
             generators=get_generators("JumpMagic_N_Left_Start_LandCMSG"),
             offsetType=CmsgOffsetType.MAGIC_CATEGORY,
             animeEndEventType=AnimeEndEventType.FIRE_IDLE_EVENT,
@@ -215,7 +190,7 @@ def run(
         )["animId"].get_value()
         hand_magic_left_start_land_high_cmsg = ctx.new_cmsg(
             hand_magic_left_start_land_high_anim_id,
-            name=f"{name}_Left_Start_Land_High_CMSG",
+            name=f"{base_name}_Left_Start_Land_High_CMSG",
             generators=get_generators("JumpMagic_N_Left_Start_Land_High_CMSG"),
             offsetType=CmsgOffsetType.MAGIC_CATEGORY,
             animeEndEventType=AnimeEndEventType.FIRE_IDLE_EVENT,
@@ -223,7 +198,7 @@ def run(
 
         hand_magic_left_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_Magic_Left",
+            name=f"{base_name} Selector_Magic_Left",
             generators=[
                 hand_magic_left_cmsg,
                 hand_magic_left_start_land_cmsg,
@@ -235,7 +210,7 @@ def run(
         # Attack Both Left
         hand_nh_left_normal_both_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_NormalAttack_BothLeft",
+            name=f"{base_name} Selector_NormalAttack_BothLeft",
             generators=get_generators(f"'{base_jump} Selector_NormalAttack_BothLeft'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_NormalAttack_BothLeft'"
@@ -245,7 +220,7 @@ def run(
         )
         hand_nh_left_hard_both_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
-            name=f"{name} Selector_HardAttack_BothLeft",
+            name=f"{base_name} Selector_HardAttack_BothLeft",
             generators=get_generators(f"'{base_jump} Selector_HardAttack_BothLeft'"),
             variableBindingSet=get_binding_set(
                 f"'{base_jump} Selector_HardAttack_BothLeft'"
@@ -256,7 +231,7 @@ def run(
 
         hand_nh_both_left_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttackFormRequest
-            name=f"{name} Selector_N-HAttack_BothLeft",
+            name=f"{base_name} Selector_N-HAttack_BothLeft",
             generators=[
                 hand_nh_left_normal_both_selector,
                 hand_nh_left_hard_both_selector,
@@ -269,7 +244,7 @@ def run(
         # Top-level selector for jump attacks
         handcondition_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_HandCondition
-            name=f"{name} HandCondition Selector",
+            name=f"{base_name} HandCondition Selector",
             generators=[
                 hand_nh_right_selector,
                 hand_nh_both_selector,
@@ -311,7 +286,7 @@ def run(
 
         jump_front_cmsg = ctx.new_cmsg(
             jump_front_anim_id,
-            name=f"{name}_Direction_Front_CMSG",
+            name=f"{base_name}_Direction_Front_CMSG",
             generators=jump_front_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -327,7 +302,7 @@ def run(
 
         jump_back_cmsg = ctx.new_cmsg(
             jump_back_anim_id,
-            name=f"{name}_Direction_BackCMSG",
+            name=f"{base_name}_Direction_BackCMSG",
             generators=jump_back_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -343,7 +318,7 @@ def run(
 
         jump_left_cmsg = ctx.new_cmsg(
             jump_left_anim_id,
-            name=f"{name}_Direction_Left_CMSG",
+            name=f"{base_name}_Direction_Left_CMSG",
             generators=jump_left_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -359,7 +334,7 @@ def run(
 
         jump_right_cmsg = ctx.new_cmsg(
             jump_right_anim_id,
-            name=f"{name}_Direction_Right_CMSG",
+            name=f"{base_name}_Direction_Right_CMSG",
             generators=jump_right_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -368,7 +343,7 @@ def run(
         # Jump Direction Selector
         direction_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpDirection
-            name=f"{name}_Direction_MSG",
+            name=f"{base_name}_Direction_MSG",
             generators=[
                 jump_front_cmsg,
                 jump_back_cmsg,
@@ -404,8 +379,50 @@ def run(
         all_layers.append(layer2_direction)
 
     layer_gen = ctx.new_layer_generator(
-        name=f"{name}_LayerGenerator",
+        name=f"{base_name}_LayerGenerator",
         layers=all_layers,
+    )
+
+    # Finally generate the new state for the state machine
+    jump_sm = ctx.find("'NewJump StateMachine'")
+    jump_event = ctx.event(event)
+    state_id = ctx.get_next_state_id(jump_sm)
+
+    default_transitions = ctx.find("DefaultTransition")
+    wildcard_transition = ctx.new_transition_info(
+        state_id,
+        jump_event, 
+        transition=default_transitions,
+        flags=TransitionInfoFlags(3584),
+    )
+    ctx.array_add(jump_sm, "wildcardTransitions/transitions", wildcard_transition)
+
+    # Transition to jump loop (?)
+    jump_loop_transition_effect = ctx.new_record(
+        "CustomTransitionEffect",
+        "<new>",
+        name=f"{base_name}_to_Jump_Loop",
+        duration=0.5,
+        selfTransitionMode=SelfTransitionMode.CONTINUE_IF_CYCLIC_BLEND_IF_ACYCLIC,
+        eventMode=EventMode.DEFAULT,
+        endMode=EndMode.NONE,
+        blendCurve=BlendCurve.SMOOTH,
+        alignmentBone=-1,
+    )
+
+    jump_loop_state = ctx.find("Jump_Loop type_name:hkbStateMachine::StateInfo")
+    jump_loop_transition = ctx.new_transition_info(
+        jump_loop_state["stateId"].get_value(),
+        "W_RideJump",  # Not sure why, but this is how it is
+        transition=jump_loop_transition_effect,
+    )
+    state_transitions = ctx.new_transition_info_array(transitions=[jump_loop_transition])
+
+    state = ctx.new_statemachine_state(
+        state_id,  # TODO raster used 39643 here, just an unused one?
+        name=base_name,
+        transitions=state_transitions,
+        generator=None,  # set later
     )
 
     ctx.set(state, generator=layer_gen)
