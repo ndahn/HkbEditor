@@ -651,7 +651,7 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_add(idx: int, new_value: tuple[str, int, int, int]):
+        def on_add(idx: int, new_value: tuple[str, VariableType, int, int]):
             if self.beh.find_variable(new_value[0], None):
                 self.logger.warning(
                     "A variable named '%s' already exists (%d)", new_value[0], idx
@@ -666,8 +666,8 @@ class BehaviorEditor(GraphEditor):
 
         def on_update(
             idx: int,
-            old_value: tuple[str, int, int, int],
-            new_value: tuple[str, int, int, int],
+            old_value: tuple[str, VariableType, int, int],
+            new_value: tuple[str, VariableType, int, int],
         ):
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)

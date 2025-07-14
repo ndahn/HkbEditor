@@ -127,14 +127,19 @@ class HavokBehavior(Tagfile):
     def create_variable(
         self,
         variable_name: str,
-        type_: VariableType = VariableType.INT32,
-        min_: int = 0,
-        max_: int = 0,
+        var_type: VariableType = VariableType.INT32,
+        range_min: int = 0,
+        range_max: int = 0,
         idx: int = None,
     ) -> int:
         if idx is None:
             idx = len(self._animations)
 
+        if isinstance(var_type, str):
+            var_type = VariableType[var_type]
+
+        var_type = VariableType(var_type)
+        
         self._variables.insert(idx, variable_name)
 
         # These must have matching entries as well
@@ -144,7 +149,7 @@ class HavokBehavior(Tagfile):
                 self,
                 self._variable_infos.element_type_id,
                 {
-                    "type": type_,
+                    "type": var_type.value,
                 },
             ),
         )
@@ -154,8 +159,8 @@ class HavokBehavior(Tagfile):
                 self,
                 self._variable_bounds.element_type_id,
                 {
-                    "min/value": min_,
-                    "max/value": max_,
+                    "min/value": range_min,
+                    "max/value": range_max,
                 },
             ),
         )
