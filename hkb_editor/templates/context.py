@@ -168,7 +168,6 @@ class TemplateContext(CommonActionsMixin):
 
             raise KeyError(f"No object matching '{query}'")
 
-    # TODO remove?
     def get(
         self,
         record: HkbRecord | str,

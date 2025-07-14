@@ -1,3 +1,6 @@
+# Just a rough outline of how the XML is structured. This is not coffee script, 
+# but vscode was able to do some nice syntax highlighting this way
+
 -> object240 hkbStateMachine
     - name: "Master_SM"
     - variableBindingSet: object309
