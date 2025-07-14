@@ -150,9 +150,9 @@ def create_cmsg_dialog(
                 stateId=new_state_id,
             )
             transitioninfo = util.new_transition_info(
+                new_state_id,
+                event,
                 transition=transitioninfo_effect_id,
-                eventId=event,
-                toStateId=new_state_id,
                 flags=transition_flags,
             )
 

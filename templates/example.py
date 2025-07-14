@@ -61,6 +61,7 @@ def run(
     # flags and enums.
     cmsg = ctx.new_record(
         "CustomManualSelectorGenerator",
+        "<new>",
         name="My_CMSG",
         enableScript=True,
         enableTae=True,

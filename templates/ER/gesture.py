@@ -78,15 +78,15 @@ def run(
     # Start to loop
     ####
     default_transition = ctx.find("name:DefaultTransition")
-    transitions = ctx.new_record(
-        "hkbStateMachine::TransitionInfoArray",
-    )
     transition_info = ctx.new_transition_info(
         toStateId=state2_id,
         eventId=transition_event,
         transition=default_transition,
     )
-    ctx.array_add(transitions, "transitions", transition_info)
+    transitions = ctx.new_transition_info_array(
+        "hkbStateMachine::TransitionInfoArray",
+        transitions=[transition_info]
+    )
 
     # TODO use?
     # state1, state1_cmsg, state1_clip = ctx.create_state_chain(

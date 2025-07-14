@@ -153,6 +153,7 @@ class BehaviorEditor(GraphEditor):
 
     def _do_write_to_file(self, file_path):
         self.beh.save_to_file(file_path)
+        self.logger.info(f"Saved to {file_path}")
 
     def exit_app(self):
         with dpg.window(

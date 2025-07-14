@@ -84,10 +84,13 @@ class HkbInteger(XmlValueHandler):
 class HkbFloat(XmlValueHandler):
     @classmethod
     def new(cls, tagfile: Tagfile, type_id: str, value: float = None) -> "HkbFloat":
+        elem = ET.Element("real", dec="", hex="")
+        ret = HkbFloat(tagfile, elem, type_id)
+
+        # Slightly roundabout, but this way we get proper comma handling etc.
         val = float(value) if value is not None else 0.0
-        ieee = cls.float_to_ieee754(val)
-        elem = ET.Element("real", dec=str(val), hex=ieee)
-        return HkbFloat(tagfile, elem, type_id)
+        ret.set_value(val)
+        return ret
 
     @classmethod
     def float_to_ieee754(cls, value: float) -> str:
@@ -538,7 +541,9 @@ class HkbRecord(XmlValueHandler):
         return elem
 
     def __str__(self) -> str:
-        return f"{self.type_name} (id={self.object_id})"
+        name = self.get_field("name", None)
+        name = f" '{name}'" if name else ""
+        return f"{self.type_name}{name} (id={self.object_id})"
 
 
 def get_value_handler(

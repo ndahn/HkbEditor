@@ -53,6 +53,7 @@ def run(
     # Transition
     transition_effect = ctx.new_record(
         "CustomTransitionEffect",
+        "<new>",
         name=f"{name}_to_Jump_Loop",
         duration=0.5,
         selfTransitionMode=SelfTransitionMode.CONTINUE_IF_CYCLIC_BLEND_IF_ACYCLIC,

@@ -176,12 +176,9 @@ def run(
             selectedIndexCanChangeAfterActivate=True,
         )
 
-        normalitem_state = ctx.new_record(
-            "hkbStateMachine::StateInfo",
+        normalitem_state = ctx.new_statemachine_state(
             name="ItemWeaponEnchant",
             generator=normalitem_selector,
-            probability=1,
-            enable=True,
         )
 
         ctx.array_add(normalitem_sm, "states", normalitem_state)

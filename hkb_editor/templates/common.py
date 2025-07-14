@@ -400,8 +400,7 @@ class CommonActionsMixin:
     def new_record(
         self,
         object_type_name: str,
-        *,
-        object_id: str = "<new>",
+        object_id: str,
         **kwargs: Any,
     ) -> HkbRecord:
         """Create an arbitrary new hkb object. If an object ID is provided or generated, the object will also be added to the behavior.
@@ -463,10 +462,14 @@ class CommonActionsMixin:
         """
         source = self.resolve_object(source)
 
+        if not source.object_id and object_id == "<new>":
+            # Looks like an object that shouldn't be at the top level
+            object_id = None
+
         attributes = {k: v.get_value() for k, v in source.get_value().items()}
         attributes.update(**overrides)
 
-        return self.new_record(source.type_name, object_id=object_id, **attributes)
+        return self.new_record(source.type_name, object_id, **attributes)
 
     # Offer common defaults and highlight required settings for the most common objects
     # TODO document functions and their arguments
@@ -491,11 +494,9 @@ class CommonActionsMixin:
         else:
             generators = []
 
-        
-
         return self.new_record(
             "CustomManualSelectorGenerator",
-            object_id=object_id,
+            object_id,
             name=name,
             generators=generators,
             offsetType=offsetType,
@@ -533,7 +534,7 @@ class CommonActionsMixin:
 
         selector = self.new_record(
             "hkbManualSelectorGenerator",
-            object_id=object_id,
+            object_id,
             name=name,
             generators=generators,
             variableBindingSet=(
@@ -571,7 +572,7 @@ class CommonActionsMixin:
 
         return self.new_record(
             "hkbClipGenerator",
-            object_id=object_id,
+            object_id,
             name=name,
             animationName=animation.name,
             playbackSpeed=playbackSpeed,
@@ -597,7 +598,7 @@ class CommonActionsMixin:
 
         return self.new_record(
             "hkbStateMachine::StateInfo",
-            object_id=object_id,
+            object_id,
             stateId=stateId,
             name=name,
             transitions=transitions.object_id if transitions else None,
@@ -615,7 +616,7 @@ class CommonActionsMixin:
     ) -> HkbRecord:
         return self.new_record(
             "hkbStateMachine::TransitionInfoArray",
-            object_id=object_id,
+            object_id,
             transitions=transitions or [],
         )
 
@@ -646,6 +647,7 @@ class CommonActionsMixin:
 
         return self.new_record(
             "hkbStateMachine::TransitionInfo",
+            None,  # Not a top-level object
             toStateId=toStateId,
             eventId=eventId.index,
             transition=transition.object_id if transition else None,
@@ -666,7 +668,7 @@ class CommonActionsMixin:
 
         return self.new_record(
             "hkbBlenderGeneratorChild",
-            object_id=object_id,
+            object_id,
             generator=cmsg.object_id if cmsg else None,
             weight=weight,
             worldFromModelWeight=worldFromModelWeight,
@@ -690,7 +692,7 @@ class CommonActionsMixin:
 
         return self.new_record(
             "hkbLayerGenerator",
-            object_id=object_id,
+            object_id,
             name=name,
             layers=layers,
             indexOfSyncMasterChild=indexOfSyncMasterChild,
@@ -731,7 +733,7 @@ class CommonActionsMixin:
 
         return self.new_record(
             "hkbLayer",
-            object_id=object_id,
+            object_id,
             useMotion=useMotion,
             **blend_params,
             **kwargs,
