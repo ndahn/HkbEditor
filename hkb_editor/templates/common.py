@@ -734,6 +734,8 @@ class CommonActionsMixin:
         return self.new_record(
             "hkbLayer",
             object_id,
+            generator=generator,
+            boneWeights=boneWeights,
             useMotion=useMotion,
             **blend_params,
             **kwargs,

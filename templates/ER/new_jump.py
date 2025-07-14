@@ -304,12 +304,13 @@ def run(
         # Front
         if jump_front_anim:
             jump_front_clips = [ctx.new_clip(jump_front_anim)]
+            jump_front_anim_id = jump_front_anim.anim_id
         else:
             jump_front_clips = get_generators(f"'{base_jump}_Direction_Front_CMSG'")
-            jump_front_anim = 202020
+            jump_front_anim_id = 202020
 
         jump_front_cmsg = ctx.new_cmsg(
-            jump_front_anim.anim_id,
+            jump_front_anim_id,
             name=f"{name}_Direction_Front_CMSG",
             generators=jump_front_clips,
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
@@ -384,7 +385,7 @@ def run(
             f"type_name:hkbLayer generator:{model_selector.object_id}"
         )
 
-        layer2 = ctx.new_layer(
+        layer2_direction = ctx.new_layer(
             generator=direction_selector,
             useMotion=True,
             weight=0.01,
@@ -400,7 +401,7 @@ def run(
         all_layers.append(layer1_jumpattack_add)
 
     if base_jump != "Jump_N":
-        all_layers.append(layer2)
+        all_layers.append(layer2_direction)
 
     layer_gen = ctx.new_layer_generator(
         name=f"{name}_LayerGenerator",
@@ -408,3 +409,4 @@ def run(
     )
 
     ctx.set(state, generator=layer_gen)
+    ctx.array_add(jump_sm, "states", state)
