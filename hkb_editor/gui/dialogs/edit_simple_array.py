@@ -1,18 +1,19 @@
-from typing import Any, Callable
+from typing import Any, Callable, Type
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.gui.helpers import center_window, create_value_widget, table_sort
+from hkb_editor.hkb import HavokBehavior
+from hkb_editor.gui.helpers import center_window, create_simple_value_widget, table_sort
 from hkb_editor.gui import style
 from .make_tuple import new_tuple_dialog
 
 
 def edit_simple_array_dialog(
     items: list[tuple],
-    columns: list[str],
+    columns: dict[str, Type],
     *,
     title: str = "Edit Array",
     help: list[str] = None,
-    choices: dict[int, list[str]] = None,
+    choices: dict[int, list[str | tuple[str, Any]]] = None,
     on_add: Callable[[int, str], bool] = None,
     on_update: Callable[[int, str, str], bool] = None,
     on_delete: Callable[[int], bool] = None,
@@ -26,7 +27,7 @@ def edit_simple_array_dialog(
 
     def new_entry_dialog(sender, app_data, item_idx: int):
         popup = new_tuple_dialog(
-            {col:type(v) for col, v in zip(columns, items[0])},
+            columns,
             add_entry,
             choices=choices,
             user_data=item_idx,
@@ -49,6 +50,14 @@ def edit_simple_array_dialog(
 
     def update_entry(sender, new_value: Any, user_data: tuple[int, int]):
         item_idx, val_idx = user_data
+
+        if choices and val_idx in choices:
+            for item in choices[val_idx]:
+                if item == new_value:
+                    break
+                if isinstance(item, tuple) and item[0] == new_value:
+                    new_value = item[1]
+                    break
 
         old_value_tuple = items[item_idx]
         new_value_tuple = list(old_value_tuple)
@@ -81,14 +90,14 @@ def edit_simple_array_dialog(
             with dpg.table_row(filter_key=f"{item_idx}:{item}", parent=table) as row:
                 dpg.add_text(str(item_idx))
 
-                for val_idx, val in enumerate(item):
-                    create_value_widget(
-                        val_idx,
-                        val,
+                for val_idx, (val_type, val) in enumerate(zip(columns.values(), item)):
+                    create_simple_value_widget(
+                        val_type,
+                        "",
                         callback=update_entry,
+                        default=val,
+                        choices=choices.get(val_idx) if choices else None,
                         user_data=(item_idx, val_idx),
-                        choices=choices,
-                        on_enter=True,
                         width=-1,
                     )
 
@@ -153,7 +162,7 @@ def edit_simple_array_dialog(
             tag=f"{tag}_table",
         ) as table:
             dpg.add_table_column(label="Index")
-            for col in columns:
+            for col in columns.keys():
                 dpg.add_table_column(label=col, width_stretch=True)
             dpg.add_table_column()
 

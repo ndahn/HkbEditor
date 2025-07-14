@@ -248,7 +248,7 @@ def run(
         )
 
         # Jump Attack Layer
-        attack_jumpnormal_evt = ctx.get_event("Event_JumpNormalAttack_Add")
+        attack_jumpnormal_evt = ctx.event("Event_JumpNormalAttack_Add")
         
         # A bit difficult to query, we need the parent layer of the selector we are imitating
         model_selector = ctx.find(f"'{base_jump} HandCondition Selector'")

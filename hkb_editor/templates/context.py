@@ -6,19 +6,13 @@ import logging
 import re
 from docstring_parser import parse as parse_docstring, DocstringParam
 
-from .common import CommonActionsMixin, Variable, Event, Animation
+from .common import CommonActionsMixin, Variable, Event, Animation, HkbRecordSpec
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 
 
 _undefined = object()
-
-
-@dataclass
-class HkbRecordSpec:
-    query: str = None
-    type_name: str = None
 
 
 class TemplateContext(CommonActionsMixin):
@@ -202,7 +196,7 @@ class TemplateContext(CommonActionsMixin):
         Any
             The value resolved to a regular type (non-recursive).
         """
-        record = self.get_record(record)
+        record = self._resolve_object(record)
         return record.get_path_value(path, default=default, resolve=True)
 
     def set(self, record: HkbRecord | str, **attributes) -> None:
@@ -297,14 +291,15 @@ class TemplateContext(CommonActionsMixin):
         self.logger.debug(f"Removed item {index} ({ret}) from {path} of {record}")
         return ret
 
-    def new_variable(
+    def variable(
         self,
         name: str,
-        data_type: VariableType = VariableType.INT32,
+        *,
+        var_type: VariableType = VariableType.INT32,
         range_min: int = 0,
         range_max: int = 0,
     ) -> Variable:
-        """Create a new variable.
+        """Get a variable by name, or create it if it doesn't exist yet.
 
         Variables are typically used to control behaviors from other subsystems like HKS and TAE. See :py:meth:`bind_attribute` for the most common use case.
 
@@ -312,7 +307,7 @@ class TemplateContext(CommonActionsMixin):
         ----------
         name : str
             The name of the variable. Must not exist yet.
-        data_type : VariableType, optional
+        var_type : VariableType, optional
             The type of data that will be stored in the variable.
         range_min : int, optional
             Minimum allowed value.
@@ -324,33 +319,18 @@ class TemplateContext(CommonActionsMixin):
         Variable
             Description of the generated variable.
         """
-        idx = self._behavior.create_variable(name, data_type, range_min, range_max)
-        undo_manager.on_create_variable(self._behavior, name)
-        self.logger.debug(f"Created new variable {name} ({idx})")
+        try:
+            idx = self._behavior.find_variable(name)
+        except ValueError:
+            var_type = VariableType(var_type)
+            idx = self._behavior.create_variable(name, var_type, range_min, range_max)
+            undo_manager.on_create_variable(self._behavior, name)
+            self.logger.debug(f"Created new variable {name} ({idx}) with type {var_type.name}")
+
         return Variable(idx, name)
 
-    def get_variable(self, name: str) -> Variable:
-        """Retrieve an already existing variable by name.
-
-        Parameters
-        ----------
-        name : str
-            The name of the variable you are looking for.
-
-        Raises
-        ------
-        ValueError
-            If no variable with the specified name can be found.
-
-        Returns
-        -------
-        Variable
-            The variable with the specified name.
-        """
-        return Variable(self._behavior.find_variable(name), name)
-
-    def new_event(self, event: str) -> Event:
-        """Create a new event.
+    def event(self, event: str) -> Event:
+        """Get the event with the specified name, or create it if it doesn't exist yet.
 
         Events are typically used to trigger transitions between statemachine states. See :py:meth:`new_statemachine_state` for details.
         TODO mention events.txt
@@ -365,33 +345,17 @@ class TemplateContext(CommonActionsMixin):
         Event
             The generated event.
         """
-        idx = self._behavior.create_event(event)
-        undo_manager.on_create_event(self._behavior, event)
-        self.logger.debug(f"Created new event {event} ({idx})")
+        try:
+            idx = self._behavior.find_event(event)
+        except ValueError:
+            idx = self._behavior.create_event(event)
+            undo_manager.on_create_event(self._behavior, event)
+            self.logger.debug(f"Created new event {event} ({idx})")
+
         return Event(idx, event)
 
-    def get_event(self, name: str) -> Event:
-        """Retrieve an event based on its name.
-
-        Parameters
-        ----------
-        name : str
-            The name of the event.
-
-        Raises
-        ------
-        ValueError
-            If no event with the specified name can be found.
-
-        Returns
-        -------
-        Event
-            The event with the specified name.
-        """
-        return Event(self._behavior.find_event(name), name)
-
-    def new_animation(self, animation: str) -> Animation:
-        """Generate a new entry for an animation slot.
+    def animation(self, animation: str) -> Animation:
+        """Get the animation with the specified name, or create a new one if it doesn't exist yet.
 
         Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
         # TODO mention animations.txt
@@ -406,36 +370,15 @@ class TemplateContext(CommonActionsMixin):
         Animation
             The generated animation name. Note that the full name is almost never used.
         """
-        if not re.fullmatch(r"a[0-9]{3}_[0-9]{6}"):
-            raise ValueError(f"Invalid animation name '{animation}'")
+        try:
+            idx = self._behavior.find_animation(animation)
+        except ValueError:
+            if not re.fullmatch(r"a[0-9]{3}_[0-9]{6}", animation):
+                raise ValueError(f"Invalid animation name '{animation}'")
 
-        idx = self._behavior.create_animation(animation)
-        undo_manager.on_create_animation(self._behavior, animation)
-        self.logger.debug(f"Created new animation {animation} ({idx})")
-        return Animation(
-            idx,
-            self._behavior.get_animation(idx, full_name=False),
-            self._behavior.get_animation(idx, full_name=True),
-        )
+            idx = self._behavior.create_animation(animation)
+            undo_manager.on_create_animation(self._behavior, animation)
+            self.logger.debug(f"Created new animation {animation} ({idx})")
 
-    def get_animation(self, short_name: str) -> Animation:
-        """Retrieve an animation slot based on its name.
-
-        Parameters
-        ----------
-        short_name : str
-            The name of the animation following the `aXXX_YYYYYY` pattern.
-
-        Raises
-        ------
-        ValueError
-            If the specified animation cannot be found.
-
-        Returns
-        -------
-        Animation
-            The animation with the specified short name.
-        """
-        idx = self._behavior.find_event(short_name)
         full_name = self._behavior.get_animation(idx, full_name=True)
-        return Animation(idx, short_name, full_name)
+        return Animation(idx, animation, full_name)

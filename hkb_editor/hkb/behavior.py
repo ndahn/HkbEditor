@@ -86,7 +86,10 @@ class HavokBehavior(Tagfile):
 
         return g
 
-    def create_event(self, event_name: str, idx: int = -1) -> int:
+    def create_event(self, event_name: str, idx: int = None) -> int:
+        if idx is None:
+            idx = len(self._animations)
+
         self._events.insert(idx, event_name)
 
         # This one never has any meaningful data, but must still have an entry
@@ -127,8 +130,11 @@ class HavokBehavior(Tagfile):
         type_: VariableType = VariableType.INT32,
         min_: int = 0,
         max_: int = 0,
-        idx: int = -1,
+        idx: int = None,
     ) -> int:
+        if idx is None:
+            idx = len(self._animations)
+
         self._variables.insert(idx, variable_name)
 
         # These must have matching entries as well
@@ -218,7 +224,10 @@ class HavokBehavior(Tagfile):
     def get_short_animation_name(self, full_anim_name: str) -> str:
         return full_anim_name.rsplit("\\", maxsplit=1)[-1].rsplit(".", maxsplit=1)[0]
 
-    def create_animation(self, animation_name: str, idx: int = -1) -> int:
+    def create_animation(self, animation_name: str, idx: int = None) -> int:
+        if idx is None:
+            idx = len(self._animations)
+
         full_anim_name = self.get_full_animation_name(animation_name)
         self._animations.insert(idx, full_anim_name)
 

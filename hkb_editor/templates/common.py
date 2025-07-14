@@ -1,5 +1,6 @@
 from typing import Any
 import os
+import re
 import logging
 from dataclasses import dataclass
 
@@ -11,6 +12,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_ChangeTypeOfSelectedIndexAfterActivate as ChangeIndexType,
     hkbClipGenerator_PlaybackMode as PlaybackMode,
     hkbBlendCurveUtils_BlendCurve as BlendCurve,
+    hkbVariableInfo_VariableType as VariableType,
 )
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
@@ -40,6 +42,13 @@ class Animation:
         return int(self.name.split("_")[-1])
 
 
+@dataclass
+class HkbRecordSpec:
+    query: str = None
+    type_name: str = None
+    include_derived: bool = True
+
+
 class CommonActionsMixin:
     def __init__(self, behavior: HavokBehavior):
         """Provides convenience methods for common actions.
@@ -61,7 +70,37 @@ class CommonActionsMixin:
             return logger
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-    def get_record(self, reference: Any, default: Any = None) -> HkbRecord:
+    def _resolve_variable(self, variable: Variable | str | int) -> int:
+        if isinstance(variable, Variable):
+            return variable.index
+        elif isinstance(variable, str):
+            return self._behavior.find_variable(variable)
+        elif isinstance(variable, int):
+            return variable
+
+        raise ValueError(f"{variable} is not a valid variable")
+    
+    def _resolve_event(self, event: Event | str | int) -> int:
+        if isinstance(event, Event):
+            return event.index
+        elif isinstance(event, str):
+            return self._behavior.find_event(event)
+        elif isinstance(event, int):
+            return event
+
+        raise ValueError(f"{event} is not a valid event")
+
+    def _resolve_animation(self, animation: Animation | str | int) -> int:
+        if isinstance(animation, Animation):
+            return animation.index
+        elif isinstance(animation, str):
+            return self._behavior.find_animation(animation)
+        elif isinstance(animation, int):
+            return animation
+
+        raise ValueError(f"{animation} is not a valid animation")
+
+    def _resolve_object(self, reference: Any, default: Any = None) -> HkbRecord:
         """Safely retrieve the record referenced by the input.
 
         If the input is None or already a HkbRecord, simply retrieve it. If it's the ID of an existing object, resolve it. In all other cases treat it as a query string and return the first matching object.
@@ -90,37 +129,6 @@ class CommonActionsMixin:
 
         # Assume it's a query string
         return next(self._behavior.query(reference), default)
-
-    def _resolve_variable(self, variable: Variable | str | int) -> int:
-        if isinstance(variable, Variable):
-            return variable.index
-        elif isinstance(variable, str):
-            return self._behavior.find_variable(variable)
-        elif isinstance(variable, int):
-            return variable
-
-        raise ValueError(f"{variable} is not a valid variable")
-    
-    def _resolve_event(self, event: Event | str | int) -> int:
-        if isinstance(event, Event):
-            return event.index
-        elif isinstance(event, str):
-            return self._behavior.find_event(event)
-        elif isinstance(event, int):
-            return event
-
-        raise ValueError(f"{event} is not a valid event")
-
-
-    def _resolve_animation(self, animation: Animation | str | int) -> int:
-        if isinstance(animation, Animation):
-            return animation.index
-        elif isinstance(animation, str):
-            return self._behavior.find_animation(animation)
-        elif isinstance(animation, int):
-            return animation
-
-        raise ValueError(f"{animation} is not a valid animation")
 
     def get_next_state_id(self, statemachine: HkbRecord) -> int:
         """Find the next state ID which is 1 higher than the highest one in use.
@@ -353,7 +361,7 @@ class CommonActionsMixin:
         HkbRecord
             A copy of the source altered according to the specified overrides.
         """
-        source = self.get_record(source)
+        source = self._resolve_object(source)
 
         attributes = {k: v.get_value() for k, v in source.get_value().items()}
         attributes.update(**overrides)
@@ -386,7 +394,7 @@ class CommonActionsMixin:
             animId = int(animId.split("_")[-1])
 
         if generators:
-            generators = [self.get_record(obj).object_id for obj in generators]
+            generators = [self._resolve_object(obj).object_id for obj in generators]
         else:
             generators = []
 
@@ -418,12 +426,12 @@ class CommonActionsMixin:
         **kwargs,
     ) -> HkbRecord:
         if generators:
-            generators = [self.get_record(obj).object_id for obj in generators]
+            generators = [self._resolve_object(obj).object_id for obj in generators]
         else:
             generators = []
 
-        variableBindingSet = self.get_record(variableBindingSet)
-        generatorChangedTransitionEffect = self.get_record(generatorChangedTransitionEffect)
+        variableBindingSet = self._resolve_object(variableBindingSet)
+        generatorChangedTransitionEffect = self._resolve_object(generatorChangedTransitionEffect)
 
         kwargs.setdefault("sentOnClipEnd/id", -1)
         kwargs.setdefault("endOfClipEventId", -1)
@@ -490,8 +498,8 @@ class CommonActionsMixin:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
-        transitions = self.get_record(transitions)
-        generator = self.get_record(generator)
+        transitions = self._resolve_object(transitions)
+        generator = self._resolve_object(generator)
 
         return self.new_record(
             "hkbStateMachine::StateInfo",
@@ -535,7 +543,7 @@ class CommonActionsMixin:
                 ),
                 None,
             )
-        transition = self.get_record(transition)
+        transition = self._resolve_object(transition)
 
         kwargs.setdefault("triggerInterval/enterEventId", -1)
         kwargs.setdefault("triggerInterval/exitEventId", -1)
@@ -560,7 +568,7 @@ class CommonActionsMixin:
         worldFromModelWeight: int = 1,
         **kwargs,
     ) -> HkbRecord:
-        cmsg = self.get_record(cmsg)
+        cmsg = self._resolve_object(cmsg)
 
         return self.new_record(
             "hkbBlenderGeneratorChild",
@@ -582,7 +590,7 @@ class CommonActionsMixin:
         **kwargs,
     ) -> HkbRecord:
         if layers:
-            layers = [self.get_record(l) for l in layers]
+            layers = [self._resolve_object(l) for l in layers]
         else:
             layers = []
 
@@ -612,8 +620,8 @@ class CommonActionsMixin:
         fadeInOutCurve: BlendCurve = BlendCurve.SMOOTH,
         **kwargs,
     ) -> HkbRecord:
-        generator = self.get_record(generator)
-        boneWeights = self.get_record(boneWeights)
+        generator = self._resolve_object(generator)
+        boneWeights = self._resolve_object(boneWeights)
         onEventId = self._resolve_event(onEventId)
         offEventId = self._resolve_event(offEventId)
 
@@ -652,7 +660,7 @@ class CommonActionsMixin:
         checkAnimEndSlotNo: int = -1,
         **cmsg_kwargs,
     ) -> tuple[HkbRecord, HkbRecord, HkbRecord]:
-        transitions = self.get_record(state_transitions)
+        transitions = self._resolve_object(state_transitions)
 
         clip = self.new_clip(animation, mode=clip_mode)
         cmsg = self.new_cmsg(

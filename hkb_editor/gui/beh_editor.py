@@ -683,7 +683,7 @@ class BehaviorEditor(GraphEditor):
                 (v.name, v.vtype.value, v.vmin, v.vmax)
                 for v in self.beh.get_variables(full_info=True)
             ],
-            ["Name", "Type", "Min", "Max"],
+            {"Name": str, "Type": VariableType, "Min": int, "Max": int},
             title="Edit Variables",
             help=[
                 ("Warning:", style.orange),
@@ -696,9 +696,6 @@ class BehaviorEditor(GraphEditor):
                     style.light_blue,
                 ),
             ],
-            choices={
-                1: [v.name for v in VariableType],
-            },
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
@@ -740,7 +737,7 @@ class BehaviorEditor(GraphEditor):
 
         edit_simple_array_dialog(
             [(e,) for e in self.beh.get_events()],
-            ["Name"],
+            {"Name": str},
             title="Edit Events",
             help=[
                 ("Warning:", style.orange),
@@ -790,7 +787,7 @@ class BehaviorEditor(GraphEditor):
 
         edit_simple_array_dialog(
             [(a,) for a in self.beh.get_animations()],
-            ["Name"],
+            {"Name": str},
             title="Edit Animation Names",
             help=[
                 ("Warning:", style.orange),

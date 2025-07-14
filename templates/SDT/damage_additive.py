@@ -56,7 +56,7 @@ def run(
         offsetType=offset_type,
     )
 
-    autotrans_event = ctx.new_event(f"{base_name}_to_DefaultDamageAdd")
+    autotrans_event = ctx.event(f"{base_name}_to_DefaultDamageAdd")
     blend_transition = ctx.find("StateToStateBlend")
     state_transition = ctx.new_transition_info(
         state_id,

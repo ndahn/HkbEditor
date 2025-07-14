@@ -20,7 +20,7 @@ from hkb_editor.gui.dialogs import (
     select_object,
 )
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.gui.helpers import center_window, add_paragraphs
+from hkb_editor.gui.helpers import center_window, add_paragraphs, create_value_widget
 from hkb_editor.gui import style
 
 
@@ -37,7 +37,7 @@ def apply_template_dialog(
 
     logger = logging.getLogger(f"{tag}_template_{os.path.basename(template_file)}")
     template = TemplateContext(behavior, template_file)
-    args = {arg.name: arg.value for arg in template._args.values()}
+    args = {arg.name: arg for arg in template._args.values()}
 
     def show_warning(msg: str) -> None:
         dpg.set_value(f"{tag}_notification", msg)
@@ -57,210 +57,33 @@ def apply_template_dialog(
                     value = choice
                     break
 
-        elif arg.type == Variable:
-            if value:
-                var_name = behavior.get_variable_name(value)
-                value = Variable(value, var_name)
-            else:
-                var_name = ""
-            dpg.set_value(f"{tag}_attribute_{arg.name}", var_name)
-
-        elif arg.type == Event:
-            if value:
-                event = behavior.get_event(value)
-                value = Event(value, event)
-            else:
-                event = ""
-            dpg.set_value(f"{tag}_attribute_{arg.name}", event)
-
-        elif arg.type == Animation:
-            if value:
-                anim_short = behavior.get_animation(value, full_name=False)
-                anim_long = behavior.get_animation(value, full_name=True)
-                value = Animation(value, anim_short, anim_long)
-            else:
-                anim_short = ""
-            dpg.set_value(f"{tag}_attribute_{arg.name}", anim_short)
-
         else:
             # simple types and HkbRecord will just be passed through
             pass
 
-        args[arg.name] = value
+        args[arg.name].value = value
 
-    # TODO use helpers.create_value_widget
     def create_widget(arg: TemplateContext._Arg) -> str:
-        # TODO make some of the AttributeWidget functions reusable for this
-
         widget_tag = f"{tag}_attribute_{arg.name}"
 
-        # Simple types
-        if arg.type == int:
-            default = arg.value if isinstance(arg.value, int) else 0
-            widget = dpg.add_input_int(
-                label=arg.name,
-                default_value=default,
-                tag=widget_tag,
+        try:
+            widget = create_value_widget(
+                behavior,
+                arg.type,
+                arg.name,
                 callback=set_arg,
+                default=arg.value,
+                tag=widget_tag,
                 user_data=arg,
             )
-        elif arg.type == float:
-            default = arg.value if isinstance(arg.value, float) else 0.0
-            widget = dpg.add_input_float(
-                label=arg.name,
-                default_value=default,
-                tag=widget_tag,
-                callback=set_arg,
-                user_data=arg,
-            )
-        elif arg.type == bool:
-            default = arg.value if isinstance(arg.value, bool) else False
-            widget = dpg.add_checkbox(
-                label=arg.name,
-                default_value=default,
-                tag=widget_tag,
-                callback=set_arg,
-                user_data=arg,
-            )
-        elif arg.type == str:
-            default = arg.value if isinstance(arg.value, str) else ""
-            widget = dpg.add_input_text(
-                label=arg.name,
-                default_value=default,
-                tag=widget_tag,
-                callback=set_arg,
-                user_data=arg,
-            )
-
-        # Literal
-        elif get_origin(arg.type) == Literal:
-            choices = [str(c) for c in get_choices(arg.type)]
-            default = str(arg.value) if arg.value is not None else ""
-            widget = dpg.add_combo(
-                choices,
-                label=arg.name,
-                default_value=default,
-                tag=widget_tag,
-                callback=set_arg,
-                user_data=arg,
-            )
-
-        # Common constants
-        elif arg.type in (Variable, Event, Animation):
-            default = ""
-
-            if arg.type == Variable:
-                if arg.value is not None:
-                    if isinstance(arg.value, str):
-                        default = arg.value
-                    elif isinstance(arg.value, int):
-                        default = behavior.get_variable_name(arg.value)
-                    elif isinstance(arg.value, Variable):
-                        if behavior.find_variable(arg.value.index, None):
-                            default = arg.value.name
-
-                    # Update the args default
-                    if default:
-                        index = behavior.find_variable(default)
-                        set_arg(None, index, arg)
-
-                selector = select_variable
-
-            elif arg.type == Event:
-                if arg.value is not None:
-                    if isinstance(arg.value, str):
-                        default = arg.value
-                    elif isinstance(arg.value, int):
-                        default = behavior.get_event(arg.value)
-                    elif isinstance(arg.value, Event):
-                        if behavior.find_event(arg.value.index, None):
-                            default = arg.value.name
-
-                    # Update the args default
-                    if default:
-                        index = behavior.find_variable(default)
-                        set_arg(None, index, arg)
-
-                selector = select_event
-
-            elif arg.type == Animation:
-                if arg.value is not None:
-                    if isinstance(arg.value, str):
-                        default = arg.value
-                    elif isinstance(arg.value, int):
-                        default = behavior.get_short_animation_name(arg.value)
-                    elif isinstance(arg.value, Animation):
-                        if behavior.find_animation(arg.value.index, None):
-                            default = arg.value.name
-
-                    # Update the args default
-                    if default:
-                        index = behavior.find_animation(default)
-                        set_arg(None, index, arg)
-
-                selector = select_animation
-
-            with dpg.group(horizontal=True) as widget:
-                dpg.add_input_text(
-                    readonly=True,
-                    default_value=default,
-                    tag=widget_tag,
-                )
-                dpg.add_button(
-                    arrow=True,
-                    direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: selector(behavior, set_arg, user_data=u),
-                    user_data=arg,
-                )
-                dpg.add_text(arg.name)
-
-        elif arg.type == HkbRecord:
-            default = ""
-            if isinstance(arg.value, str):
-                arg.value = HkbRecordSpec(arg.value)
-
-            if isinstance(arg.value, HkbRecordSpec):
-                if arg.value.query in behavior.objects:
-                    default = arg.value.query
-                else:
-                    query = arg.value.query
-                    filt = None
-                    if arg.value.type_name:
-                        type_id = behavior.type_registry.find_first_type_by_name(
-                            arg.value.type_name
-                        )
-                        filt = lambda o: o.type_id == type_id
-
-                    match = next(behavior.query(query, object_filter=filt), None)
-                    if match:
-                        default = match.object_id
-                    # Update our args default
-                    set_arg(None, match, arg)
-
-            with dpg.group(horizontal=True) as widget:
-                dpg.add_input_text(
-                    readonly=True,
-                    default_value=default,
-                    tag=widget_tag,
-                )
-                dpg.add_button(
-                    arrow=True,
-                    direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: select_object(
-                        behavior, None, set_arg, user_data=u
-                    ),
-                    user_data=arg,
-                )
-                dpg.add_text(arg.name)
-
-        else:
+        except ValueError:
             # Refuse to handle the template
             dpg.delete_item(window)
             raise ValueError(f"Template argument {arg.name} has unhandled type {arg.type.__name__}")
 
         if arg.doc:
             with dpg.tooltip(widget):
-                dpg.add_text(arg.doc)
+                add_paragraphs(arg.doc)
 
         return widget_tag
 
@@ -291,14 +114,29 @@ def apply_template_dialog(
             logger.info(f"Executing template '{template._title}'")
 
             with undo_manager.combine():
-                execute_template(template, **args)
+                for arg in args.values():
+                    if arg.value in (None, ""):
+                        continue
+                    
+                    # Resolve to the types the template expects
+                    if arg.type == Variable:
+                        arg.value = template.variable(arg.value)
+                    elif arg.type == Event:
+                        arg.value = template.event(arg.value)
+                    elif arg.type == Animation:
+                        arg.value = template.animation(arg.value)
+
+                arg_values = {key: arg.value for key, arg in args.items()}
+                execute_template(template, **arg_values)
         except Exception as e:
+            logger.error(f"Template failed: {str(e)}", exc_info=e)
+            show_warning(f"Template failed: {str(e)}")
+
             # Undo any changes that might have already happened
             if undo_top != undo_manager.top():
                 undo_manager.undo()
 
-            logger.error(f"Template failed: {str(e)}", exc_info=e)
-            show_warning(f"Template failed: {str(e)}")
+            logger.info("All recorded changes undone")
         else:
             logger.info(f"Template '{template._title}' finished successfully")
 

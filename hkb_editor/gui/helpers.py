@@ -1,12 +1,21 @@
-from typing import Any, Callable, Type, Literal
-from enum import IntFlag
+from typing import Any, Callable, Type, Literal, get_origin, get_args
+from enum import IntFlag, Enum, Flag
+from functools import partial
 import logging
 import textwrap
 from dearpygui import dearpygui as dpg
 import pyperclip
 from natsort import natsorted
 
-from hkb_editor.hkb.hkb_types import HkbRecord
+from hkb_editor.hkb import HavokBehavior, HkbRecord
+from hkb_editor.templates.common import (
+    CommonActionsMixin,
+    Variable,
+    Event,
+    Animation,
+    HkbRecordSpec,
+)
+
 from . import style
 
 
@@ -29,78 +38,285 @@ def center_window(window: str, parent: str = None) -> None:
     )
 
 
-def create_value_widget(
-    val_idx: int,
-    val: Any,
+def create_simple_value_widget(
+    value_type: type,
+    label: str,
+    callback: Callable[[str, str | Any, Any], None],
     *,
-    choices: dict[int, str] = None,
-    callback: Callable[[str, Any, Any], None] = None,
-    user_data: Any = None,
-    on_enter: bool = False,
-    label: str = "",
+    default: Any = None,
+    choices: list[str | tuple[str | Any]] = None,
+    flags_as_int: bool = False,
+    accept_on_enter: bool = False,
     tag: str = 0,
+    user_data: Any = None,
     **kwargs,
 ) -> str:
     if tag in (None, 0, ""):
         tag = dpg.generate_uuid()
 
-    if user_data is None:
-        user_data = val_idx
+    if isinstance(value_type, type) and issubclass(value_type, Flag):
+        if flags_as_int:
+            value_type = int
+        else:
+            # We have specific support for flags already
+            return create_flag_checkboxes(
+                value_type,
+                callback,
+                base_tag=tag,
+                active_flags=default if default is not None else 0,
+                user_data=user_data,
+            )
 
-    # TODO support for Literal, merge with function in apply_template
-    if choices and val_idx in choices:
-        items = choices[val_idx]
+    # Support enums by extracting their choices
+    if isinstance(value_type, type) and issubclass(value_type, Enum):
+        choices = [(v.name, v.value) for v in value_type]
+        if default is not None and not isinstance(default, str):
+            default = value_type(default).name
+
+    # If choices is provided we treat this as a Literal
+    if choices:
+        orig_callback = callback
+        items = [x[0] if isinstance(x, tuple) else x for x in choices]
+
+        def new_callback(sender: str, data: str, cb_user_data: Any):
+            # Find the selected item in the original choices list
+            index = items.index(data)
+            selected = choices[index]
+
+            # If a tuple was provided the first element is only a label,
+            # the actual value is in the second element
+            if isinstance(selected, tuple):
+                selected = selected[1]
+
+            orig_callback(sender, selected, user_data)
+
+        value_type = Literal[tuple(items)]
+        callback = new_callback
+
+    # The simple types
+    if get_origin(value_type) == Literal:
+        choices = get_args(value_type)
+        items = [str(c) for c in choices]
+
+        if default in choices:
+            default = items[choices.index(default)]
+
         dpg.add_combo(
             items,
-            callback=callback,
-            user_data=user_data,
-            default_value=items[val if val is not None else 0],
             label=label,
+            default_value=default if default is not None else "",
+            callback=callback,
             tag=tag,
             **kwargs,
-        )
-    elif val is None or isinstance(val, str):
-        dpg.add_input_text(
-            callback=callback,
             user_data=user_data,
-            default_value=val or "",
-            on_enter=on_enter,
-            label=label,
-            tag=tag,
-            **kwargs,
         )
-    elif isinstance(val, int):
+    elif value_type == int:
         dpg.add_input_int(
-            callback=callback,
-            user_data=user_data,
-            default_value=val,
-            on_enter=on_enter,
             label=label,
+            default_value=default,
+            callback=callback,
+            on_enter=accept_on_enter,
             tag=tag,
+            user_data=user_data,
             **kwargs,
         )
-    elif isinstance(val, float):
+    elif value_type == float:
         dpg.add_input_float(
-            callback=callback,
-            user_data=user_data,
-            default_value=val,
-            on_enter=on_enter,
             label=label,
+            default_value=default,
+            callback=callback,
+            on_enter=accept_on_enter,
             tag=tag,
+            user_data=user_data,
             **kwargs,
         )
-    elif isinstance(val, bool):
+    elif value_type == bool:
         dpg.add_checkbox(
-            callback=callback,
-            user_data=user_data,
-            default_value=val,
             label=label,
+            default_value=default,
+            callback=callback,
             tag=tag,
+            **kwargs,
+            user_data=user_data,
+        )
+    elif value_type in (type(None), str):
+        dpg.add_input_text(
+            label=label,
+            default_value=default or "",
+            callback=callback,
+            on_enter=accept_on_enter,
+            tag=tag,
+            user_data=user_data,
             **kwargs,
         )
     else:
+        raise ValueError(f"Could not handle type {value_type} for {label}")
+
+    return tag
+
+
+def create_value_widget(
+    behavior: HavokBehavior,
+    value_type: type,
+    label: str,
+    callback: Callable[[str, str | Any, Any], None],
+    *,
+    default: Any = None,
+    choices: list[str | tuple[str | Any]] = None,
+    accept_on_enter: bool = False,
+    flags_as_int: bool = False,
+    tag: str = 0,
+    user_data: Any = None,
+    **kwargs,
+) -> str:
+    from hkb_editor.gui.dialogs import (
+        select_variable,
+        select_event,
+        select_animation,
+        select_object,
+    )
+
+    if tag in (None, 0, ""):
+        tag = dpg.generate_uuid()
+
+    # See if a simple widget will suffice first
+    try:
+        return create_simple_value_widget(
+            value_type,
+            label,
+            callback,
+            default=default,
+            choices=choices,
+            accept_on_enter=accept_on_enter,
+            flags_as_int=flags_as_int,
+            tag=tag,
+            user_data=user_data,
+            **kwargs,
+        )
+    except ValueError:
+        pass
+
+    # Common helper types
+    if value_type in (Variable, Event, Animation):
+        util = CommonActionsMixin(behavior)
+        if value_type == Variable:
+            try:
+                var_idx = util._resolve_variable(default)
+                default = behavior.get_variable(var_idx)
+            except:
+                pass
+
+            def on_variable_selected(sender: str, variable: int, user_data: Any):
+                if variable is not None:
+                    variable_name = behavior.get_variable(variable)
+                    dpg.set_value(f"{tag}_input_helper", variable_name)
+                    callback(sender, variable_name, user_data)
+                else:
+                    dpg.set_value(f"{tag}_input_helper", "")
+                    callback(sender, None, user_data)
+
+            selector = partial(select_variable, behavior, on_variable_selected)
+
+        elif value_type == Event:
+            try:
+                event_idx = util._resolve_event(default)
+                default = behavior.get_event(event_idx)
+            except:
+                pass
+
+            def on_event_selected(sender: str, event: int, user_data: Any):
+                if event is not None:
+                    event_name = behavior.get_event(event)
+                    dpg.set_value(f"{tag}_input_helper", event_name)
+                    callback(sender, event_name, user_data)
+                else:
+                    dpg.set_value(f"{tag}_input_helper", "")
+                    callback(sender, None, user_data)
+
+            selector = partial(select_event, behavior, on_event_selected)
+
+        elif value_type == Animation:
+            try:
+                anim_idx = util._resolve_animation(default)
+                default = behavior.get_animation(anim_idx)
+            except:
+                pass
+
+            def on_animation_selected(sender: str, animation: int, user_data: Any):
+                if animation:
+                    animation_name = behavior.get_animation(animation)
+                    dpg.set_value(f"{tag}_input_helper", animation_name)
+                    callback(sender, animation_name, user_data)
+                else:
+                    dpg.set_value(f"{tag}_input_helper", "")
+                    callback(sender, None, user_data)
+
+            selector = partial(select_animation, behavior, on_animation_selected)
+
+        with dpg.group(horizontal=True, tag=tag):
+            dpg.add_input_text(
+                # readonly=True,
+                default_value=default if default is not None else "",
+                callback=callback,
+                user_data=user_data,
+                tag=f"{tag}_input_helper",
+            )
+            dpg.add_button(
+                arrow=True,
+                direction=dpg.mvDir_Right,
+                callback=lambda s, a, u: selector(user_data=u),
+                user_data=user_data,
+            )
+            if label:
+                dpg.add_text(label)
+
+    # Select an object
+    elif value_type == HkbRecord:
+
+        def on_object_selected(sender: str, record: HkbRecord, cb_user_data: Any):
+            oid = record.object_id if record else ""
+            dpg.set_value(f"{tag}_input_helper", oid)
+            callback(sender, record, user_data)
+
+        def open_object_selector(sender: str, app_data: str, spec: HkbRecordSpec):
+            if spec.type_name:
+                type_id = behavior.type_registry.find_first_type_by_name(spec.type_name)
+            else:
+                type_id = None
+
+            select_object(
+                behavior,
+                type_id,
+                on_object_selected,
+                include_derived=spec.include_derived,
+                initial_filter=spec.query,
+                title=f"Select target for {label}",
+            )
+
+        if isinstance(default, HkbRecordSpec):
+            spec = default
+            default = ""
+        else:
+            spec = HkbRecordSpec()
+
+        with dpg.group(horizontal=True, tag=tag):
+            dpg.add_input_text(
+                readonly=True,  # Must be an existing object!
+                enabled=False,
+                default_value=default if default is not None else "",
+                tag=f"{tag}_input_helper",
+            )
+            dpg.add_button(
+                arrow=True,
+                direction=dpg.mvDir_Right,
+                callback=open_object_selector,
+                user_data=spec,
+            )
+            dpg.add_text(label)
+
+    else:
         logging.getLogger().warning(
-            f"Cannot create widget for value {val} with unexpected type {type(val).__name__}"
+            f"Cannot create widget for value {default} with unexpected type {type(default).__name__}"
         )
         return None
 
@@ -225,7 +441,7 @@ def create_flag_checkboxes(
             )
             active_flags = 0
 
-    with dpg.group():
+    with dpg.group(tag=base_tag):
         for flag in flag_type:
             if flag == 0:
                 # 0 is in every flag

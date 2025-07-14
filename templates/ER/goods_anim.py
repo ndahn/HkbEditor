@@ -115,8 +115,8 @@ def run(
         if duelingshield_anim is None:
             duelingshield_anim = normal_use_anim
 
-        enchant_event = ctx.get_event("W_ItemWeaponEnchant")
-        weapon_type_var = ctx.get_variable("ItemWeaponType")
+        enchant_event = ctx.event("W_ItemWeaponEnchant")
+        weapon_type_var = ctx.variable("ItemWeaponType")
         transition_flags = TransitionFlags(3584)
 
         hand_change_state = ctx.find("name:HandChangeStart")
@@ -185,7 +185,7 @@ def run(
         ctx.array_add(normalitem_sm, "states", normalitem_state.object_id)
 
         # Upper half-blend
-        enchant_upper_event = ctx.get_event("W_ItemWeaponEnchant_Upper")
+        enchant_upper_event = ctx.event("W_ItemWeaponEnchant_Upper")
         default_transition = ctx.find("name:DefaultTransition")
 
         normalitem_upper_transition = ctx.new_transition_info(

@@ -1,14 +1,16 @@
 from typing import Any, Callable, Type
+from enum import Enum
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.gui.helpers import create_value_widget
+from hkb_editor.hkb import HavokBehavior
+from hkb_editor.gui.helpers import create_simple_value_widget
 
 
 def new_tuple_dialog(
     columns: dict[str, Type],
     callback: Callable[[str, tuple, Any], None],
     *,
-    choices: dict[int, list[str]] = None,
+    choices: dict[int, list[str | tuple[str, Any]]] = None,
     title: str = "New Item",
     tag: str = 0,
     user_data: Any = None,
@@ -16,12 +18,21 @@ def new_tuple_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-    new_val = [t() for t in columns.values()]
+    new_val = [None] * len(columns)
+    for idx, t in enumerate(columns.values()):
+        if issubclass(t, Enum):
+            new_val[idx] = list(t)[0]
+        else:
+            new_val[idx] = t()
 
     def assemble(sender: str, new_value: Any, val_idx: int):
         if choices and val_idx in choices:
-            choice_values = choices[val_idx]
-            new_value = choice_values.index(new_value)
+            for item in choices[val_idx]:
+                if item == new_value:
+                    break
+                if isinstance(item, tuple) and item[0] == new_value:
+                    new_value = item[1]
+                    break
 
         new_val[val_idx] = new_value
 
@@ -38,14 +49,15 @@ def new_tuple_dialog(
         on_close=lambda: dpg.delete_item(dialog),
         tag=tag,
     ) as dialog:
-        for idx, (col, subval) in enumerate(zip(columns.keys(), new_val)):
-            create_value_widget(
-                idx,
-                subval,
-                callback=assemble,
-                label=col,
-                choices=choices,
+        for idx, (col, col_type) in enumerate(columns.items()):
+            create_simple_value_widget(
+                col_type,
+                col,
+                assemble,
+                choices=choices.get(idx) if choices else None,
+                default=new_val[idx],
                 tag=f"{tag}_widget_{idx}",
+                user_data=idx,
             )
 
         with dpg.group(horizontal=True):

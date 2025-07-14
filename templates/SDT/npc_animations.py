@@ -57,13 +57,13 @@ def run(
     for x in range(anim_start, anim_start + num_anims):
         animation_name = f"a{action_offset}00_{x:06}"
         try:
-            ctx.get_animation(animation_name)
+            ctx.animation(animation_name)
         except ValueError:
             # Action already exists, continue
             ctx.logger.debug(f"Animation {animation_name} already exists")
             continue
         
-        anim = ctx.new_animation(animation_name)
+        anim = ctx.animation(animation_name)
 
         clip = ctx.new_clip(anim)
         cmsg = ctx.new_cmsg(
@@ -85,7 +85,7 @@ def run(
         transition_flags = TransitionInfoFlags(3584)
 
         if create_attack_event:
-            attack_event = ctx.new_event(f"W_Attack{anim.anim_id}")
+            attack_event = ctx.event(f"W_Attack{anim.anim_id}")
             transition = ctx.new_transition_info(
                 state_id,
                 attack_event,
@@ -95,7 +95,7 @@ def run(
             ctx.array_add(sm, "wildcardTransitions", transition)
 
         if create_regular_event:
-            attack_event = ctx.new_event(f"W_Event{anim.anim_id}")
+            attack_event = ctx.event(f"W_Event{anim.anim_id}")
             transition = ctx.new_transition_info(
                 state_id,
                 attack_event,

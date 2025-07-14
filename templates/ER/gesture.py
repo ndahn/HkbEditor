@@ -11,9 +11,9 @@ from hkb_editor.hkb.hkb_flags import (
 
 def run(
     ctx: TemplateContext,
-    event1_name: str,
+    event1: Event,
     anim_start: Animation,
-    event2_name: str,
+    event2: Event,
     anim_loop: Animation,
     anim_end: Animation,
     gesture_id: int = 91,
@@ -28,11 +28,11 @@ def run(
     ----------
     ctx : TemplateContext
         The template context.
-    event1_name : str
+    event1 : Event
         Loop start event.
     anim_start : Animation
         Loop start animation.
-    event2_name : str
+    event2 : Event
         Loop event.
     anim_loop : Animation
         Loop animation.
@@ -51,10 +51,8 @@ def run(
     wildcard_transitions = gesture_sm["wildcardTransitions"].get_target()
 
     # State 1: start, state 2: loop
-    event1 = ctx.new_event(event1_name)
-    event2 = ctx.new_event(event2_name)
     # Creates an automatic transition between the states
-    transition_event = ctx.new_event(f"{event1_name}_to_{event2_name}")
+    transition_event = ctx.event(f"{event1.name}_to_{event2.name}")
 
     transition_flags = TransitionFlags(3584)
 
@@ -94,7 +92,7 @@ def run(
     # state1, state1_cmsg, state1_clip = ctx.create_state_chain(
     #     state1_id,
     #     anim_start,
-    #     event1_name,
+    #     event1.name,
     #     state_transitions=transitions,
     #     cmsg_enable_script=False,
     #     offsetType=CmsgOffsetType.IDLE_CATEGORY,
@@ -102,7 +100,7 @@ def run(
 
     state1_clip = ctx.new_clip(anim_start.index)
     state1_cmsg = ctx.new_cmsg(
-        name=f"{event1_name}_CMSG",
+        name=f"{event1.name}_CMSG",
         animId=anim_start,
         generators=[state1_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
@@ -110,7 +108,7 @@ def run(
     )
     state1 = ctx.new_statemachine_state(
         stateId=state1_id,
-        name=event1_name,
+        name=event1.name,
         generator=state1_cmsg,
         transitions=transitions.object_id,
     )
@@ -169,7 +167,7 @@ def run(
     ####
     state2_clip = ctx.new_clip(anim_loop.index, mode=PlaybackMode.LOOPING)
     state2_cmsg = ctx.new_cmsg(
-        name=f"{event2_name}_CMSG",
+        name=f"{event2.name}_CMSG",
         animId=anim_loop,
         generators=[state2_clip],
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
@@ -177,7 +175,7 @@ def run(
     )
     state2 = ctx.new_statemachine_state(
         stateId=state2_id,
-        name=event2_name,
+        name=event2.name,
         generator=state2_cmsg,
         transitions=transitions.object_id,
     )
