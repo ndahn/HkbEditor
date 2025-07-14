@@ -57,7 +57,7 @@ def run(
             for self_ptr in selftrans_cmsg["generators"]:
                 # Replace any references to the original clip with our copy
                 if self_ptr.get_value() == orig_ptr.get_value():
-                    self_ptr.set_value(clip.object_id)
+                    ctx.set(self_ptr, clip)
                     break
             else:
                 # Not used after all

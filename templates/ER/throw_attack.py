@@ -51,4 +51,4 @@ def run(
     )
 
     parent = ctx.find("name:ThrowAtk_Blend")
-    ctx.array_add(parent, "children", blender.object_id)
+    ctx.array_add(parent, "children", blender)

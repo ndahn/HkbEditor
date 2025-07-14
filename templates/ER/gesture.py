@@ -84,7 +84,7 @@ def run(
     transition_info = ctx.new_transition_info(
         toStateId=state2_id,
         eventId=transition_event,
-        transition=default_transition.object_id,
+        transition=default_transition,
     )
     ctx.array_add(transitions, "transitions", transition_info)
 
@@ -110,10 +110,10 @@ def run(
         stateId=state1_id,
         name=event1.name,
         generator=state1_cmsg,
-        transitions=transitions.object_id,
+        transitions=transitions,
     )
 
-    ctx.array_add(gesture_sm, "states", state1.object_id)
+    ctx.array_add(gesture_sm, "states", state1)
 
     # Blending
     start_blend_common_clip = ctx.new_clip(anim_start.index)
@@ -144,7 +144,7 @@ def run(
         weight=gesture_id,
     )
     blend01_gen = ctx.find("name:'GestureLoopStart Blend01'")
-    ctx.array_add(blend01_gen, "children", start_blend01.object_id)
+    ctx.array_add(blend01_gen, "children", start_blend01)
 
 
     start_blend00_cmsg = ctx.new_cmsg(
@@ -160,7 +160,7 @@ def run(
         weight=gesture_id,
     )
     start_blend00_gen = ctx.find("name:'GestureLoopStart Blend00'")
-    ctx.array_add(start_blend00_gen, "children", start_blend00.object_id)
+    ctx.array_add(start_blend00_gen, "children", start_blend00)
 
     ####
     # Loop anim
@@ -177,10 +177,10 @@ def run(
         stateId=state2_id,
         name=event2.name,
         generator=state2_cmsg,
-        transitions=transitions.object_id,
+        transitions=transitions,
     )
 
-    ctx.array_add(gesture_sm, "states", state2.object_id)
+    ctx.array_add(gesture_sm, "states", state2)
 
     # Blending
     loop_blend_common_clip = ctx.new_clip(anim_loop.index, mode=PlaybackMode.LOOPING)
@@ -199,7 +199,7 @@ def run(
         weight=gesture_id,
     )
     loop_blend00_gen = ctx.find("name:'GestureLoop Blend00'")
-    ctx.array_add(loop_blend00_gen, "children", loop_blend00.object_id)
+    ctx.array_add(loop_blend00_gen, "children", loop_blend00)
 
     loop_blend02_cmsg = ctx.new_cmsg(
         anim_loop.anim_id,
@@ -214,7 +214,7 @@ def run(
         weight=gesture_id,
     )
     loop_blend02_gen = ctx.find("name:'GestureLoop Blend02'")
-    ctx.array_add(loop_blend02_gen, "children", loop_blend02.object_id)
+    ctx.array_add(loop_blend02_gen, "children", loop_blend02)
 
     # TODO this seems disconnected from the rest, not even a state or dedicated event?
     ####
@@ -236,7 +236,7 @@ def run(
         weight=gesture_id,
     )
     end_blend01_gen = ctx.find("name:'GestureLoopEnd Blend01'")
-    ctx.array_add(end_blend01_gen, "children", end_blend01.object_id)
+    ctx.array_add(end_blend01_gen, "children", end_blend01)
 
     end_blend00_cmsg = ctx.new_cmsg(
         anim_end.anim_id,
@@ -251,4 +251,4 @@ def run(
         weight=gesture_id,
     )
     end_blend00_gen = ctx.find("name:'GestureLoopEnd Blend00'")
-    ctx.array_add(end_blend00_gen, "children", end_blend00.object_id)
+    ctx.array_add(end_blend00_gen, "children", end_blend00)

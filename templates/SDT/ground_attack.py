@@ -53,4 +53,4 @@ def run(
         name=base_name,
         generator=cmsg,
     )
-    ctx.array_add(sm, "states", state.object_id)
+    ctx.array_add(sm, "states", state)

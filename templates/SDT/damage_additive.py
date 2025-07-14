@@ -71,4 +71,4 @@ def run(
         generator=cmsg,
         transitions=transitioninfo_array,
     )
-    ctx.array_add(sm, "states", state.object_id)
+    ctx.array_add(sm, "states", state)

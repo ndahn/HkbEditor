@@ -57,7 +57,7 @@ def run(
     )
     # Item_SM
     selftrans_gen = ctx.find("name:ItemOneshot_SelfTrans type_name:hkbBlenderGenerator")
-    ctx.array_add(selftrans_gen, "children", selftrans_blend.object_id)
+    ctx.array_add(selftrans_gen, "children", selftrans_blend)
 
     selftrans_upper_blend, selftrans_upper_cmsg = ctx.create_blend_chain(
         selftrans_clip,
@@ -71,7 +71,7 @@ def run(
     selftrans_upper_gen = ctx.find(
         "name:ItemOneshot_SelfTrans type_name:hkbBlenderGenerator"
     )
-    ctx.array_add(selftrans_upper_gen, "children", selftrans_upper_blend.object_id)
+    ctx.array_add(selftrans_upper_gen, "children", selftrans_upper_blend)
 
     ####
     # Oneshot
@@ -89,7 +89,7 @@ def run(
         )
         # Item_SM
         oneshot_gen = ctx.find("name:ItemOneshot type_name:hkbBlenderGenerator")
-        ctx.array_add(oneshot_gen, "children", oneshot_blend.object_id)
+        ctx.array_add(oneshot_gen, "children", oneshot_blend)
 
         oneshot_upper_blend, oneshot_upper_cmsg = ctx.create_blend_chain(
             oneshot_clip,
@@ -103,7 +103,7 @@ def run(
         oneshot_upper_gen = ctx.find(
             "name:ItemOneshot_Upper type_name:hkbBlenderGenerator"
         )
-        ctx.array_add(oneshot_upper_gen, "children", oneshot_upper_blend.object_id)
+        ctx.array_add(oneshot_upper_gen, "children", oneshot_upper_blend)
 
     ####
     # Weapon buff items
@@ -179,12 +179,12 @@ def run(
         normalitem_state = ctx.new_record(
             "hkbStateMachine::StateInfo",
             name="ItemWeaponEnchant",
-            generator=normalitem_selector.object_id,
+            generator=normalitem_selector,
             probability=1,
             enable=True,
         )
 
-        ctx.array_add(normalitem_sm, "states", normalitem_state.object_id)
+        ctx.array_add(normalitem_sm, "states", normalitem_state)
 
         # Upper half-blend
         enchant_upper_event = ctx.event("W_ItemWeaponEnchant_Upper")
@@ -193,7 +193,7 @@ def run(
         normalitem_upper_transition = ctx.new_transition_info(
             0,
             enchant_upper_event,
-            transition=default_transition.object_id,
+            transition=default_transition,
             flags=transition_flags,
         )
 
@@ -243,9 +243,9 @@ def run(
         normalitem_upper_state = ctx.new_record(
             "hkbStateMachine::StateInfo",
             name="ItemWeaponEnchant_Upper",
-            generator=normalitem_upper_selector.object_id,
+            generator=normalitem_upper_selector,
             probability=1,
             enable=True,
         )
 
-        ctx.array_add(normalitem_upper_sm, "states", normalitem_upper_state.object_id)
+        ctx.array_add(normalitem_upper_sm, "states", normalitem_upper_state)

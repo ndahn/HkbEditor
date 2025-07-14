@@ -333,7 +333,7 @@ class CommonActionsMixin:
                 self._behavior.add_object(binding_set)
                 undo_manager.on_create_object(self._behavior, binding_set)
 
-                binding_set_ptr.set_value(binding_set.object_id)
+                binding_set_ptr.set_value(binding_set)
                 undo_manager.on_update_value(
                     binding_set_ptr, None, binding_set.object_id
                 )
@@ -592,9 +592,7 @@ class CommonActionsMixin:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
-        if transitions:
-            transitions = [self.resolve_object(t) for t in transitions]
-        
+        transitions = self.resolve_object(transitions)
         generator = self.resolve_object(generator)
 
         return self.new_record(

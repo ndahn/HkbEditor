@@ -162,7 +162,7 @@ class HkbPointer(XmlValueHandler):
         return val
 
     def set_value(self, value: str) -> None:
-        if isinstance(value, HkbRecord):
+        if isinstance(value, HkbRecord) and value.object_id:
             value = value.object_id
 
         if value in ("", None):

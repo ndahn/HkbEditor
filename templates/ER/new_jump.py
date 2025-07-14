@@ -66,7 +66,7 @@ def run(
     trans = ctx.new_transition_info(
         jump_loop_state["stateId"].get_value(),
         "W_RideJump",
-        transition=transition_effect.object_id,
+        transition=transition_effect,
     )
     transitions = ctx.new_transition_info_array(transitions=[trans])
 
@@ -406,4 +406,4 @@ def run(
         layers=all_layers,
     )
 
-    ctx.set(state, generator=layer_gen.object_id)
+    ctx.set(state, generator=layer_gen)

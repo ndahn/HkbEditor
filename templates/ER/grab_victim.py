@@ -75,4 +75,4 @@ def run(
             weight=grab_id,
         )
 
-        ctx.array_add(parent, "children", blender.object_id)
+        ctx.array_add(parent, "children", blender)

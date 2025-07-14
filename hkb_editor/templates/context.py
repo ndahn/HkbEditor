@@ -8,7 +8,7 @@ from docstring_parser import parse as parse_docstring, DocstringParam
 
 from .common import CommonActionsMixin, Variable, Event, Animation
 from hkb_editor.gui.workflows.undo import undo_manager
-from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
+from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 
 
@@ -39,7 +39,7 @@ class TemplateContext(CommonActionsMixin):
 
     def __init__(self, behavior: HavokBehavior, template_file: str):
         super().__init__(behavior)
-        
+
         self._template_file = template_file
         self._template_func: ast.FunctionDef = None
 
@@ -215,6 +215,7 @@ class TemplateContext(CommonActionsMixin):
         with undo_manager.combine():
             for path, value in attributes.items():
                 handler = record.get_path_value(path)
+                # Pointers already support setting from objects
                 handler.set_value(value)
                 undo_manager.on_update_value(handler, handler.get_value(), value)
                 self.logger.debug(f"Updated {path}={value} of {record}")
@@ -232,8 +233,7 @@ class TemplateContext(CommonActionsMixin):
         HkbRecord
             The record that was deleted.
         """
-        if isinstance(record, str):
-            record = self._behavior[record]
+        record = self.resolve_object(record)
 
         if record.object_id:
             self._behavior.objects.pop(record.object_id)
@@ -257,11 +257,19 @@ class TemplateContext(CommonActionsMixin):
         item : Any
             The item to append to the array.
         """
-        if isinstance(record, str):
-            record = self._behavior[record]
+        record = self.resolve_object(record)
 
         array: HkbArray = record.get_path_value(path)
-        array.append(item)
+        try:
+            array.append(item)
+        except ValueError:
+            # TODO there should be a better way to test whether it's a pointer array
+            # The array might be a pointer array
+            if isinstance(item, HkbRecord):
+                array.append(item.object_id)
+            else:
+                raise
+
         undo_manager.on_update_array_item(array, -1, None, item)
         self.logger.debug(f"Appended {item} to {path} of {record}")
 
@@ -282,8 +290,7 @@ class TemplateContext(CommonActionsMixin):
         Any
             The value that was removed from the array.
         """
-        if isinstance(record, str):
-            record = self._behavior[record]
+        record = self.resolve_object(record)
 
         array: HkbArray = record.get_path_value(path)
         ret = array.pop(index).get_value()
