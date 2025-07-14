@@ -18,7 +18,7 @@ from hkb_editor.hkb import (
     get_value_handler,
 )
 from hkb_editor.hkb import get_hkb_enum, get_hkb_flags
-from hkb_editor.hkb.common import CommonActionsMixin
+from hkb_editor.templates.common import CommonActionsMixin
 
 from .dialogs import select_object
 from .table_tree import (

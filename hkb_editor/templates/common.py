@@ -40,12 +40,6 @@ class Animation:
         return int(self.name.split("_")[-1])
 
 
-@dataclass
-class HkbRecordSpec:
-    query: str = None
-    type_name: str = None
-
-
 class CommonActionsMixin:
     def __init__(self, behavior: HavokBehavior):
         """Provides convenience methods for common actions.

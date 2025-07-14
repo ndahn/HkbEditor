@@ -3,9 +3,9 @@ import re
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
-from hkb_editor.hkb.common import CommonActionsMixin
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
 from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags as ClipFlags
+from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_animation, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes, add_paragraphs

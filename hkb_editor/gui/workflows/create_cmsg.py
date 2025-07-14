@@ -7,10 +7,10 @@ from hkb_editor.hkb.hkb_enums import (
     hkbClipGenerator_PlaybackMode as PlaybackMode,
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
-from hkb_editor.hkb.common import CommonActionsMixin
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
 )
+from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_event, select_animation, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes, add_paragraphs
