@@ -76,7 +76,7 @@ class CommonActionsMixin:
         var_type: VariableType = VariableType.INT32,
         range_min: int = 0,
         range_max: int = 0,
-        allow_create: bool = True,
+        create: bool = True,
     ) -> Variable:
         """Get a variable by name, or create it if it doesn't exist yet.
 
@@ -92,7 +92,7 @@ class CommonActionsMixin:
             Minimum allowed value.
         range_max : int, optional
             Maximum allowed value.
-        allow_create : bool, optional
+        create : bool, optional
             If True create a new variable if it cannot be resolved.
 
         Returns
@@ -111,7 +111,7 @@ class CommonActionsMixin:
             else:
                 raise TypeError(f"Invalid variable type {variable}")
         except ValueError:
-            if not allow_create:
+            if not create:
                 raise
 
             if not isinstance(variable, str):
@@ -124,7 +124,7 @@ class CommonActionsMixin:
 
         return Variable(idx, variable)
 
-    def event(self, event: Event | str | int, *, allow_create: bool = True) -> Event:
+    def event(self, event: Event | str | int, *, create: bool = True) -> Event:
         """Get the event with the specified name, or create it if it doesn't exist yet.
 
         Events are typically used to trigger transitions between statemachine states. See :py:meth:`new_statemachine_state` for details.
@@ -134,7 +134,7 @@ class CommonActionsMixin:
         ----------
         event : str
             The name of the event to create. Typically starts with `W_`.
-        allow_create : bool, optional
+        create : bool, optional
             If True create a new variable if it cannot be resolved.
 
         Returns
@@ -153,7 +153,7 @@ class CommonActionsMixin:
             else:
                 raise TypeError(f"Invalid event type {event}")
         except ValueError:
-            if not allow_create:
+            if not create:
                 raise
 
             if not isinstance(event, str):
@@ -165,7 +165,7 @@ class CommonActionsMixin:
 
         return Event(idx, event)
 
-    def animation(self, animation: Animation | str | int, allow_create: bool = True) -> Animation:
+    def animation(self, animation: Animation | str | int, create: bool = True) -> Animation:
         """Get the animation with the specified name, or create a new one if it doesn't exist yet.
 
         Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
@@ -175,7 +175,7 @@ class CommonActionsMixin:
         ----------
         animation : str
             The name of the animation slot following the `aXXX_YYYYYY` pattern.
-        allow_create : bool, optional
+        create : bool, optional
             If True create a new variable if it cannot be resolved.
 
         Returns
@@ -194,7 +194,7 @@ class CommonActionsMixin:
             else:
                 raise TypeError(f"Invalid animation type {animation}")
         except ValueError:
-            if not allow_create:
+            if not create:
                 raise
 
             if not isinstance(animation, str):

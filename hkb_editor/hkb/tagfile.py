@@ -151,9 +151,16 @@ class Tagfile:
         obj = self.objects.pop(id)
 
         # Proper objects will have their <record> inside an <object> tag
-        parent = obj.element.getparent()
+        parent: ET._Element = obj.element.getparent()
+
         if parent is None:
             parent = self._tree.getroot()
-        parent.remove(obj.element)
-
+        
+        # Make sure to not leave an empty <object> tag behind!
+        if parent.tag == "object":
+            object_elem = parent
+            parent.getparent().remove(object_elem)
+        else:
+            parent.remove(obj.element)
+        
         return obj

@@ -200,7 +200,7 @@ def create_value_widget(
         util = CommonActionsMixin(behavior)
         if value_type == Variable:
             try:
-                var_idx = util.variable(default, allow_create=False)
+                var_idx = util.variable(default, create=False)
                 default = behavior.get_variable(var_idx)
             except:
                 pass
@@ -218,7 +218,7 @@ def create_value_widget(
 
         elif value_type == Event:
             try:
-                event_idx = util.event(default, allow_create=False)
+                event_idx = util.event(default, create=False)
                 default = behavior.get_event(event_idx)
             except:
                 pass

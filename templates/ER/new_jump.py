@@ -74,9 +74,9 @@ def run(
         hand_nh_right_normal_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
             name=f"{base_name} Selector_NormalAttack_Right",
-            generators=get_generators(f"'{base_jump} Selector_NormalAttack_BothLeft'"),
+            generators=get_generators(f"'{base_jump} Selector_NormalAttack_Right'"),
             variableBindingSet=get_binding_set(
-                f"'{base_jump} Selector_NormalAttack_BothLeft'"
+                f"'{base_jump} Selector_NormalAttack_Right'"
             ),
             selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
@@ -85,9 +85,9 @@ def run(
         hand_nh_right_hard_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
             name=f"{base_name} Selector_HardAttack_Right",
-            generators=get_generators(f"'{base_jump} Selector_NormalAttack_BothLeft'"),
+            generators=get_generators(f"'{base_jump} Selector_HardAttack_Right'"),
             variableBindingSet=get_binding_set(
-                f"'{base_jump} Selector_NormalAttack_BothLeft'"
+                f"'{base_jump} Selector_HardAttack_Right'"
             ),
             selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
@@ -96,9 +96,9 @@ def run(
         hand_nh_right_normal_dual_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
             name=f"{base_name} Selector_NormalAttack_Dual",
-            generators=get_generators(f"'{base_jump} Selector_NormalAttack_Right'"),
+            generators=get_generators(f"'{base_jump} Selector_NormalAttack_Dual'"),
             variableBindingSet=get_binding_set(
-                f"'{base_jump} Selector_NormalAttack_Right'"
+                f"'{base_jump} Selector_NormalAttack_Dual'"
             ),
             selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
@@ -107,9 +107,9 @@ def run(
         hand_nh_right_magic_selector = ctx.new_selector(
             None,  # we use an existing binding set with @JumpAttack_Land
             name=f"{base_name} Selector_N-HAttack_Right",
-            generators=get_generators(f"'{base_jump} Selector_NormalAttack_Right'"),
+            generators=get_generators(f"'{base_jump} Selector_N-HAttack_Right'"),
             variableBindingSet=get_binding_set(
-                f"'{base_jump} Selector_NormalAttack_Right'"
+                f"'{base_jump} Selector_N-HAttack_Right'"
             ),
             selectedIndexCanChangeAfterActivate=True, # TODO copy from base jump
             generatorChangedTransitionEffect=change_transition_blend,
@@ -255,7 +255,7 @@ def run(
         )
 
         # Jump Attack Layer
-        attack_jumpnormal_evt = ctx.event("Event_JumpNormalAttack_Add")
+        attack_jumpnormal_evt = ctx.event("Event_JumpNormalAttack_Add", create=False)
 
         # A bit difficult to query, we need the parent layer of the selector we are imitating
         model_selector = ctx.find(f"'{base_jump} HandCondition Selector'")
@@ -379,7 +379,7 @@ def run(
         all_layers.append(layer2_direction)
 
     layer_gen = ctx.new_layer_generator(
-        name=f"{base_name}_LayerGenerator",
+        name=f"{base_name} LayerGenerator",
         layers=all_layers,
     )
 
@@ -403,10 +403,6 @@ def run(
         "<new>",
         name=f"{base_name}_to_Jump_Loop",
         duration=0.5,
-        selfTransitionMode=SelfTransitionMode.CONTINUE_IF_CYCLIC_BLEND_IF_ACYCLIC,
-        eventMode=EventMode.DEFAULT,
-        endMode=EndMode.NONE,
-        blendCurve=BlendCurve.SMOOTH,
         alignmentBone=-1,
     )
 
@@ -422,8 +418,6 @@ def run(
         state_id,  # TODO raster used 39643 here, just an unused one?
         name=base_name,
         transitions=state_transitions,
-        generator=None,  # set later
+        generator=layer_gen,
     )
-
-    ctx.set(state, generator=layer_gen)
     ctx.array_add(jump_sm, "states", state)
