@@ -36,17 +36,14 @@ class Tagfile:
             for obj in root.findall(".//object")
         }
 
+        # TODO cache objects by name and type_name for quick access
+
         objectid_values = [
             int(k[len("object") :])
             for k in self.objects.keys()
             if k.startswith("object")
         ]
         self._next_object_id = max(objectid_values, default=0) + 1
-
-        userdata_values = [
-            int(v) for v in self._tree.xpath("//field[@name='userData']/integer/@value")
-        ]
-        self._next_userdata_value = max(userdata_values, default=-1) + 1
 
     def save_to_file(self, file_path: str) -> None:
         ET.indent(self._tree)
@@ -128,11 +125,6 @@ class Tagfile:
 
         self._next_object_id = new_id + 1
         return f"object{new_id}"
-
-    def new_userdata_value(self, offset: int = 0) -> int:
-        new_value = self._next_userdata_value + offset
-        self._next_userdata_value = new_value + 1
-        return new_value
 
     def add_object(self, record: "HkbRecord", id: str = None) -> str:
         if id is None:

@@ -25,11 +25,17 @@ class Variable:
     index: int
     name: str
 
+    def __repr__(self) -> str:
+        return f"Variable '{self.name}' ({self.index})"
+
 
 @dataclass
 class Event:
     index: int
     name: str
+
+    def __repr__(self) -> str:
+        return f"Event '{self.name}' ({self.index})"
 
 
 @dataclass
@@ -42,10 +48,13 @@ class Animation:
     def anim_id(self) -> int:
         return int(self.name.split("_")[-1])
 
+    def __repr__(self) -> str:
+        return f"Animation '{self.name}' ({self.index})"
+
 
 # TODO record spec like this maybe?
-#from typing import Annotated
-#HkbRecordSpec = Annotated[HkbRecord, "type_name:CMSG"]
+# from typing import Annotated
+# HkbRecordSpec = Annotated[HkbRecord, "type_name:CMSG"]
 
 
 class CommonActionsMixin:
@@ -63,11 +72,13 @@ class CommonActionsMixin:
 
     def __getattr__(self, name: str) -> Any:
         # Check if the class we're mixed with (if any) already has a logger
-        if name == 'logger':
+        if name == "logger":
             logger = logging.getLogger(os.path.basename(self._behavior.file))
-            object.__setattr__(self, 'logger', logger)
+            object.__setattr__(self, "logger", logger)
             return logger
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
     def variable(
         self,
@@ -118,9 +129,13 @@ class CommonActionsMixin:
                 raise ValueError(f"Cannot create new variable from {variable}")
 
             var_type = VariableType(var_type)
-            idx = self._behavior.create_variable(variable, var_type, range_min, range_max)
+            idx = self._behavior.create_variable(
+                variable, var_type, range_min, range_max
+            )
             undo_manager.on_create_variable(self._behavior, variable)
-            self.logger.debug(f"Created new variable {variable} ({idx}) with type {var_type.name}")
+            self.logger.debug(
+                f"Created new variable {variable} ({idx}) with type {var_type.name}"
+            )
 
         return Variable(idx, variable)
 
@@ -165,7 +180,9 @@ class CommonActionsMixin:
 
         return Event(idx, event)
 
-    def animation(self, animation: Animation | str | int, create: bool = True) -> Animation:
+    def animation(
+        self, animation: Animation | str | int, create: bool = True
+    ) -> Animation:
         """Get the animation with the specified name, or create a new one if it doesn't exist yet.
 
         Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
@@ -286,11 +303,11 @@ class CommonActionsMixin:
         for item in array:
             if isinstance(item, HkbPointer):
                 item = item.get_target()
-        
+
             if item:
                 if all(item[key].get_value() == val for key, val in conditions.items()):
                     return item
-        
+
         return None
 
     def bind_variable(
@@ -386,7 +403,7 @@ class CommonActionsMixin:
         Parameters
         ----------
         record : HkbRecord
-            The record to clear the variable binding set from. 
+            The record to clear the variable binding set from.
         path : str
             Path to the bound field.
         """
@@ -481,6 +498,32 @@ class CommonActionsMixin:
 
         return self.new_record(source.type_name, object_id, **attributes)
 
+    def copy_attributes(
+        self,
+        source: HkbRecord | str,
+        dest: HkbRecord | str,
+        *attributes,
+        allow_type_mismatch: bool = False,
+    ) -> None:
+        source = self.resolve_object(source)
+        dest = self.resolve_object(dest)
+
+        if allow_type_mismatch and source.type_id != dest.type_id:
+            raise ValueError(
+                f"Types don't match ({source.type_name} vs {dest.type_name})"
+            )
+
+        with undo_manager.combine():
+            for attr in attributes:
+                src_attr = source.get_path_value(attr)
+                new_val = src_attr.get_value()
+                
+                dest_attr = dest.get_path_value(attr)
+                old_val = dest_attr.get_value()
+                
+                dest_attr.set_value(new_val)
+                undo_manager.on_update_value(dest_attr, old_val, new_val)
+
     # Offer common defaults and highlight required settings for the most common objects
     # TODO document functions and their arguments
 
@@ -537,7 +580,9 @@ class CommonActionsMixin:
             generators = []
 
         variableBindingSet = self.resolve_object(variableBindingSet)
-        generatorChangedTransitionEffect = self.resolve_object(generatorChangedTransitionEffect)
+        generatorChangedTransitionEffect = self.resolve_object(
+            generatorChangedTransitionEffect
+        )
 
         kwargs.setdefault("sentOnClipEnd/id", -1)
         kwargs.setdefault("endOfClipEventId", -1)

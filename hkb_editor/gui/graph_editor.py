@@ -204,6 +204,7 @@ class GraphEditor:
         )
 
         if ret:
+            self.logger.debug("======================================")
             self.logger.info("Loading file %s", ret)
             self._do_load_from_file(ret)
             self.loaded_file = ret

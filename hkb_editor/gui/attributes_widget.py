@@ -547,12 +547,16 @@ class AttributesWidget:
             type_name = self.tagfile.type_registry.get_name(value.type_id)
             dpg.add_text(f"<{type_name}>")
 
-            if is_simple and bound_var_idx >= 0:
-                bound_var_name = self.tagfile.get_variable_name(bound_var_idx)
-                dpg.add_text(
-                    f"bound: {bound_var_name}",
-                    color=style.pink,
-                )
+            if is_simple:
+                if bound_var_idx >= 0:
+                    bound_var_name = self.tagfile.get_variable_name(bound_var_idx)
+                    dpg.add_text(
+                        f"bound: {bound_var_name}",
+                        color=style.pink,
+                    )
+                elif type_name == "hkInt32":
+                    # TODO could show here what the name would be if it was a variable, event or animation ID
+                    pass
 
             # Copy & paste
             dpg.add_separator()

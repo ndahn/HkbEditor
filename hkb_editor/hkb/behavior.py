@@ -88,7 +88,7 @@ class HavokBehavior(Tagfile):
 
     def create_event(self, event_name: str, idx: int = None) -> int:
         if idx is None:
-            idx = len(self._animations)
+            idx = len(self._events)
 
         self._events.insert(idx, event_name)
 
@@ -98,7 +98,7 @@ class HavokBehavior(Tagfile):
         )
 
         if idx < 0:
-            return len(self._variables) - idx
+            return len(self._events) - idx
 
         return idx
 
@@ -133,7 +133,7 @@ class HavokBehavior(Tagfile):
         idx: int = None,
     ) -> int:
         if idx is None:
-            idx = len(self._animations)
+            idx = len(self._variables)
 
         if isinstance(var_type, str):
             var_type = VariableType[var_type]

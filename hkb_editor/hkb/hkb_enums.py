@@ -122,6 +122,9 @@ class hkbBlendCurveUtils_BlendCurve(IntEnum):
     SMOOTH_TO_LINEAR = 3
 
 
+hkbLayer_BlendCurve = hkbBlendCurveUtils_BlendCurve
+
+
 class CustomLookAtTwistModifier_GainState(IntEnum):
     TARGET_GAIN = 0
     ON = 1

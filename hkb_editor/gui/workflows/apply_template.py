@@ -104,6 +104,7 @@ def apply_template_dialog(
             dpg.split_frame()
             center_window(loading_indicator, window)
 
+            logger.debug("======================================")
             logger.info(f"Executing template '{template._title}'")
 
             with undo_manager.combine():

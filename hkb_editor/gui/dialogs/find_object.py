@@ -41,16 +41,7 @@ def find_dialog(
         dpg.delete_item(table, children_only=True, slot=1)
 
         # Get matching items and update total count. May take a while depending on the query.
-        # The dpg loading indicator has a fixed size depending on the radius of the circles, 
-        # so we have to position it manually 
-        filt_box_max = dpg.get_item_rect_max(f"{tag}_filter")
-        indicator_pos = (
-            filt_box_max[0] - 33, filt_box_max[1] - 62
-        )
-
-        dpg.set_item_pos(f"{tag}_loading", indicator_pos)
         dpg.show_item(f"{tag}_loading")
-
         dpg.set_value(f"{tag}_total", "(Searching...)")
 
         # TODO find a way to cancel this early
@@ -219,6 +210,14 @@ def find_dialog(
     # Wait a frame so the size of our widgets is known
     dpg.split_frame()
     on_filter_update(f"{tag}_filter", initial_filter, None)
+
+    # The dpg loading indicator has a fixed size depending on the radius of the circles, 
+    # so we have to position it manually 
+    filt_box_max = dpg.get_item_rect_max(f"{tag}_filter")
+    indicator_pos = (
+        filt_box_max[0] - 33, filt_box_max[1] - 62
+    )
+    dpg.set_item_pos(f"{tag}_loading", indicator_pos)
 
     dpg.focus_item(f"{tag}_filter")
     return dialog

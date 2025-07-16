@@ -157,6 +157,15 @@ class HkbPointer(XmlValueHandler):
         super().__init__(tagfile, element, type_id)
         self.subtype = tagfile.type_registry.get_subtype(type_id)
 
+    def will_accept(self, record: "HkbRecord", check_subtypes: bool = True) -> bool:
+        if self.subtype == record.type_id:
+            return True
+
+        if check_subtypes and record.type_id in self.tagfile.type_registry.get_compatible_types(self.subtype):
+            return True
+
+        return False
+
     def get_value(self) -> str:
         val = self.element.attrib.get("id", None)
         if val in ("object0", None, ""):
@@ -212,6 +221,10 @@ class HkbArray(XmlValueHandler):
 
         super().__init__(tagfile, element, type_id)
         self.element_type_id = element.attrib["elementtypeid"]
+        # TODO format of element_type_id will be easier to check
+        self.is_pointer_array = (
+            get_value_handler(tagfile.type_registry, self.element_type_id) == HkbPointer
+        )
 
     @property
     def element_type_name(self) -> str:
@@ -307,16 +320,14 @@ class HkbArray(XmlValueHandler):
         if value.type_id == self.element_type_id:
             return True
 
+        # Pointers allow being set from objects, so we should't be in the way
+        if self.is_pointer_array and isinstance(value, HkbRecord):
+            return True
+
         # NOTE could check for compatible types, but I have yet to see that in use
 
         val_type = self.tagfile.type_registry.get_name(value.type_id)
         exp_type = self.tagfile.type_registry.get_name(self.element_type_id)
-
-        # We might be an array of pointers, but even if the underlying type matches
-        # we still only can accept its object_id, not the object itself
-        # TODO check format once we have a complete format map
-        # fmt = self.tagfile.type_registry.get_format(self.element_type_id)
-        # if fmt == TypeFormats.POINTER
 
         raise ValueError(
             f"Non-matching value type {value.type_id} ({val_type}), expected {self.element_type_id} ({exp_type})"
@@ -387,12 +398,10 @@ class HkbRecord(XmlValueHandler):
             # Handler.new will create all expected fields for the subelement
             Handler = get_value_handler(tagfile.type_registry, ftype)
             field_val = Handler.new(tagfile, ftype)
-
-            if fname == "userData":
-                # Needs to be unique?
-                field_val.set_value(tagfile.new_userdata_value())
-
             field_elem.append(field_val.element)
+
+            # Note: userData is probably a void pointer and not useful to set
+            # unless you are making a copy of another record
 
         if path_values:
             for path, val in path_values.items():
@@ -511,16 +520,13 @@ class HkbRecord(XmlValueHandler):
                     f"Tried to assign value with non-matching type {value.type_id} to field {name} ({ftype})"
                 )
 
-            # We fully replace the inner field element. This will invalidate any previous
-            # references to values of this field, but I suspect that will be less surprising
-            # than modifying a previously applied value and seeing no effect.
-            # TODO by doing this we might remove the value XML from another record
-            field_el.remove(next(field_el))
-            field_el.append(value.element)
-            # value = value.get_value()
-        else:
-            wrapped = wrap_element(self.tagfile, field_el, ftype)
-            wrapped.set_value(value)
+            # We could fully replace the inner field element, but this would invalidate any
+            # previous references to this field and could potentially remove the value XML from
+            # another record
+            value = value.get_value()
+
+        wrapped = wrap_element(self.tagfile, field_el, ftype)
+        wrapped.set_value(value)
 
     def __getitem__(self, key: str) -> XmlValueHandler:
         return self.get_field(key)
