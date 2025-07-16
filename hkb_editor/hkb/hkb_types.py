@@ -157,11 +157,19 @@ class HkbPointer(XmlValueHandler):
         super().__init__(tagfile, element, type_id)
         self.subtype = tagfile.type_registry.get_subtype(type_id)
 
+    @property
+    def subtype_name(self) -> str:
+        return self.tagfile.type_registry.get_name(self.subtype)
+
     def will_accept(self, record: "HkbRecord", check_subtypes: bool = True) -> bool:
         if self.subtype == record.type_id:
             return True
 
-        if check_subtypes and record.type_id in self.tagfile.type_registry.get_compatible_types(self.subtype):
+        if (
+            check_subtypes
+            and record.type_id
+            in self.tagfile.type_registry.get_compatible_types(self.subtype)
+        ):
             return True
 
         return False
@@ -173,8 +181,11 @@ class HkbPointer(XmlValueHandler):
 
         return val
 
-    def set_value(self, value: str) -> None:
+    def set_value(self, value: "HkbRecord | str") -> None:
         if isinstance(value, HkbRecord) and value.object_id:
+            # verify the record is compatible
+            if not self.will_accept(value):
+                raise ValueError(f"Incompatible record type {value.type_name}, expected {self.subtype_name}")
             value = value.object_id
 
         if value in ("", None):
@@ -191,6 +202,9 @@ class HkbPointer(XmlValueHandler):
             return None
 
         return self.tagfile.objects[oid]
+
+    def __str__(self) -> str:
+        return f"Pointer -> {self.get_value()} ({self.subtype_name})"
 
 
 class HkbArray(XmlValueHandler):
@@ -249,31 +263,19 @@ class HkbArray(XmlValueHandler):
             Handler(self.tagfile, elem, self.element_type_id) for elem in self.element
         ]
 
-    def set_value(
-        self, values: list[XmlValueHandler | Any], autowrap: bool = True
-    ) -> None:
-        if autowrap:
-            wrapped = []
-            ElemHandler = get_value_handler(
-                self.tagfile.type_registry, self.element_type_id
-            )
-            for v in values:
-                if not isinstance(v, XmlValueHandler):
-                    # Could use self._wrap_value, but this way we safe some lookups
-                    v = ElemHandler.new(self.tagfile, self.element_type_id, v)
-                wrapped.append(v)
+    def set_value(self, values: list[XmlValueHandler | Any]) -> None:
+        values = [self._wrap_value(v) for v in values]
 
-            values = wrapped
+        for v in values:
+            self._verify_compatible(v)
 
-        for item in values:
-            if isinstance(item, XmlValueHandler):
-                self._verify_compatible(item)
-
+        # Can't use clear as it would remove the attributes as well
         for child in list(self.element):
             self.element.remove(child)
 
         for v in values:
             self.element.append(v.element)
+
         self._count = len(values)
 
     def __len__(self) -> int:
@@ -313,6 +315,12 @@ class HkbArray(XmlValueHandler):
         self._count -= 1
 
     def _wrap_value(self, value: Any) -> XmlValueHandler:
+        if self.is_pointer_array and isinstance(value, HkbRecord):
+            return HkbPointer.new(self.tagfile, self.element_type_id, value.object_id)
+
+        if isinstance(value, XmlValueHandler):
+            return value
+
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return Handler.new(self.tagfile, self.element_type_id, value)
 
@@ -347,9 +355,8 @@ class HkbArray(XmlValueHandler):
     def append(self, value: XmlValueHandler | Any) -> None:
         if isinstance(value, XmlValueHandler):
             self._verify_compatible(value)
-        else:
-            value = self._wrap_value(value)
 
+        value = self._wrap_value(value)
         self.element.append(value.element)
         self._count += 1
 
@@ -359,9 +366,8 @@ class HkbArray(XmlValueHandler):
 
         if isinstance(value, XmlValueHandler):
             self._verify_compatible(value)
-        else:
-            value = self._wrap_value(value)
 
+        value = self._wrap_value(value)
         self.element.insert(index, value.element)
         self._count += 1
 
@@ -515,15 +521,23 @@ class HkbRecord(XmlValueHandler):
 
         field_el = self._get_field_element(name)
         if isinstance(value, XmlValueHandler):
-            if value.type_id != ftype:
+            if (
+                isinstance(value, HkbRecord)
+                and get_value_handler(self.tagfile.type_registry, ftype) == HkbPointer
+            ):
+                # Allow setting a pointer from an object, don't use get_value here
+                pass
+
+            elif value.type_id != ftype:
                 raise ValueError(
                     f"Tried to assign value with non-matching type {value.type_id} to field {name} ({ftype})"
                 )
-
-            # We could fully replace the inner field element, but this would invalidate any
-            # previous references to this field and could potentially remove the value XML from
-            # another record
-            value = value.get_value()
+            
+            else:
+                # We could fully replace the inner field element, but this would invalidate any
+                # previous references to this field and could potentially remove the value XML from
+                # another record
+                value = value.get_value()
 
         wrapped = wrap_element(self.tagfile, field_el, ftype)
         wrapped.set_value(value)

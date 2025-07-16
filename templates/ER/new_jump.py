@@ -61,7 +61,7 @@ def run(
             return
 
         new_bindings = ctx.make_copy(bindings)
-        record["variableBindingSet"] = new_bindings.object_id
+        record["variableBindingSet"] = new_bindings
 
     ####
     # Jump with added attack
@@ -213,6 +213,8 @@ def run(
             generator=handcondition_selector,
         )
 
+        isolate_binding_set(layer1_jumpattack_add)
+
     ####
     # Regular Directional Jumps
     ####
@@ -301,6 +303,8 @@ def run(
             ],
         )
 
+        isolate_binding_set(direction_selector)
+
         # Regular Jump Layer
 
         # A bit difficult to query, we need the parent layer of the selector we are imitating
@@ -310,6 +314,8 @@ def run(
             f"type_name:hkbLayer generator:{direction_selector_orig.object_id}",
             generator=direction_selector,
         )
+
+        isolate_binding_set(layer2_direction)
 
     # Assemble layers
     all_layers = []

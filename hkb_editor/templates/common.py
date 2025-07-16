@@ -464,7 +464,7 @@ class CommonActionsMixin:
             self._behavior.add_object(record)
             undo_manager.on_create_object(self._behavior, record)
 
-        self.logger.debug(f"Created new object {record}")
+        self.logger.debug(f"Created new {record}")
 
         return record
 
