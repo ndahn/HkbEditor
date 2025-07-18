@@ -33,6 +33,12 @@ def run(
 
     Note that directional jumps are not available for "Jump_N" (neutral jumps). Use "Jump_F" (walking) or "Jump_D" (running) instead if you want those. The main difference is whether you can change direction after the jump started.
 
+    # How to use
+    After this template has succeeded you can make use of the new behaviors by adding the following in your HKS:
+    ```
+    -- TODO instructions
+    ```
+
     Author: Raster
 
     Parameters

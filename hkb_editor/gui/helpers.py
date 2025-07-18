@@ -1,8 +1,10 @@
 from typing import Any, Callable, Type, Literal, get_origin, get_args
 from enum import IntFlag, Enum, Flag
 from functools import partial
+import re
 import logging
 import textwrap
+import webbrowser
 from dearpygui import dearpygui as dpg
 import pyperclip
 from natsort import natsorted
@@ -16,6 +18,9 @@ from hkb_editor.templates.common import (
 )
 
 from . import style
+
+
+url_regex = r"https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)"
 
 
 def center_window(window: str, parent: str = None) -> None:
@@ -289,7 +294,7 @@ def create_value_widget(
 
         with dpg.group(horizontal=True, tag=tag):
             dpg.add_input_text(
-                #readonly=True,
+                # readonly=True,
                 default_value=default if default is not None else "",
                 tag=f"{tag}_input_helper",
             )
@@ -458,23 +463,62 @@ def add_paragraphs(
     *,
     margin: tuple[int, int] = (3, 3),
     line_gap: int = 5,
-    paragraph_gap_factor: float = 0.8,
     **textargs,
 ) -> str:
     # Standard dpg font
     line_height = 13
     paragraph = ""
-    y = margin[1]
+    section_type = ""
+    has_sections = False
 
-    def place_line(line, **textargs):
-        nonlocal y
-        dpg.add_text(line, pos=(margin[0], y), **textargs)
-        y += line_height + line_gap
-
-    def place_paragraph(**textargs):
+    def place_paragraph():
         nonlocal paragraph
-        for frag in textwrap.wrap(paragraph, width=line_width):
-            place_line(frag, **textargs)
+        y = margin[1]
+
+        available_width = line_width
+        if has_sections:
+            available_width -= 5
+
+        with dpg.child_window(border=False, auto_resize_x=True, auto_resize_y=True):
+            # Bullet points
+            if section_type == "-":
+                fragments = textwrap.wrap(
+                    paragraph,
+                    # 2 bullet chars + 3 whitespaces
+                    width=available_width - 5,
+                    initial_indent="   ",
+                    subsequent_indent="   ",
+                )
+                dpg.add_text(
+                    fragments[0][5:], pos=(margin[0], y), bullet=True, **textargs
+                )
+                y += line_height + line_gap
+
+                # Indent subsequent lines if bullet line is too long
+                for frag in fragments[1:]:
+                    dpg.add_text(frag, pos=(margin[0], y), **textargs)
+                    y += line_height + line_gap
+
+            # Code block the user can copy from
+            elif section_type == "```":
+                block_width = int(
+                    estimate_drawn_text_size(available_width, font_size=line_height)[0]
+                    * 0.95
+                )
+                print("###", block_width)
+                dpg.add_input_text(
+                    default_value=paragraph,
+                    readonly=True,
+                    multiline=True,
+                    width=block_width,
+                )
+
+            # Regular paragraph
+            else:
+                for frag in textwrap.wrap(paragraph, width=available_width):
+                    dpg.add_text(frag, pos=(margin[0], y), **textargs)
+                    y += line_height + line_gap
+
         paragraph = ""
 
     with dpg.child_window(
@@ -483,31 +527,55 @@ def add_paragraphs(
         for line in text.splitlines():
             line = line.strip()
 
-            if not line or line.startswith(("-", "*")):
-                # Place all lines collected so far
-                place_paragraph(**textargs)
+            if not line:
+                place_paragraph()
 
-                if not line:
-                    # Paragraph gap
-                    y += (line_height + line_gap) * paragraph_gap_factor
+                if has_sections:
+                    dpg.pop_container_stack()
+                    has_sections = False
 
-                elif line.startswith(("- ", "* ")):
-                    # Bullet point
-                    fragments = textwrap.wrap(
-                        line,
-                        # 2 bullet chars + 3 whitespaces
-                        width=line_width - 5,
-                        initial_indent="   ",
-                        subsequent_indent="   ",
-                    )
-                    place_line(fragments[0][5:], bullet=True, **textargs)
-                    for frag in fragments[1:]:
-                        place_line(frag, **textargs)
+            elif line.startswith(("- ", "* ")):
+                if section_type != "-":
+                    place_paragraph()
+
+                paragraph += line + "\n"
+                section_type = "-"
+
+            elif line.startswith("# "):
+                if has_sections:
+                    dpg.pop_container_stack()
+
+                # Create a new section instead of adding to the paragraph
+                section = dpg.add_tree_node(label=line[2:])
+                dpg.push_container_stack(section)
+                has_sections = True
+
+            elif line.startswith("```"):
+                place_paragraph()
+
+                if section_type == "```":
+                    section_type = ""
+                else:
+                    section_type = "```"
+
+            elif re.match(url_regex, line):
+                place_paragraph()
+                dpg.add_button(
+                    label=line,
+                    small=True,
+                    callback=lambda s, a, u: webbrowser.open(u),
+                    user_data=line,
+                )
+
             else:
-                paragraph += line + " "
+                # Need to preserve the newline for code blocks
+                paragraph += line + "\n"
 
         # Place any remaining lines
-        place_paragraph(**textargs)
+        place_paragraph()
+
+    if has_sections:
+        dpg.pop_container_stack()
 
     return container
 
