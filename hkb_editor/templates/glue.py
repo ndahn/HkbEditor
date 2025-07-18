@@ -25,9 +25,6 @@ def get_templates() -> dict[str, tuple[tuple[str, ...], str]]:
             categories = ()
 
         for file in files:
-            if file == "example.py":
-                continue
-
             path = os.path.join(dirpath, file)
             if not file.endswith(".py") or not os.path.isfile(path):
                 continue

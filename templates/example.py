@@ -6,40 +6,53 @@ from hkb_editor.templates import *
 def run(
     # Always first
     ctx: TemplateContext,
-    # Will become an integer input in the dialog
-    some_value: int,
     # Will allow the user to pick an animation using a search dialog
     animation: Animation,
+    # Will become an integer input in the dialog
+    cmsg_name: str,
     # Will become a combobox where the user can pick either "a" or "b"
     choice: Literal["a", "b"] = "a",
 ):
     """Example template
 
-    The short description (i.e. the first line of this docstring) will appear in
+    This template should serve as an example of how to write new templates. You can 
+    explore its code for yourselve by clicking the "Source" button below. 
+
+    # About docstrings
+    The short description (that is, the first line of this docstring) will appear in
     the menu, so keep it very short (< 25 characters). All subsequent paragraphs 
     will become text that is shown in the dialog.
 
+    There is very limited support for markdown-like formatting in the form of: 
+    ```
+    - # Headings (only level 0, ends at the next heading or double empty line)
+    - -/* bullet points
+    - ``` code blocks (which the user can copy from)
+    - links (must start with http on a new line)
+    ```
+
+    # Template arguments
     The context variable will always be the first parameter passed. All subsequent
     parameters will be exposed in the dialog for the user to fill in. Their type
-    will be deduced preferably from the type hint, then the docstring below, then
-    the default value (if any). If the type cannot be deduced the template will be
-    rejected. The docstrings below are optional but recommended as they will become
-    tooltips.
+    will be deduced preferably from the type hint, then the docstring, then the 
+    default value (if any). If the type cannot be deduced the template will be
+    rejected. The following argument types will be supported:
 
-    For now only the following types will be supported:
     - simple types (int, float, bool, str)
     - choices (Literal of simple types)
     - known constants (Animation, Event, Variable)
-    - other behavior objects (HkbRecord, no defaults)
+    - other behavior objects (HkbRecord, defaults ignored)
+    - any other type will cause the template to be rejected.
 
     Defaults for Animations, Events and Variables may be provided as int or string.
     Defaults for HkbRecord objects may be provided as a string representing an 
     object ID or lucene search string to preselect a matching object.
 
+
     Please try to follow these guidelines, especially when submitting new scripts
     to be included in future releases.
 
-    P.S.: templates will not be loaded until they are executed, only parsed.
+    P.S.: template code will not be truly loaded until it is executed.
 
     Author: Managarm
 
@@ -54,26 +67,38 @@ def run(
     animation : Animation
         The animation to use.
     """
-    # Create objects. They'll be added to the behavior automatically if either
-    # generate_id is True or an object_id is provided. Any attributes you don't
-    # specify will default to their type default (i.e. 0 for int, 0.0 for float,
-    # "" for str, False for bool, object0 for pointers, etc.). This includes
-    # flags and enums.
-    cmsg = ctx.new_record(
-        "CustomManualSelectorGenerator",
-        "<new>",
-        name="My_CMSG",
-        enableScript=True,
-        enableTae=True,
+    # The template is responsible for verifying passed arguments. However, future 
+    # versions will consider all arguments without defaults as required, so the 
+    # template won't be executed unless the user has specified them.
+    if not cmsg_name or not animation:
+        raise ValueError("Missing parameters")
+    
+    # Create a new CMSG with defaults and add it to the behavior. It will not be 
+    # attached anywhere yet. 
+    cmsg = ctx.new_cmsg(
+        animation.anim_id,
+        name=cmsg_name,
+        enableScript=False,
     )
 
-    # Uses our lucene search syntax. See hkb_editor.hkb.query for details
-    parent = ctx.find("name:'Root_SM'")
+    # Create a new ClipGenerator. We still have to link it to another object, 
+    # usually a CMSG.
+    clip = ctx.new_clip(animation)
 
-    # The object has already been added to the xml in create(), but it still 
-    # needs to be linked to the hierarchy
-    ctx.set(parent, generator=cmsg)
+    # We could have created the ClipGenerator first and pass it immediately when 
+    # creating the CMSG, but this is a tutorial after all
+    ctx.set(cmsg, generators=[clip])
 
-    # You should only use the functions provided in hkb_editor.templates.*. Any
-    # other interactions may result in unspecified behavior. If you feel like
-    # something is missing please contact me.
+    # Uses the search syntax to find the first node matching it. Will throw an
+    # exception if no node matches.
+    parent = ctx.find(f"name:'{cmsg_name}'")
+    print(f"Found new CMSG with name {cmsg_name}")
+
+    # Where possible you should only use the functions in hkb_editor.templates.*. 
+    # This ensures that any modifications will be undoable in case the template 
+    # fails or the user wants to undo the outcome. 
+
+    # The template API already has many functions covering the most common and tedious
+    # tasks. Check out the other examples as well as templates/context.py and 
+    # templates/common.py. However, if you feel like some important functionality is 
+    # missing please contact me.

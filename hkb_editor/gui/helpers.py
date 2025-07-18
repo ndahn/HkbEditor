@@ -117,7 +117,7 @@ def create_simple_value_widget(
     elif value_type == int:
         dpg.add_input_int(
             label=label,
-            default_value=default,
+            default_value=default or 0,
             callback=callback,
             on_enter=accept_on_enter,
             tag=tag,
@@ -127,7 +127,7 @@ def create_simple_value_widget(
     elif value_type == float:
         dpg.add_input_float(
             label=label,
-            default_value=default,
+            default_value=default or 0.0,
             callback=callback,
             on_enter=accept_on_enter,
             tag=tag,
@@ -137,7 +137,7 @@ def create_simple_value_widget(
     elif value_type == bool:
         dpg.add_checkbox(
             label=label,
-            default_value=default,
+            default_value=default or False,
             callback=callback,
             tag=tag,
             **kwargs,
@@ -470,6 +470,7 @@ def add_paragraphs(
     paragraph = ""
     section_type = ""
     has_sections = False
+    last_line_empty = False
 
     def place_paragraph():
         nonlocal paragraph
@@ -482,22 +483,23 @@ def add_paragraphs(
         with dpg.child_window(border=False, auto_resize_x=True, auto_resize_y=True):
             # Bullet points
             if section_type == "-":
-                fragments = textwrap.wrap(
-                    paragraph,
-                    # 2 bullet chars + 3 whitespaces
-                    width=available_width - 5,
-                    initial_indent="   ",
-                    subsequent_indent="   ",
-                )
-                dpg.add_text(
-                    fragments[0][5:], pos=(margin[0], y), bullet=True, **textargs
-                )
-                y += line_height + line_gap
-
-                # Indent subsequent lines if bullet line is too long
-                for frag in fragments[1:]:
-                    dpg.add_text(frag, pos=(margin[0], y), **textargs)
+                for line in paragraph.splitlines():
+                    fragments = textwrap.wrap(
+                        line,
+                        # 2 bullet chars + 3 whitespaces
+                        width=available_width - 5,
+                        initial_indent="   ",
+                        subsequent_indent="   ",
+                    )
+                    dpg.add_text(
+                        fragments[0][5:], pos=(margin[0], y), bullet=True, **textargs
+                    )
                     y += line_height + line_gap
+
+                    # Indent subsequent lines if bullet line is too long
+                    for frag in fragments[1:]:
+                        dpg.add_text(frag, pos=(margin[0], y), **textargs)
+                        y += line_height + line_gap
 
             # Code block the user can copy from
             elif section_type == "```":
@@ -505,7 +507,6 @@ def add_paragraphs(
                     estimate_drawn_text_size(available_width, font_size=line_height)[0]
                     * 0.95
                 )
-                print("###", block_width)
                 dpg.add_input_text(
                     default_value=paragraph,
                     readonly=True,
@@ -527,14 +528,23 @@ def add_paragraphs(
         for line in text.splitlines():
             line = line.strip()
 
-            if not line:
-                place_paragraph()
+            if section_type == "```":
+                # If we are in a code block section, ignore all formatting cases 
+                # and simply add to the paragraph (or place the paragraph once we 
+                # reach the code block end)
+                if line.startswith("```"):
+                    place_paragraph()
+                    section_type = ""
+                else:
+                    paragraph += line + "\n"
 
-                if has_sections:
-                    dpg.pop_container_stack()
-                    has_sections = False
+            elif line.startswith("```"):
+                # Start a new code block
+                place_paragraph()
+                section_type = "```"
 
             elif line.startswith(("- ", "* ")):
+                # Bullet point
                 if section_type != "-":
                     place_paragraph()
 
@@ -542,6 +552,7 @@ def add_paragraphs(
                 section_type = "-"
 
             elif line.startswith("# "):
+                # New section header
                 if has_sections:
                     dpg.pop_container_stack()
 
@@ -549,16 +560,10 @@ def add_paragraphs(
                 section = dpg.add_tree_node(label=line[2:])
                 dpg.push_container_stack(section)
                 has_sections = True
-
-            elif line.startswith("```"):
-                place_paragraph()
-
-                if section_type == "```":
-                    section_type = ""
-                else:
-                    section_type = "```"
+                section_type = ""
 
             elif re.match(url_regex, line):
+                # Web link
                 place_paragraph()
                 dpg.add_button(
                     label=line,
@@ -567,9 +572,23 @@ def add_paragraphs(
                     user_data=line,
                 )
 
+            elif not line:
+                # Empty line
+                if paragraph:
+                    place_paragraph()
+                elif last_line_empty and has_sections:
+                    # If this is the second empty line end the section
+                    dpg.pop_container_stack()
+                    has_sections = False
+                
+                # End the previous section whatever it was
+                section_type = ""
+
             else:
                 # Need to preserve the newline for code blocks
                 paragraph += line + "\n"
+
+            last_line_empty = not bool(line)
 
         # Place any remaining lines
         place_paragraph()

@@ -27,17 +27,57 @@ def run(
 ):
     """New Jump Slot
 
-    Creates a new TAE slot for jump animations with support for jump attacks.
+    Creates a new TAE slot for jump animations with support for directional jumps and jump attacks.
 
+    # Details
     If you define an animation for one of the directions it will be the only slot used for this direction. Otherwise the regular slots for this direction are used, taken from the "base_jump". These are in Elden Ring 202020 - 202023 (front, back, left, right). If jump attacks are enabled, the new jump behaviors will support all jump attacks already registered for the base jump.
 
     Note that directional jumps are not available for "Jump_N" (neutral jumps). Use "Jump_F" (walking) or "Jump_D" (running) instead if you want those. The main difference is whether you can change direction after the jump started.
 
     # How to use
     After this template has succeeded you can make use of the new behaviors by adding the following in your HKS:
+
+    Add the following code to your `ExecJump` function, replacing the SpEffect ID and event with values appropriate for your behavior.
     ```
-    -- TODO instructions
+    if env(GetSpEffectID, 480098) == TRUE then
+        if env(IsAIJumpRequested) == TRUE then
+            act(NotifyAIOfJumpState)
+        end
+
+        act(SetNpcAIAttackRequestIDAfterBlend, env(GetNpcAIAttackRequestID))
+        SetAIActionState()
+        ExecEvent("W_RasterSurgeSprintJump_S")
+
+    return TRUE
     ```
+
+    Then add the following code on the global level, renaming the functions to match the `base_name` you specified.
+    ```
+    function RasterSurgeSprintJump_S_onActivate()
+        act(AIJumpState)
+        SetAIActionState()
+    end
+
+    function RasterSurgeSprintJump_S_onUpdate()
+        SetAIActionState()
+        JUMP_STATE_1 = 0
+        JUMP_STATE_2 = 0
+        JUMP_STATE_3 = 1
+
+        if GetVariable("JumpAttackForm") == 0 then
+            act(LockonFixedAngleCancel)
+        end
+        
+        if JumpCommonFunction(2) == TRUE then
+            return
+        end
+    end
+
+    function RasterSurgeSprintJump_S_onDeactivate()
+        act(DisallowAdditiveTurning, FALSE)
+    end
+    ```
+
 
     Author: Raster
 
