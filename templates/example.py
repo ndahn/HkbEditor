@@ -73,7 +73,8 @@ def run(
         raise ValueError("Missing parameters")
     
     # Create a new CMSG with defaults and add it to the behavior. It will not be 
-    # attached anywhere yet. 
+    # attached anywhere yet. When creating objects with names, try to follow the 
+    # typical naming conventions (e.g. adding _CMSG to then name of a CMSG).
     cmsg = ctx.new_cmsg(
         animation.anim_id,
         name=cmsg_name,
@@ -89,9 +90,11 @@ def run(
     ctx.set(cmsg, generators=[clip])
 
     # Uses the search syntax to find the first node matching it. Will throw an
-    # exception if no node matches.
-    parent = ctx.find(f"name:'{cmsg_name}'")
-    print(f"Found new CMSG with name {cmsg_name}")
+    # exception if no node matches. Be aware that names are not required to be 
+    # unique. Add additional filters like 'type_name:CustomManualSelectorGenerator' 
+    # to make sure you find what you want.
+    found_object = ctx.find(f"name:'{cmsg_name}'")
+    print(f"Found new CMSG with name {found_object["name"]}")
 
     # Where possible you should only use the functions in hkb_editor.templates.*. 
     # This ensures that any modifications will be undoable in case the template 
