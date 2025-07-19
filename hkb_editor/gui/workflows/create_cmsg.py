@@ -102,10 +102,10 @@ def create_cmsg_dialog(
         if not cmsg_name.endswith("_CMSG"):
             cmsg_name += "_CMSG"
 
-        # Add entry to animations array. We also need the parts in some places
+        # Get or create the animation slot
         animation = util.animation(animation_val)
 
-        # Add event to the events array
+        # Get or create the event
         event = util.event(event_val)
 
         playback_mode = PlaybackMode[playback_mode_val].value
@@ -130,9 +130,7 @@ def create_cmsg_dialog(
         with undo_manager.combine():
             clip = util.new_clip(
                 animation,
-                name=f"{animation_val}_{base_name}",
                 mode=playback_mode,
-
             )
             cmsg = util.new_cmsg(
                 animation.anim_id,
@@ -217,7 +215,6 @@ def create_cmsg_dialog(
 
             dpg.add_input_text(
                 default_value="",
-                readonly=True,
                 tag=f"{tag}_event",
             )
             with dpg.tooltip(dpg.last_item()):
@@ -243,7 +240,6 @@ def create_cmsg_dialog(
             dpg.add_input_text(
                 default_value="",
                 hint="aXXX_YYYYYY",
-                readonly=True,
                 tag=f"{tag}_animation",
             )
             with dpg.tooltip(dpg.last_item()):
@@ -286,10 +282,18 @@ def create_cmsg_dialog(
                         "hkbTransitionEffect"
                     )
                 )
+
                 default_transition = next(
-                    behavior.query(f"type_id:{transition_effect_type_id} TaeBlend"),
+                    # Default in ER and Nightreign
+                    behavior.query(f"type_id:{transition_effect_type_id} DefaultTransition"),
                     None,
                 )
+                if not default_transition:
+                    # Default in Sekiro
+                    default_transition = next(
+                        behavior.query(f"type_id:{transition_effect_type_id} TaeBlend"),
+                        None,
+                    )
 
                 dpg.add_input_text(
                     readonly=True,
@@ -325,7 +329,7 @@ def create_cmsg_dialog(
                     TransitionInfoFlags,
                     None,
                     base_tag=f"{tag}_transition_flags",
-                    active_flags=0,
+                    active_flags=3584,
                 )
 
             # AnimeEndEventType

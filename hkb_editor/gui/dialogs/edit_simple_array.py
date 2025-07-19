@@ -19,11 +19,17 @@ def edit_simple_array_dialog(
     on_delete: Callable[[int], bool] = None,
     on_close: Callable[[str, list[str], Any], None] = None,
     get_item_hint: Callable[[int], list[str]] = None,
+    item_limit: int = None,
     tag: str = 0,
     user_data: Any = None,
 ) -> None:
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
+
+    if item_limit is None:
+        item_limit = 2000 / len(columns)
+        # round to nearest hundred
+        item_limit = max(100, int(round(item_limit / 100)) * 100)
 
     def new_entry_dialog(sender, app_data, item_idx: int):
         popup = new_tuple_dialog(
@@ -86,7 +92,23 @@ def edit_simple_array_dialog(
     def fill_table():
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
 
-        for item_idx, item in enumerate(items):
+        filt = dpg.get_value(f"{tag}_filter")
+        if filt:
+            matches = [
+                (idx, item)
+                for idx, item in enumerate(items)
+                if filt in str(idx) or filt in str(item)
+            ]
+        else:
+            matches = [(idx, item) for idx, item in enumerate(items)]
+
+        if len(matches) > item_limit:
+            dpg.set_value(f"{tag}_total", f"(showing {item_limit}/{len(matches)})")
+            matches = matches[:item_limit]
+        else:
+            dpg.set_value(f"{tag}_total", f"({len(matches)} matches)")
+
+        for item_idx, item in matches:
             with dpg.table_row(filter_key=f"{item_idx}:{item}", parent=table) as row:
                 dpg.add_text(str(item_idx))
 
@@ -137,11 +159,13 @@ def edit_simple_array_dialog(
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
-        dpg.add_input_text(
-            hint="Filter Entries",
-            callback=lambda s, a, u: dpg.set_value(table, dpg.get_value(s)),
-            tag=f"{tag}_filter",
-        )
+        with dpg.group(horizontal=True):
+            dpg.add_input_text(
+                hint="Filter Entries",
+                callback=fill_table,
+                tag=f"{tag}_filter",
+            )
+            dpg.add_text(f"", tag=f"{tag}_total")
 
         dpg.add_separator()
 
@@ -156,7 +180,7 @@ def edit_simple_array_dialog(
             scrollY=True,
             height=-spare_height,
             sortable=True,
-            #sort_tristate=True,
+            # sort_tristate=True,
             sort_multi=True,
             callback=table_sort,
             tag=f"{tag}_table",
@@ -172,7 +196,7 @@ def edit_simple_array_dialog(
                 color = style.white
                 if isinstance(line, tuple):
                     line, color = line
-                
+
                 dpg.add_text(line, color=color)
 
     dpg.focus_item(f"{tag}_filter")

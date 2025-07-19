@@ -89,6 +89,9 @@ def register_clip_dialog(
             show_warning("CMSG not set")
             return
 
+        # Get or create the animation
+        animation = util.animation(animation_name)
+
         # dpg combo only gives us the item, not the index
         playback_mode = PlaybackMode[playback_mode_name].value
 
@@ -100,7 +103,7 @@ def register_clip_dialog(
         # Do the deed
         with undo_manager.combine():
             clip = util.new_clip(
-                animation_name,
+                animation,
                 name=clip_name,
                 mode=playback_mode,
                 flags=clip_flags,
@@ -135,7 +138,6 @@ def register_clip_dialog(
             dpg.add_input_text(
                 default_value="",
                 hint="aXXX_YYYYYY",
-                readonly=True,
                 tag=f"{tag}_animation",
             )
             dpg.add_button(

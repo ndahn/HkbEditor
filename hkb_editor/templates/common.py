@@ -631,7 +631,7 @@ class CommonActionsMixin:
             name=name,
             animationName=animation.name,
             playbackSpeed=playbackSpeed,
-            animationInternalId=animation.anim_id,
+            animationInternalId=animation.index,
             mode=mode,
             **kwargs,
         )
