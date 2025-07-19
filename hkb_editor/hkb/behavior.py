@@ -201,8 +201,8 @@ class HavokBehavior(Tagfile):
 
     def get_variable_bounds(self, idx: int) -> tuple[int, int]:
         bounds: HkbRecord = self._variable_bounds[idx]
-        lo = bounds.get_path_value("min/value", resolve=True)
-        hi = bounds.get_path_value("max/value", resolve=True)
+        lo = bounds.get_field("min/value", resolve=True)
+        hi = bounds.get_field("max/value", resolve=True)
         return [lo, hi]
 
     def delete_variable(self, idx: int = -1) -> None:

@@ -107,7 +107,7 @@ def run(
             return
 
         new_bindings = ctx.make_copy(bindings)
-        record["variableBindingSet"] = new_bindings
+        ctx.set(record, variableBindingSet=new_bindings)
 
     ####
     # Jump with added attack

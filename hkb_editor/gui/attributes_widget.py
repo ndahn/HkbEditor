@@ -457,7 +457,7 @@ class AttributesWidget:
                     # The path will become deeper if and only if we descended into
                     # record fields, so the parent object will always be a record
                     parent_path = "/".join(path.split("/")[:-1])
-                    current_record = self.record.get_path_value(parent_path)
+                    current_record = self.record.get_field(parent_path)
 
                 enum = get_hkb_enum(
                     self.tagfile.type_registry, current_record.type_id, path

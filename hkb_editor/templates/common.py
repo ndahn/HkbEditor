@@ -492,7 +492,7 @@ class CommonActionsMixin:
         if not source.object_id and object_id == "<new>":
             # Looks like an object that shouldn't be at the top level
             object_id = None
-
+            
         attributes = {k: v.get_value() for k, v in source.get_value().items()}
         attributes.update(**overrides)
 
@@ -515,10 +515,10 @@ class CommonActionsMixin:
 
         with undo_manager.combine():
             for attr in attributes:
-                src_attr = source.get_path_value(attr)
+                src_attr = source.get_field(attr)
                 new_val = src_attr.get_value()
                 
-                dest_attr = dest.get_path_value(attr)
+                dest_attr = dest.get_field(attr)
                 old_val = dest_attr.get_value()
                 
                 dest_attr.set_value(new_val)

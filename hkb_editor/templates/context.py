@@ -196,7 +196,7 @@ class TemplateContext(CommonActionsMixin):
             The value resolved to a regular type (non-recursive).
         """
         record = self.resolve_object(record)
-        return record.get_path_value(path, default=default, resolve=True)
+        return record.get_field(path, default=default, resolve=True)
 
     def set(self, record: HkbRecord | str, **attributes) -> None:
         """Update a one or more fields of the specified :py:class:`HkbRecord`.
@@ -213,7 +213,7 @@ class TemplateContext(CommonActionsMixin):
 
         with undo_manager.combine():
             for path, value in attributes.items():
-                handler = record.get_path_value(path)
+                handler = record.get_field(path)
                 # Pointers already support setting from objects
                 handler.set_value(value)
                 undo_manager.on_update_value(handler, handler.get_value(), value)
@@ -258,7 +258,7 @@ class TemplateContext(CommonActionsMixin):
         """
         record = self.resolve_object(record)
 
-        array: HkbArray = record.get_path_value(path)
+        array: HkbArray = record.get_field(path)
         try:
             array.append(item)
         except ValueError:
@@ -291,7 +291,7 @@ class TemplateContext(CommonActionsMixin):
         """
         record = self.resolve_object(record)
 
-        array: HkbArray = record.get_path_value(path)
+        array: HkbArray = record.get_field(path)
         ret = array.pop(index).get_value()
         undo_manager.on_update_array_item(array, index, ret, None)
         self.logger.debug(f"Removed item {index} ({ret}) from {path} of {record}")

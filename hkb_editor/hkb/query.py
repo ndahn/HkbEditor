@@ -148,7 +148,7 @@ class QueryTransformer(Transformer):
                     # TODO only supports a single array wildcard for now
                     loc = path.index(":*")
                     frags = path[:loc], path[loc + 2 :]
-                    array = self.record.get_path_value(frags[0])
+                    array = self.record.get_field(frags[0])
                     
                     if not isinstance(array, HkbArray):
                         return False
@@ -162,7 +162,7 @@ class QueryTransformer(Transformer):
                     return False
                 else:
                     # Still need to match against a string!
-                    actual = str(self.record.get_path_value(path, resolve=True))
+                    actual = str(self.record.get_field(path, resolve=True))
             else:
                 actual = self.record.get_field(path)
         except (AttributeError, KeyError, ValueError) as e:

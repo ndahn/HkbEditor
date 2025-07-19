@@ -55,9 +55,10 @@ class HkbString(XmlValueHandler):
     def get_value(self) -> str:
         return self.element.attrib.get("value", "")
 
-    def set_value(self, value: str) -> None:
-        if not isinstance(value, str):
+    def set_value(self, value: "HkbString | str") -> None:
+        if not isinstance(value, (HkbString, str)):
             raise ValueError(f"Value {value} ({type(value)}) is not a string")
+
         self.element.attrib["value"] = str(value)
 
 
@@ -77,8 +78,11 @@ class HkbInteger(XmlValueHandler):
     def get_value(self) -> int:
         return int(self.element.attrib.get("value", 0))
 
-    def set_value(self, value: int) -> None:
+    def set_value(self, value: "HkbInteger | int") -> None:
         self.element.attrib["value"] = str(int(value))
+
+    def __int__(self) -> int:
+        return self.get_value()
 
 
 class HkbFloat(XmlValueHandler):
@@ -108,7 +112,7 @@ class HkbFloat(XmlValueHandler):
         # Behaviors use commas as decimal separators
         return float(self.element.attrib.get("dec", "0").replace(",", "."))
 
-    def set_value(self, value: float) -> None:
+    def set_value(self, value: "HkbFloat | float") -> None:
         value = float(value)
 
         # Some older versions of HKLib seem to have decompiled floats with commas
@@ -118,6 +122,9 @@ class HkbFloat(XmlValueHandler):
 
         self.element.attrib["dec"] = str_value
         self.element.attrib["hex"] = self.float_to_ieee754(value)
+
+    def __float__(self) -> float:
+        return self.get_value()
 
 
 class HkbBool(XmlValueHandler):
@@ -137,10 +144,14 @@ class HkbBool(XmlValueHandler):
     def get_value(self) -> bool:
         return self.element.attrib.get("value", "false").lower() == "true"
 
-    def set_value(self, value: bool) -> None:
-        if not isinstance(value, bool):
+    def set_value(self, value: "HkbBool | bool") -> None:
+        if not isinstance(value, (HkbBool, bool)):
             raise ValueError(f"Value {value} ({type(value)}) is not a bool")
+
         self.element.attrib["value"] = "true" if value else "false"
+
+    def __bool__(self) -> bool:
+        return self.get_value()
 
 
 class HkbPointer(XmlValueHandler):
@@ -181,12 +192,14 @@ class HkbPointer(XmlValueHandler):
 
         return val
 
-    def set_value(self, value: "HkbRecord | str") -> None:
+    def set_value(self, value: "HkbPointer | HkbRecord | str") -> None:
         if isinstance(value, HkbRecord) and value.object_id:
             # verify the record is compatible
             if not self.will_accept(value):
                 raise ValueError(f"Incompatible record type {value.type_name}, expected {self.subtype_name}")
             value = value.object_id
+        elif isinstance(value, HkbPointer):
+            value = value.get_value()
 
         if value in ("", None):
             value = "object0"
@@ -253,31 +266,6 @@ class HkbArray(XmlValueHandler):
     def _count(self, new_count: int) -> None:
         self.element.attrib["count"] = str(new_count)
 
-    def clear(self) -> None:
-        for child in self.element:
-            self.element.remove(child)
-
-    def get_value(self) -> list[XmlValueHandler]:
-        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
-        return [
-            Handler(self.tagfile, elem, self.element_type_id) for elem in self.element
-        ]
-
-    def set_value(self, values: list[XmlValueHandler | Any]) -> None:
-        values = [self._wrap_value(v) for v in values]
-
-        for v in values:
-            self._verify_compatible(v)
-
-        # Can't use clear as it would remove the attributes as well
-        for child in list(self.element):
-            self.element.remove(child)
-
-        for v in values:
-            self.element.append(v.element)
-
-        self._count = len(values)
-
     def __len__(self) -> int:
         return self._count
 
@@ -314,16 +302,6 @@ class HkbArray(XmlValueHandler):
 
         self._count -= 1
 
-    def _wrap_value(self, value: Any) -> XmlValueHandler:
-        if self.is_pointer_array and isinstance(value, HkbRecord):
-            return HkbPointer.new(self.tagfile, self.element_type_id, value.object_id)
-
-        if isinstance(value, XmlValueHandler):
-            return value
-
-        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
-        return Handler.new(self.tagfile, self.element_type_id, value)
-
     def _verify_compatible(self, value: XmlValueHandler) -> None:
         if value.type_id == self.element_type_id:
             return True
@@ -340,6 +318,39 @@ class HkbArray(XmlValueHandler):
         raise ValueError(
             f"Non-matching value type {value.type_id} ({val_type}), expected {self.element_type_id} ({exp_type})"
         )
+
+    def _wrap_value(self, value: Any) -> XmlValueHandler:
+        if self.is_pointer_array and isinstance(value, HkbRecord):
+            return HkbPointer.new(self.tagfile, self.element_type_id, value.object_id)
+
+        if isinstance(value, XmlValueHandler):
+            # Always make a copy to avoid moving the xml element away from its 
+            # original parent
+            return value.new(self.tagfile, value.type_id, value.get_value())
+
+        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
+        return Handler.new(self.tagfile, self.element_type_id, value)
+
+    def get_value(self) -> list[XmlValueHandler]:
+        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
+        return [
+            Handler(self.tagfile, elem, self.element_type_id) for elem in self.element
+        ]
+
+    def set_value(self, values: "HkbArray | list[XmlValueHandler | Any]") -> None:
+        values = [self._wrap_value(v) for v in values]
+
+        for v in values:
+            self._verify_compatible(v)
+
+        # Can't use clear as it would remove the attributes as well
+        for child in list(self.element):
+            self.element.remove(child)
+
+        for v in values:
+            self.element.append(v.element)
+
+        self._count = len(values)
 
     def index(self, value: XmlValueHandler | Any) -> int:
         if isinstance(value, XmlValueHandler):
@@ -376,6 +387,10 @@ class HkbArray(XmlValueHandler):
         del self[index]
         return ret
 
+    def clear(self) -> None:
+        for child in self.element:
+            self.element.remove(child)
+
     def __str__(self):
         return f"HkbArray[{self.element_type_name}] (len={self._count})"
 
@@ -411,7 +426,7 @@ class HkbRecord(XmlValueHandler):
 
         if path_values:
             for path, val in path_values.items():
-                record.set_path_value(path, val)
+                record.set_field(path, val)
 
         return record
 
@@ -439,7 +454,10 @@ class HkbRecord(XmlValueHandler):
     def get_value(self) -> dict[str, XmlValueHandler]:
         return {f: self[f] for f in self._fields.keys()}
 
-    def set_value(self, values: dict[str, XmlValueHandler]) -> None:
+    def set_value(self, values: "HkbRecord | dict[str, XmlValueHandler]") -> None:
+        if isinstance(values, HkbRecord):
+            values = values.get_value()
+        
         for key, val in values.items():
             self[key] = val
 
@@ -462,7 +480,7 @@ class HkbRecord(XmlValueHandler):
 
         return None
 
-    def get_path_value(
+    def get_field(
         self,
         path: str,
         default: Any = _undefined,
@@ -493,57 +511,18 @@ class HkbRecord(XmlValueHandler):
 
         return obj
 
-    def set_path_value(self, path: str, value: Any) -> None:
-        handler = self.get_path_value(path, resolve=False)
+    def set_field(self, path: str, value: XmlValueHandler | Any) -> None:
+        # Just delegate to the value handler
+        handler = self.get_field(path, resolve=False)
         handler.set_value(value)
 
-    def get_field(
-        self, name: str, default: Any = _undefined, resolve: bool = False
-    ) -> XmlValueHandler | Any:
+    def __getitem__(self, name: str) -> XmlValueHandler:
         ftype = self.get_field_type(name)
         if ftype is None:
-            if default is not _undefined:
-                return default
             raise AttributeError(f"No field '{name}'")
 
         field_el = self._get_field_element(name)
-        wrap = wrap_element(self.tagfile, field_el, ftype)
-
-        if resolve:
-            return wrap.get_value()
-
-        return wrap
-
-    def set_field(self, name: str, value: XmlValueHandler | Any) -> None:
-        ftype = self.get_field_type(name)
-        if ftype is None:
-            raise AttributeError(f"No field named '{name}'")
-
-        field_el = self._get_field_element(name)
-        if isinstance(value, XmlValueHandler):
-            if (
-                isinstance(value, HkbRecord)
-                and get_value_handler(self.tagfile.type_registry, ftype) == HkbPointer
-            ):
-                # Allow setting a pointer from an object, don't use get_value here
-                pass
-
-            elif value.type_id != ftype:
-                raise ValueError(
-                    f"Tried to assign value with non-matching type {value.type_id} to field {name} ({ftype})"
-                )
-            
-            else:
-                # We could fully replace the inner field element, but this would invalidate any
-                # previous references to this field and could potentially remove the value XML from
-                # another record
-                value = value.get_value()
-
-        wrapped = wrap_element(self.tagfile, field_el, ftype)
-        wrapped.set_value(value)
-
-    def __getitem__(self, key: str) -> XmlValueHandler:
-        return self.get_field(key)
+        return wrap_element(self.tagfile, field_el, ftype)
 
     def __setitem__(self, key: str, value: XmlValueHandler | Any) -> None:
         self.set_field(key, value)
