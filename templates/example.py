@@ -15,8 +15,7 @@ def run(
 ):
     """Example template
 
-    This template should serve as an example of how to write new templates. You can 
-    explore its code for yourselve by clicking the "Source" button below. 
+    This template should serve as an example of how to write new templates. When opening it in the editor, you can explore its code for yourselve by clicking the "Source" button below this text.
 
     # About docstrings
     The short description (that is, the first line of this docstring) will appear in
