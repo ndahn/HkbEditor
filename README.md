@@ -8,9 +8,9 @@ Behaviors are one of the most complex subsystems in these games, controling whic
 ![image](https://github.com/user-attachments/assets/c9a1fe5a-63c1-44a9-a770-5608277b4c12)
 
 # How to use
-In order to open a behavior you first need to unpack your game using [UXM](https://github.com/Nordgaren/UXM-Selective-Unpack). You want the `chr` folder, which contains animations and behaviors. Next, using [WitchyBND](https://github.com/ividyon/WitchyBND), unpack the `.behbnd.dcx` file of the character behavior you want to edit. This will create a folder with two subfolders and a few files. The behavior this tool is made for is under `Behaviors/cXXXX.hk`, where *XXXX* is the character's ID. After you decompile it into an XML using [HKLib](https://github.com/The12thAvenger/HKLib) you can open is with this program.
+In order to open a behavior you first need to unpack your game using [UXM](https://github.com/Nordgaren/UXM-Selective-Unpack). You want the `chr` folder, which contains animations and behaviors. Next, using [WitchyBND](https://github.com/ividyon/WitchyBND), unpack the `.behbnd.dcx` file of the character behavior you want to edit. This will create a folder with two subfolders and a few files. The behavior this tool is made for is under `Behaviors/cXXXX.hkx`, where *XXXX* is the character's ID. After you decompile it into an XML using [HKLib](https://github.com/The12thAvenger/HKLib) you can open it.
 
-Once open, you can expand one of the state machines and move around the graph with middle mouse button + drag (could be weird on some laptops?). Zoom in and out using your mouse wheel. Most things like graph nodes, attributes, etc. have useful menus on right click providing additional actions.
+Once loaded, you can expand one of the state machines and move around the graph with middle mouse button + drag (could be weird on some laptops?). Zoom in and out using your mouse wheel. Most things like graph nodes, attributes, etc. have useful menus on right click providing additional actions.
 
 When editing behaviors you should typically rely on making small incremental changes. The most common use cases - registering clips and creating CMSGs - can be found in the *workflows* menu. To create new hierarchies you would typically start by creating a new target for a pointer (e.g. a StateInfo's generator, or a new entry for a CMSG's generators). 
 
