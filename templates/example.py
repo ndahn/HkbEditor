@@ -94,7 +94,7 @@ def run(
     # unique. Add additional filters like 'type_name:CustomManualSelectorGenerator' 
     # to make sure you find what you want.
     found_object = ctx.find(f"name:'{cmsg_name}'")
-    print(f"Found new CMSG with name {found_object["name"]}")
+    print(f"Found new CMSG with name {found_object['name']}")
 
     # Where possible you should only use the functions in hkb_editor.templates.*. 
     # This ensures that any modifications will be undoable in case the template 

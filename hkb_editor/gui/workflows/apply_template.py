@@ -183,7 +183,7 @@ def apply_template_dialog(
         dpg.add_separator()
 
         # Notification
-        dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
+        dpg.add_text(show=False, tag=f"{tag}_notification", color=style.red)
 
         # Buttons
         with dpg.group(horizontal=True):

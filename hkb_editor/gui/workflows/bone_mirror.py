@@ -281,7 +281,7 @@ Note that the object ID and type IDs may differ between characters and games.\
         dpg.add_button(label="Auto Mirror", callback=auto_mirror)
         dpg.add_separator()
 
-        dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
+        dpg.add_text(show=False, tag=f"{tag}_notification", color=style.red)
 
         with dpg.group(horizontal=True):
             dpg.add_button(label="Copy CSV", callback=copy_csv)

@@ -7,6 +7,7 @@ from hkb_editor.gui.workflows.aliases import AliasManager
 from hkb_editor.gui.dialogs import find_dialog
 from hkb_editor.gui.attributes_widget import AttributesWidget
 from hkb_editor.gui.helpers import center_window
+from hkb_editor.gui import style
 
 
 def create_object_dialog(
@@ -150,7 +151,7 @@ def create_object_dialog(
         with dpg.child_window(auto_resize_y=True):
             attributes = AttributesWidget(alias_manager)
 
-        dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
+        dpg.add_text(show=False, tag=f"{tag}_notification", color=style.red)
 
         with dpg.group(horizontal=True):
             dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")

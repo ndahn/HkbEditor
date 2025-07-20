@@ -35,6 +35,7 @@ from .workflows.register_clip import register_clip_dialog
 from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
+from .workflows.update_name_ids import update_name_ids_dialog
 from .helpers import make_copy_menu
 from . import style
 
@@ -78,7 +79,7 @@ class BehaviorEditor(GraphEditor):
                 autosize=True,
             ) as note:
                 for line in lines:
-                    dpg.add_text(line, color=(0, 0, 0, 255))
+                    dpg.add_text(line, color=style.black)
 
             if severity >= logging.ERROR:
                 theme = style.notification_error_theme
@@ -176,7 +177,42 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(wnd))
 
     def create_app_menu(self):
-        self._create_file_menu()
+        # File
+        with dpg.menu(label="File"):
+            dpg.add_menu_item(label="Open...", callback=self.file_open)
+            dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="Save",
+                callback=self.file_save,
+                enabled=False,
+                tag=f"{self.tag}_menu_file_save",
+            )
+            dpg.add_menu_item(
+                label="Save as...",
+                callback=self.file_save_as,
+                enabled=False,
+                tag=f"{self.tag}_menu_file_save_as",
+            )
+            dpg.add_menu_item(
+                label="Update name ID files...",
+                callback=self.open_update_name_ids_dialog,
+                enabled=False,
+                tag=f"{self.tag}_menu_file_update_name_ids",
+            )
+            dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="Save layout as default", callback=self._save_app_layout
+            )
+            dpg.add_menu_item(
+                label="Restore factory layout",
+                callback=self._restore_default_app_layout,
+            )
+
+            dpg.add_separator()
+            dpg.add_menu_item(label="Exit", callback=self.exit_app)
+
         dpg.add_separator()
 
         # Edit
@@ -294,6 +330,7 @@ class BehaviorEditor(GraphEditor):
         func = dpg.enable_item if enabled else dpg.disable_item
         func(f"{self.tag}_menu_file_save")
         func(f"{self.tag}_menu_file_save_as")
+        func(f"{self.tag}_menu_file_update_name_ids")
         func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_workflows")
         func(f"{self.tag}_menu_templates")
@@ -645,6 +682,19 @@ class BehaviorEditor(GraphEditor):
         self.clear_attributes()
         self.canvas.show_node_path(path)
 
+    ####
+    # Dialogs
+    ####
+
+    def open_update_name_ids_dialog(self):
+        tag = f"{self.tag}_update_name_ids_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        update_name_ids_dialog(self.beh, tag=tag)
+
     def open_variable_editor(self):
         tag = f"{self.tag}_edit_variables_dialog"
         if dpg.does_item_exist(tag):
@@ -686,17 +736,11 @@ class BehaviorEditor(GraphEditor):
             ],
             {"Name": str, "Type": VariableType, "Min": int, "Max": int},
             title="Edit Variables",
-            help=[
-                ("Warning:", style.orange),
-                (
-                    "Variables are referenced by their index in VariableBindingSets.",
-                    style.light_blue,
-                ),
-                (
-                    "Deleting or inserting names may invalidate your behavior.",
-                    style.light_blue,
-                ),
-            ],
+            help="""\
+                NOTE that variables are referenced by their index in VariableBindingSets. Deleting or inserting names may invalidate your behavior.
+                
+                Remember to run "File/Update name ID Files" after adding new entries!
+                """,
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
@@ -740,17 +784,11 @@ class BehaviorEditor(GraphEditor):
             [(e,) for e in self.beh.get_events()],
             {"Name": str},
             title="Edit Events",
-            help=[
-                ("Warning:", style.orange),
-                (
-                    "Events are referenced by their index in TransitionInfos.",
-                    style.light_blue,
-                ),
-                (
-                    "Deleting or inserting events may invalidate your behavior.",
-                    style.light_blue,
-                ),
-            ],
+            help="""\
+                NOTE that events are referenced by their index in TransitionInfos and other nodes. Deleting or inserting names may invalidate your behavior.
+                
+                Remember to run "File/Update name ID Files" after adding new entries!
+                """,
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
@@ -790,17 +828,9 @@ class BehaviorEditor(GraphEditor):
             [(a,) for a in self.beh.get_animations()],
             {"Name": str},
             title="Edit Animation Names",
-            help=[
-                ("Warning:", style.orange),
-                (
-                    "Animation names are referenced by their index in ClipGenerators.",
-                    style.light_blue,
-                ),
-                (
-                    "Deleting or inserting names may invalidate your behavior.",
-                    style.light_blue,
-                ),
-            ],
+            help="""\
+                NOTE that events are referenced by their index in ClipGenerators. Deleting or inserting names may invalidate your behavior.
+                """,
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,

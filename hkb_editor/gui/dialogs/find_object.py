@@ -55,7 +55,8 @@ def find_dialog(
 
             if idx > item_limit:
                 # Item limit reached, indicate that we are done but more matches exist
-                dpg.set_value(f"{tag}_total", f"({item_limit}/? matches)")
+                total = idx + sum(1 for _ in matches)
+                dpg.set_value(f"{tag}_total", f"(showing {item_limit}/{total})")
                 break
 
             cells = item_to_row(item)

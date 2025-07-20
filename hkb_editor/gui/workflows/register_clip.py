@@ -201,7 +201,7 @@ slot (that is, a TAE ID that is not used by the game yet).
         # Main form done, now just some buttons and such
         dpg.add_separator()
 
-        dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
+        dpg.add_text(show=False, tag=f"{tag}_notification", color=style.red)
 
         with dpg.group(horizontal=True):
             dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")

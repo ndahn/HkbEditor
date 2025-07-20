@@ -372,17 +372,20 @@ def create_cmsg_dialog(
 
         dpg.add_spacer(height=3)
 
-        # TODO extend
         instructions = """\
 Adds a new StateInfo, CMSG and Clip and adds them to a statemachine.
 This essentially allows you to create entirely new animation slots.
+
+Note that for a StateInfo to work correctly you need to do two things:
+- add a '<statename>_onUpdate' function in your HKS
+- add an entry to 'action/statenameid.txt' (see File/Update name ID files)
 """
         add_paragraphs(instructions, 50, color=style.light_blue)
 
         # Main form done, now just some buttons and such
         dpg.add_separator()
 
-        dpg.add_text(show=False, tag=f"{tag}_notification", color=(255, 0, 0))
+        dpg.add_text(show=False, tag=f"{tag}_notification", color=style.red)
 
         with dpg.group(horizontal=True):
             dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")

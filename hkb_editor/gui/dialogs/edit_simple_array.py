@@ -2,7 +2,7 @@ from typing import Any, Callable, Type
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior
-from hkb_editor.gui.helpers import center_window, create_simple_value_widget, table_sort
+from hkb_editor.gui.helpers import center_window, create_simple_value_widget, table_sort, add_paragraphs
 from hkb_editor.gui import style
 from .make_tuple import new_tuple_dialog
 
@@ -12,7 +12,7 @@ def edit_simple_array_dialog(
     columns: dict[str, Type],
     *,
     title: str = "Edit Array",
-    help: list[str] = None,
+    help: str = None,
     choices: dict[int, list[str | tuple[str, Any]]] = None,
     on_add: Callable[[int, str], bool] = None,
     on_update: Callable[[int, str, str], bool] = None,
@@ -155,7 +155,7 @@ def edit_simple_array_dialog(
         height=400,
         label=title,
         on_close=close_dialog,
-        # autosize=True,
+        autosize=True,
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
@@ -169,16 +169,13 @@ def edit_simple_array_dialog(
 
         dpg.add_separator()
 
-        spare_height = 30
-        if help:
-            spare_height += 15 * len(help)
-
         with dpg.table(
             delay_search=True,
             resizable=True,
             policy=dpg.mvTable_SizingStretchSame,
             scrollY=True,
-            height=-spare_height,
+            width=600,
+            height=250,
             sortable=True,
             # sort_tristate=True,
             sort_multi=True,
@@ -192,12 +189,7 @@ def edit_simple_array_dialog(
 
         if help:
             dpg.add_separator()
-            for line in help:
-                color = style.white
-                if isinstance(line, tuple):
-                    line, color = line
-
-                dpg.add_text(line, color=color)
-
+            add_paragraphs(help, 90, color=style.light_blue)
+            
     dpg.focus_item(f"{tag}_filter")
     fill_table()
