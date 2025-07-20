@@ -236,7 +236,7 @@ class TemplateContext(CommonActionsMixin):
 
         if record.object_id:
             self._behavior.objects.pop(record.object_id)
-            undo_manager.on_delete_object(record)
+            undo_manager.on_delete_object(self._behavior, record)
             self.logger.debug(f"Deleted object {record}")
             return record
 

@@ -51,14 +51,14 @@ def run(
         for orig_ptr in normal_cmsg["generators"]:
             # Create a copy of the original clip so the selftrans CMSG can run it in parallel
             orig_clip = orig_ptr.get_target()
-            anim = orig_clip["animationName"]
-            clip = ctx.new_clip(anim)
+            copy = ctx.make_copy(orig_clip)
 
             for self_ptr in selftrans_cmsg["generators"]:
                 # Replace any references to the original clip with our copy
-                if self_ptr.get_value() == orig_ptr.get_value():
-                    ctx.set(self_ptr, clip)
+                if self_ptr == orig_ptr:
+                    # Pointers can be set from records
+                    self_ptr.set_value(copy)
                     break
             else:
                 # Not used after all
-                ctx.delete(clip)
+                ctx.delete(copy)

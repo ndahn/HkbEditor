@@ -35,6 +35,12 @@ class XmlValueHandler:
         ET.indent(self.element)
         return ET.tostring(self.element, pretty_print=True, encoding="unicode")
 
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+
+        return self.get_value() == other.get_value()
+
     def __str__(self) -> str:
         return str(self.get_value())
 
