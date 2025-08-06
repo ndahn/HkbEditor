@@ -16,7 +16,7 @@ from hkb_editor.hkb.hkb_flags import (
 
 def run(
     ctx: TemplateContext,
-    base_name: str,
+    jump_name: str,
     event: Event,
     base_jump: Literal["Jump_N", "Jump_F", "Jump_D"] = "Jump_D",
     enable_jump_attacks: bool = True,
@@ -25,7 +25,7 @@ def run(
     jump_left_anim: Animation = None,
     jump_right_anim: Animation = None,
 ):
-    """New Jump Slot
+    """New Jump
 
     Creates a new TAE slot for jump animations with support for directional jumps and jump attacks.
 
@@ -80,6 +80,7 @@ def run(
 
 
     Author: Raster
+    Status: verified
 
     Parameters
     ----------
@@ -87,7 +88,7 @@ def run(
         The template context.
     name : str
         Name of your new jump. Will be used for CMSGs, States, etc.
-    base_jump : Literal[f&quot;Jump_N&quot;, &quot;Jump_F&quot;, &quot;Jump_D&quot;], optional
+    jump_name : Literal[f&quot;Jump_N&quot;, &quot;Jump_F&quot;, &quot;Jump_D&quot;], optional
         The jump behavior to use for unspecified directions.
     jump_front_anim : Animation, optional
         Animation slot to use for forward jumps. Register clips from default slot if not specified.
@@ -116,27 +117,27 @@ def run(
         # Normal/Hard Attack Right
         hand_nh_right_normal_selector = ctx.make_copy(
             f"'{base_jump} Selector_NormalAttack_Right'",
-            name=f"{base_name} Selector_NormalAttack_Right",
+            name=f"{jump_name} Selector_NormalAttack_Right",
         )
 
         hand_nh_right_hard_selector = ctx.make_copy(
             f"'{base_jump} Selector_HardAttack_Right'",
-            name=f"{base_name} Selector_HardAttack_Right",
+            name=f"{jump_name} Selector_HardAttack_Right",
         )
 
         hand_nh_right_normal_dual_selector = ctx.make_copy(
             f"'{base_jump} Selector_NormalAttack_Dual'",
-            name=f"{base_name} Selector_NormalAttack_Dual",
+            name=f"{jump_name} Selector_NormalAttack_Dual",
         )
 
         hand_nh_right_magic_selector = ctx.make_copy(
             f"'{base_jump} Selector_Magic_Right'",
-            name=f"{base_name} Selector_Magic_Right",
+            name=f"{jump_name} Selector_Magic_Right",
         )
 
         hand_nh_right_selector = ctx.make_copy(
             f"'{base_jump} Selector_N-HAttack_Right'",
-            name=f"{base_name} Selector_N-HAttack_Right",
+            name=f"{jump_name} Selector_N-HAttack_Right",
             generators=[
                 hand_nh_right_normal_selector,
                 hand_nh_right_hard_selector,
@@ -154,17 +155,17 @@ def run(
         ### Hard Attack Both
         hand_nh_right_normal_both_selector = ctx.make_copy(
             f"'{base_jump} Selector_NormalAttack_Both'",
-            name=f"{base_name} Selector_NormalAttack_Both",
+            name=f"{jump_name} Selector_NormalAttack_Both",
         )
 
         hand_nh_right_hard_both_selector = ctx.make_copy(
             f"'{base_jump} Selector_HardAttack_Both'",
-            name=f"{base_name} Selector_HardAttack_Both",
+            name=f"{jump_name} Selector_HardAttack_Both",
         )
 
         hand_nh_both_selector = ctx.make_copy(
             f"'{base_jump} Selector_N-HAttack_Both'",
-            name=f"{base_name} Selector_N-HAttack_Both",
+            name=f"{jump_name} Selector_N-HAttack_Both",
             generators=[
                 hand_nh_right_normal_both_selector,
                 hand_nh_right_hard_both_selector,
@@ -186,22 +187,22 @@ def run(
             f"'{base_jump_magic}_Left_CMSG'",
             # Slightly different naming scheme, but we can't enforce the base name
             # to follow a compatible pattern
-            name=f"{base_name}_Magic_Left_CMSG",
+            name=f"{jump_name}_Magic_Left_CMSG",
         )
 
         hand_magic_left_start_land_cmsg = ctx.make_copy(
             f"'{base_jump_magic}_Left_Start_LandCMSG'",
-            name=f"{base_name}_Magic_Left_Start_LandCMSG",
+            name=f"{jump_name}_Magic_Left_Start_LandCMSG",
         )
 
         hand_magic_left_start_land_high_cmsg = ctx.make_copy(
             f"'{base_jump_magic}_Left_Start_Land_High_CMSG'",
-            name=f"{base_name}_Magic_Left_Start_Land_High_CMSG",
+            name=f"{jump_name}_Magic_Left_Start_Land_High_CMSG",
         )
 
         hand_magic_left_selector = ctx.make_copy(
             f"'{base_jump} Selector_Magic_Left'",
-            name=f"{base_name} Selector_Magic_Left",
+            name=f"{jump_name} Selector_Magic_Left",
             generators=[
                 hand_magic_left_cmsg,
                 hand_magic_left_start_land_cmsg,
@@ -214,17 +215,17 @@ def run(
         # Attack Both Left
         hand_nh_left_normal_both_selector = ctx.make_copy(
             f"'{base_jump} Selector_NormalAttack_BothLeft'",
-            name=f"{base_name} Selector_NormalAttack_BothLeft",
+            name=f"{jump_name} Selector_NormalAttack_BothLeft",
         )
 
         hand_nh_left_hard_both_selector = ctx.make_copy(
             f"'{base_jump} Selector_HardAttack_BothLeft'",
-            name=f"{base_name} Selector_HardAttack_BothLeft",
+            name=f"{jump_name} Selector_HardAttack_BothLeft",
         )
 
         hand_nh_both_left_selector = ctx.make_copy(
             f"'{base_jump} Selector_N-HAttack_BothLeft'",
-            name=f"{base_name} Selector_N-HAttack_BothLeft",
+            name=f"{jump_name} Selector_N-HAttack_BothLeft",
             generators=[
                 hand_nh_left_normal_both_selector,
                 hand_nh_left_hard_both_selector,
@@ -238,7 +239,7 @@ def run(
         # Top-level selector for jump attacks
         handcondition_selector = ctx.make_copy(
             f"'{base_jump} HandCondition Selector'",
-            name=f"{base_name} HandCondition Selector",
+            name=f"{jump_name} HandCondition Selector",
             generators=[
                 hand_nh_right_selector,
                 hand_nh_both_selector,
@@ -278,7 +279,7 @@ def run(
 
         jump_front_cmsg = ctx.make_copy(
             f"'{base_jump}_Direction_Front_CMSG'",
-            name=f"'{base_name}_Direction_Front_CMSG'",
+            name=f"'{jump_name}_Direction_Front_CMSG'",
             animId=jump_front_anim_id,
             generators=jump_front_clips,
         )
@@ -296,7 +297,7 @@ def run(
 
         jump_back_cmsg = ctx.make_copy(
             f"'{base_jump}_Direction_Back_CMSG'",
-            name=f"'{base_name}_Direction_Back_CMSG'",
+            name=f"'{jump_name}_Direction_Back_CMSG'",
             animId=jump_back_anim_id,
             generators=jump_back_clips,
         )
@@ -314,7 +315,7 @@ def run(
 
         jump_left_cmsg = ctx.make_copy(
             f"'{base_jump}_Direction_Left_CMSG'",
-            name=f"'{base_name}_Direction_Left_CMSG'",
+            name=f"'{jump_name}_Direction_Left_CMSG'",
             animId=jump_left_anim_id,
             generators=jump_left_clips,
         )
@@ -332,7 +333,7 @@ def run(
 
         jump_right_cmsg = ctx.make_copy(
             f"'{base_jump}_Direction_Right_CMSG'",
-            name=f"'{base_name}_Direction_Right_CMSG'",
+            name=f"'{jump_name}_Direction_Right_CMSG'",
             animId=jump_right_anim_id,
             generators=jump_right_clips,
         )
@@ -340,7 +341,7 @@ def run(
         # Jump Direction Selector
         direction_selector = ctx.make_copy(
             f"'{base_jump}_Direction_MSG'",
-            name=f"{base_name}_Direction_MSG",
+            name=f"{jump_name}_Direction_MSG",
             generators=[
                 jump_front_cmsg,
                 jump_back_cmsg,
@@ -373,7 +374,7 @@ def run(
         all_layers.append(layer2_direction)
 
     layer_gen = ctx.new_layer_generator(
-        name=f"{base_name} LayerGenerator",
+        name=f"{jump_name} LayerGenerator",
         layers=all_layers,
     )
 
@@ -394,7 +395,7 @@ def run(
     jump_loop_transition_effect = ctx.new_record(
         "CustomTransitionEffect",
         "<new>",
-        name=f"{base_name}_to_Jump_Loop",
+        name=f"{jump_name}_to_Jump_Loop",
         duration=0.5,
         alignmentBone=-1,
     )
@@ -411,7 +412,7 @@ def run(
 
     state = ctx.new_statemachine_state(
         state_id,
-        name=base_name,
+        name=jump_name,
         transitions=state_transitions,
         generator=layer_gen,
     )

@@ -18,6 +18,7 @@ def run(
     TODO more details
 
     Author: FloppyDonuts
+    Status: untested
 
     Parameters
     ----------

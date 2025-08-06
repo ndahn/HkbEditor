@@ -45,7 +45,13 @@ class Animation:
     full_name: str
 
     @property
+    def category(self) -> str:
+        """the X part of aXXX_YYYYYY."""
+        return int(self.name.split("_")[0][1:])
+
+    @property
     def anim_id(self) -> int:
+        """The Y part of aXXX_YYYYYY."""
         return int(self.name.split("_")[-1])
 
     def __repr__(self) -> str:

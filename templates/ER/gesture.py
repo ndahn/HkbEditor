@@ -23,6 +23,7 @@ def run(
     Generates new gesture states for a gesture consisting of a loop start, loop, and loop end. To use the gesture, fire the first event from hks. TODO more info, how to use, loop end, ...
 
     Author: FloppyDonuts
+    Status: untested
 
     Parameters
     ----------
