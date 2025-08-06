@@ -66,6 +66,8 @@ def run(
     animation : Animation
         The animation to use.
     """
+    raise ValueError("You're not supposed to run this example :)")
+
     # The template is responsible for verifying passed arguments. However, future 
     # versions will consider all arguments without defaults as required, so the 
     # template won't be executed unless the user has specified them.

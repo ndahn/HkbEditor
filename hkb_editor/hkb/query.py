@@ -176,7 +176,7 @@ class QueryTransformer(Transformer):
 
         try:
             return self._is_matching(actual, token)
-        except:
+        except Exception:
             return False
 
 

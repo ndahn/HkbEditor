@@ -1,5 +1,4 @@
 from typing import Callable, Generator, TYPE_CHECKING, Any
-from itertools import chain
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
 
