@@ -25,6 +25,7 @@ def run(
     Oneshot items will only use the 'normal_use_anim'. Weapon buff items should also specify the 'backhandblade_anim' and 'duelingshield_ainm'. If not specified, the 'normal_use_anim' will be used instead.
 
     Author: FloppyDonuts
+    
     Status: untested
 
     Parameters

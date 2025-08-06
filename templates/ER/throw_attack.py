@@ -17,6 +17,7 @@ def run(
     Throws and grabs are controlled by the ThrowParam table of the regulation.bin. After adding a new victim grab behavior, create new rows as needed and set the "atkAnimId" field to the animation ID of your grab_anim (ignoring the aXXX part, i.e. a000_004170 becomes 4170).
 
     Author: FloppyDonuts
+    
     Status: confident
 
     Parameters
