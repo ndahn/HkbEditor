@@ -430,13 +430,16 @@ class GraphWidget:
             return
 
         if isinstance(node, str):
-            node = self.nodes[node]
+            node = self.nodes.get(node)
+
+        if not node or node not in self.nodes.values():
+            return
 
         if self.single_branch_mode:
             if node != self.selected_node:
                 if self.selected_node:
                     self._set_node_highlight(self.selected_node, False)
-                self.isolate_branch(node)
+                self.reveal(node)
         else:
             if node == self.selected_node:
                 self.deselect()
@@ -521,6 +524,14 @@ class GraphWidget:
                     self._draw_edge(node, child_node)
 
         node.unfolded = True
+
+    def reveal(self, node: Node | str) -> None:
+        if isinstance(node, str):
+            node = self.nodes[node]
+
+        path = nx.shortest_path(self.graph, self.root, node.id)
+        for n in path:
+            self._unfold_node(self.nodes[n])
 
     def reveal_descendant_nodes(self, node: Node | str = None) -> None:
         if not node:

@@ -1,4 +1,5 @@
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, Iterable
+import re
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import Tagfile, HkbRecord
@@ -14,8 +15,11 @@ def create_object_dialog(
     tagfile: Tagfile,
     alias_manager: AliasManager,
     callback: Callable[[str, HkbRecord, Any], None],
-    object_type_id: str = None,
     *,
+    allowed_types: Iterable[str] = None,
+    include_derived_types: bool = False,
+    selected_type_id: str = None,
+    id_required: bool = False,
     title: str = "Create Hkb Object",
     tag: str = None,
     user_data: Any = None,
@@ -23,19 +27,45 @@ def create_object_dialog(
     if tag in (None, 0, ""):
         tag = dpg.generate_uuid()
 
+    type_registry = tagfile.type_registry
     record: HkbRecord = None
 
-    # There is no "hkbRecord" type to identify complex types that make sense for this dialog.
-    # Instead we have to go by the type format, which may vary between games. Luckily, every
-    # tagfile seems to contain a "hkRootLevelContainer" which we can use to identify the
-    # record format.
-    root_type_id = tagfile.type_registry.find_first_type_by_name("hkRootLevelContainer")
-    record_format = tagfile.type_registry.get_format(root_type_id)
-    record_types = [
-        (type_id, details["name"])
-        for type_id, details in tagfile.type_registry.types.items()
-        if details["format"] == record_format
-    ]
+    if allowed_types:
+        record_types = []
+
+        for tp in allowed_types:
+            if re.match(r"type[0-9]+", tp):
+                tid = tp
+                name = type_registry.get_name(tp)
+            else:
+                tid = type_registry.find_first_type_by_name(tp)
+                name = tp
+            
+            record_types.append((tid, name))
+
+            if include_derived_types:
+                for derived in type_registry.get_compatible_types(tid):
+                    d_name = type_registry.get_name(derived)
+                    record_types.append((derived, d_name))
+
+        # Sort by names
+        record_types.sort(key=lambda t: t[1])
+
+        if selected_type_id is None:
+            # We can assume the first item is a sensible choice
+            selected_type_id = record_types[0][0]
+    else:
+        # There is no "hkbRecord" type to identify complex types that make sense for this dialog.
+        # Instead we have to go by the type format, which may vary between games. Luckily, every
+        # tagfile seems to contain a "hkRootLevelContainer" which we can use to identify the
+        # record format.
+        root_type_id = type_registry.find_first_type_by_name("hkRootLevelContainer")
+        record_format = type_registry.get_format(root_type_id)
+        record_types = [
+            (type_id, details["name"])
+            for type_id, details in type_registry.types.items()
+            if details["format"] == record_format
+        ]
 
     def show_warning(msg: str) -> None:
         dpg.set_value(f"{tag}_notification", msg)
@@ -68,7 +98,7 @@ def create_object_dialog(
         dpg.hide_item(f"{tag}_notification")
         dpg.delete_item(f"{tag}_attributes", children_only=True)
 
-        type_name = tagfile.type_registry.get_name(new_type_id)
+        type_name = type_registry.get_name(new_type_id)
         dpg.set_value(f"{tag}_object_type", type_name)
 
         # By creating the record here all UI widgets can modify it directly and we don't
@@ -89,12 +119,12 @@ def create_object_dialog(
             show_warning("Select an object type first")
             return
 
-        oid = dpg.get_value(f"{tag}_object_id")
+        oid = record.object_id
         if not oid:
-            show_warning("Please enter a valid object ID")
-            return
-
-        if oid in tagfile.objects:
+            if id_required:
+                show_warning("Please enter a valid object ID")
+                return
+        elif oid in tagfile.objects:
             show_warning("Object ID already exists")
             return
 
@@ -120,19 +150,32 @@ def create_object_dialog(
         tag=tag,
         on_close=lambda: dpg.delete_item(window),
     ) as window:
-        with dpg.group(horizontal=True, width=300):
-            dpg.add_input_text(
-                default_value="",
-                readonly=True,
-                hint="Object type",
+        if allowed_types:
+            # If there's a limited number of available object types use a dropdown
+            def on_type_selected(sender: str, type_name: str, user_data: Any):
+                type_id = type_registry.find_first_type_by_name(type_name)
+                change_object_type(type_id)
+
+            dpg.add_combo(
+                [t[1] for t in record_types],
+                callback=on_type_selected,
                 tag=f"{tag}_object_type",
             )
-            dpg.add_button(
-                arrow=True,
-                direction=dpg.mvDir_Right,
-                callback=select_object_type,
-            )
-            dpg.add_text("Object type")
+        else:
+            # If all types are allowed use a find dialog
+            with dpg.group(horizontal=True, width=300):
+                dpg.add_input_text(
+                    default_value="",
+                    readonly=True,
+                    hint="Object type",
+                    tag=f"{tag}_object_type",
+                )
+                dpg.add_button(
+                    arrow=True,
+                    direction=dpg.mvDir_Right,
+                    callback=select_object_type,
+                )
+                dpg.add_text("Object type")
 
         with dpg.group(horizontal=True, width=300):
             dpg.add_input_text(
@@ -142,14 +185,14 @@ def create_object_dialog(
                 tag=f"{tag}_object_id",
             )
             dpg.add_button(
-                arrow=True,
-                direction=dpg.mvDir_Right,
+                label="+",
+                small=True,
                 callback=lambda: update_object_id(None, tagfile.new_id()),
             )
             dpg.add_text("Object ID")
 
         with dpg.child_window(auto_resize_y=True):
-            attributes = AttributesWidget(alias_manager)
+            attributes = AttributesWidget(alias_manager, hide_title=True)
 
         dpg.add_text(show=False, tag=f"{tag}_notification", color=style.red)
 
@@ -165,8 +208,8 @@ def create_object_dialog(
                 tag=f"{tag}_pin_objects",
             )
 
-    if object_type_id:
-        change_object_type(object_type_id)
+    if selected_type_id:
+        change_object_type(selected_type_id)
 
     dpg.split_frame()
     center_window(window)

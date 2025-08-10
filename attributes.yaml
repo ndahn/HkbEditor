@@ -1,0 +1,23 @@
+# This file is used for providing additional information on record attributes.
+# If you want to contribute, please either create a pull request on github,
+# or send me an entire type section (not just a single attribute). 
+
+# common is used as a fallback if the type name or path cannot be found.
+common:
+  name: The name of this object
+  generator: The animation object that is activated by this.
+  generators: Animation objects like CMSG or ClipGenerators that can be activated.
+  variableBindingSet: Binds attributes to variables which can then be set from HKS.
+  userData: A memory pointer. Don't set this unless you copy it from a similar object.
+  flags: If the flag values are known you can right click to set these from a number.
+
+hkbManualSelectorGenerator:
+  selectedGeneratorIndex: Decides which generator is active. Typically bound to a variable and set via HKS.
+  indexSelector: 
+  selectedIndexCanChangeAfterActivate: 
+  generatorChangedTransitionEffect: 
+  sentOnClipEnd: 
+  sentOnClipEnd/id: 
+  sentOnClipEnd/payload: 
+  generatorPreDeleteIndex: 
+  endOfClipEventId: 

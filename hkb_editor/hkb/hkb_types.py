@@ -237,7 +237,14 @@ class HkbArray(XmlValueHandler):
         if items is None:
             items = []
 
-        elem_type_id = tagfile.type_registry.get_subtype(type_id)
+        elem_type_id = None
+        temp_type = type_id
+        
+        while elem_type_id is None:
+            # Sometimes the subtype is inherited (e.g. type85/hkVector4 in Sekiro)
+            elem_type_id = tagfile.type_registry.get_subtype(temp_type)
+            temp_type = tagfile.type_registry.get_parent(temp_type)
+        
         elem = ET.Element("array", count=str(len(items)), elementtypeid=elem_type_id)
         elem.extend(item.element for item in items)
 

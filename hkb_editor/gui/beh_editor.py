@@ -164,7 +164,7 @@ class BehaviorEditor(GraphEditor):
             on_close=lambda: dpg.delete_item(wnd),
         ) as wnd:
             if self.last_save == 0.0:
-                dpg.add_text(f"You have not saved yet. Exit anyways?")
+                dpg.add_text("You have not saved yet. Exit anyways?")
             else:
                 dpg.add_text(
                     f"It has been {self.last_save:.0f}s since your last save. Exit?"
@@ -556,7 +556,7 @@ class BehaviorEditor(GraphEditor):
     def _copy_to_clipboard(self, data: str) -> None:
         try:
             pyperclip.copy(data)
-            self.logger.info(f"Copied to clipboard")
+            self.logger.info("Copied to clipboard")
         except Exception as e:
             self.logger.warning(f"Copying value failed: {e}", exc_info=e)
 
@@ -609,7 +609,7 @@ class BehaviorEditor(GraphEditor):
         root_id = self.get_active_statemachine().object_id
         selected = self.selected_node
         self._on_root_selected("", True, root_id)
-        if selected:
+        if selected and selected.id in self.canvas.graph:
             self.canvas.select(selected)
 
     def clear_attributes(self):

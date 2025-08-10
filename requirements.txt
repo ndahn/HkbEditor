@@ -9,3 +9,4 @@ lark
 rapidfuzz
 docstring_parser
 natsort
+pyyaml
