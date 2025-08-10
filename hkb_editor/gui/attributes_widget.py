@@ -768,7 +768,7 @@ class AttributesWidget:
         self.logger.info("Cut value:\n%s", val)
 
     def _copy_value(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
+        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
     ) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
@@ -778,7 +778,7 @@ class AttributesWidget:
         self._copy_to_clipboard(val)
 
     def _copy_value_xml(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
+        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
     ) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
@@ -788,7 +788,7 @@ class AttributesWidget:
         self._copy_to_clipboard(val)
 
     def _copy_value_path(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
+        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
     ) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
@@ -797,13 +797,17 @@ class AttributesWidget:
         self._copy_to_clipboard(path)
 
     def _paste_value(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
+        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
     ) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
         widget, path, value = user_data
         data = pyperclip.paste()
+
+        if isinstance(value, HkbPointer) and data not in self.tagfile.objects:
+            self.logger.error(f"'{data}' is not a valid pointer ID")
+            return
 
         try:
             xml = ET.fromstring(data)
@@ -813,6 +817,9 @@ class AttributesWidget:
 
         try:
             self._on_value_changed(widget, new_value, value)
+
+            if isinstance(value, HkbPointer) and self.on_graph_changed:
+                self.on_graph_changed()
         except Exception as e:
             self.logger.error("Paste value to %s failed: %s", widget, e)
             return
