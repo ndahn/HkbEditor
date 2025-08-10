@@ -11,4 +11,5 @@ REN dist\main.exe hkbeditor.exe
 COPY LICENSE dist\
 COPY README.md dist\
 COPY user_layout.ini dist\default_layout.ini
+COPY attributes.yaml dist\
 ROBOCOPY templates dist\templates /E
