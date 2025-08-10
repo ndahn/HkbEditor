@@ -658,6 +658,9 @@ class AttributesWidget:
                     label="New object",
                     callback=create_object_for_pointer,
                 )
+
+                # TODO we could provide a menu listing pinned items here
+
                 if self.jump_callback:
                     dpg.add_selectable(label="Jump to", callback=jump)
 
