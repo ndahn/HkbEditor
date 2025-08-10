@@ -159,6 +159,7 @@ def create_object_dialog(
             dpg.add_combo(
                 [t[1] for t in record_types],
                 callback=on_type_selected,
+                width=300,
                 tag=f"{tag}_object_type",
             )
         else:

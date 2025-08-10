@@ -633,6 +633,11 @@ class AttributesWidget:
                     # Late import to avoid cyclic import
                     from .workflows.create_object import create_object_dialog
 
+                    current = attribute.get_target()
+                    selected_type = None
+                    if current:
+                        selected_type = current.type_id
+
                     with undo_manager.combine():
                         create_object_dialog(
                             self.tagfile,
@@ -641,6 +646,7 @@ class AttributesWidget:
                             allowed_types=[attribute.subtype],
                             include_derived_types=True,
                             id_required=True,
+                            selected_type_id=selected_type,
                             title=f"Create object for '{path}'",
                             tag=f"{self.tag}_{path}_create_object_dialog",
                         )

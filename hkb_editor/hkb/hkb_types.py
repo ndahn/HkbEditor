@@ -222,6 +222,9 @@ class HkbPointer(XmlValueHandler):
 
         return self.tagfile.objects[oid]
 
+    def is_set(self) -> bool:
+        return bool(self.get_value())
+
     def __str__(self) -> str:
         return f"Pointer -> {self.get_value()} ({self.subtype_name})"
 
