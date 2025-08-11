@@ -75,7 +75,7 @@ def edit_simple_array_dialog(
             return
 
         items[item_idx] = new_value_tuple
-        fill_table()
+        #fill_table()
 
     def delete_entry(sender: str, app_data: Any, index: int):
         # May return True as a veto
@@ -165,7 +165,7 @@ def edit_simple_array_dialog(
                 callback=fill_table,
                 tag=f"{tag}_filter",
             )
-            dpg.add_text(f"", tag=f"{tag}_total")
+            dpg.add_text("", tag=f"{tag}_total")
 
         dpg.add_separator()
 
