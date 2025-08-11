@@ -529,6 +529,8 @@ class GraphWidget:
         if isinstance(node, str):
             node = self.nodes[node]
 
+        self.clear()
+
         path = nx.shortest_path(self.graph, self.root, node.id)
         for n in path:
             self._unfold_node(self.nodes[n])
