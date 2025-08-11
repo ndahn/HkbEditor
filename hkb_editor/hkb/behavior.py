@@ -55,14 +55,19 @@ class HavokBehavior(Tagfile):
     def build_graph(self, root_id: str):
         g = nx.DiGraph()
 
+        visited = set()
         todo: deque[tuple[str, ET.Element]] = deque()
 
         def expand(elem: ET.Element, parent_id: str) -> None:
+            if parent_id in visited:
+                return
+
             todo.extend(
                 (parent_id, ptr)
                 for ptr in elem.findall(".//pointer")
                 if ptr.attrib["id"] != "object0"
             )
+            visited.add(parent_id)
 
         root = self.objects[root_id]
         expand(root.element, root_id)

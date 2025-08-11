@@ -805,9 +805,19 @@ class AttributesWidget:
         widget, path, value = user_data
         data = pyperclip.paste()
 
-        if isinstance(value, HkbPointer) and data not in self.tagfile.objects:
-            self.logger.error(f"'{data}' is not a valid pointer ID")
-            return
+        if isinstance(value, HkbPointer):
+            target = self.tagfile.retrieve_object(data)
+            if target is None:
+                self.logger.error(f"'{data}' is not a valid pointer ID")
+                return
+
+            if target == self.record:
+                self.logger.error("A record should not reference itself. If this is intended, use the select object dialog.")
+                return
+
+            if not value.will_accept(target):
+                self.logger.error(f"'{data}' is of type {target.type_name}, which is incompatible with {value.subtype_name}")
+                return
 
         try:
             xml = ET.fromstring(data)
