@@ -143,7 +143,7 @@ def create_object_dialog(
     # UI content
     with dpg.window(
         label=title,
-        width=400,
+        width=500,
         height=600,
         autosize=True,
         no_saved_settings=True,
