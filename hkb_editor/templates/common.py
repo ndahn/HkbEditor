@@ -44,14 +44,18 @@ class Animation:
     name: str
     full_name: str
 
+    @classmethod
+    def make_name(cls, category: int, anim_id: int) -> str:
+        return f"a{category:03d}_{anim_id:06d}"
+
     @property
-    def category(self) -> str:
-        """the X part of aXXX_YYYYYY."""
+    def category(self) -> int:
+        """the X part of aXXX_YYYYYY without leading zeros."""
         return int(self.name.split("_")[0][1:])
 
     @property
     def anim_id(self) -> int:
-        """The Y part of aXXX_YYYYYY."""
+        """The Y part of aXXX_YYYYYY without leading zeros."""
         return int(self.name.split("_")[-1])
 
     def __repr__(self) -> str:
