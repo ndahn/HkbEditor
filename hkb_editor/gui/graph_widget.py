@@ -350,7 +350,7 @@ class GraphWidget:
         self.hovered_node = node
 
     # Canvas content management
-    def clear(self):
+    def clear(self, reset_origin: bool = True):
         dpg.delete_item(f"{self.tag}_edge_layer", children_only=True)
         dpg.delete_item(f"{self.tag}_node_layer", children_only=True)
         self.color_generator.reset()
@@ -360,7 +360,8 @@ class GraphWidget:
             node.unfolded = False
 
         self.selected_node = None
-        self.set_origin(0.0, 0.0)
+        if reset_origin:
+            self.set_origin(0.0, 0.0)
 
     def regenerate(self):
         dpg.delete_item(f"{self.tag}_edge_layer", children_only=True)
@@ -389,7 +390,7 @@ class GraphWidget:
             self.select(selected)
 
     def show_node_path(self, path: list[Node | str]) -> None:
-        self.clear()
+        self.clear(False)
 
         if not path:
             return
@@ -529,7 +530,7 @@ class GraphWidget:
         if isinstance(node, str):
             node = self.nodes[node]
 
-        self.clear()
+        self.clear(False)
 
         path = nx.shortest_path(self.graph, self.root, node.id)
         for n in path:
