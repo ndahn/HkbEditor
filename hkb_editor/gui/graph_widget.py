@@ -1,8 +1,7 @@
-from typing import Any, Callable, Literal
+from typing import Callable, Literal
 from dearpygui import dearpygui as dpg
 import networkx as nx
 import math
-from dataclasses import dataclass
 
 from .graph_layout import GraphLayout, Node
 from . import style
