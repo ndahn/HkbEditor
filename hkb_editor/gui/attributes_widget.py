@@ -818,11 +818,15 @@ class AttributesWidget:
                 return
 
             if target == self.record:
-                self.logger.error("A record should not reference itself. If this is intended, use the select object dialog.")
+                self.logger.error(
+                    "A record should not reference itself. If this is intended, use the select object dialog."
+                )
                 return
 
             if not value.will_accept(target):
-                self.logger.error(f"'{data}' is of type {target.type_name}, which is incompatible with {value.subtype_name}")
+                self.logger.error(
+                    f"'{data}' is of type {target.type_name}, which is incompatible with {value.subtype_name}"
+                )
                 return
 
         try:
@@ -859,17 +863,27 @@ class AttributesWidget:
             new_id = self.tagfile.new_id()
 
             elem.attrib["id"] = new_id
-            
+
             for reference in tree.xpath(f".//pointer[@id='{old_id}']"):
                 reference.attrib["id"] = new_id
 
         hierarchy = []
         with undo_manager.combine():
+            verified = False
             for elem in tree.findall(".//object"):
                 obj = HkbRecord.from_object(self.tagfile, elem)
+
+                # Make sure the hierarchy root will be compatible with the pointer
+                if not verified and not pointer.will_accept(obj):
+                    self.logger.error(
+                        f"Hierarchy root ({obj.type_name}) is incompatible with pointer ({pointer.subtype_name})"
+                    )
+                    return
+
+                verified = True
                 self.tagfile.add_object(obj)
                 hierarchy.append(obj)
-            
+
         pointer.set_value(hierarchy[0])
         self.logger.info(f"Cloned hierarchy of {len(hierarchy)} elements")
 
