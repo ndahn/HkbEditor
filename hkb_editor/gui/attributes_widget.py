@@ -667,6 +667,12 @@ class AttributesWidget:
 
                 # TODO we could provide a menu listing pinned items here
 
+                dpg.add_selectable(
+                    label="Clone Hierarchy",
+                    callback=self._paste_hierarchy,
+                    user_data=attribute,
+                )
+
                 if self.jump_callback:
                     dpg.add_selectable(label="Jump to", callback=jump)
 
@@ -833,6 +839,42 @@ class AttributesWidget:
         except Exception as e:
             self.logger.error("Paste value to %s failed: %s", widget, e)
             return
+
+    def _paste_hierarchy(self, sender, app_data, pointer: HkbPointer) -> None:
+        data = pyperclip.paste()
+
+        if not data.startswith("<behavior_tree"):
+            self.logger.error("Clipboard data is not a node hierarchy")
+            return
+
+        try:
+            tree = ET.fromstring(data)
+        except Exception as e:
+            self.logger.error("Pasting hierarchy failed", exc_info=e)
+            return
+
+        # Change object ID of element and all references to it before constructing any records
+        for elem in tree.findall(".//object"):
+            old_id = elem.attrib["id"]
+            new_id = self.tagfile.new_id()
+
+            elem.attrib["id"] = new_id
+            
+            for reference in tree.xpath(f".//pointer[@id='{old_id}']"):
+                reference.attrib["id"] = new_id
+
+        hierarchy = []
+        with undo_manager.combine():
+            for elem in tree.findall(".//object"):
+                obj = HkbRecord.from_object(self.tagfile, elem)
+                self.tagfile.add_object(obj)
+                hierarchy.append(obj)
+            
+        pointer.set_value(hierarchy[0])
+        self.logger.info(f"Cloned hierarchy of {len(hierarchy)} elements")
+
+        if self.on_graph_changed:
+            self.on_graph_changed()
 
     def _copy_to_clipboard(self, data: str):
         try:

@@ -562,7 +562,8 @@ class BehaviorEditor(GraphEditor):
 
     def _copy_hierarchy(self, node: Node) -> None:
         g = self.beh.build_graph(node.id)
-        xml = ""
+        sm = self.get_active_statemachine(node.id)
+        xml = f"<behavior_tree sm=\"{sm.object_id}\">\n"
         todo = [node.id]
 
         while todo:
@@ -576,6 +577,8 @@ class BehaviorEditor(GraphEditor):
                 obj.as_object(), pretty_print=True, encoding="unicode"
             )
             todo.extend(g.successors(n))
+
+        xml += "\n</behavior_tree>"
 
         self._copy_to_clipboard(xml)
 
