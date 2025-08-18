@@ -2,11 +2,12 @@ import sys
 from os import path
 import yaml
 from dataclasses import dataclass, field, asdict
+from collections import deque
 
 
 @dataclass
 class Config:
-    recent_files: list[str] = field(default_factory=list)
+    recent_files: deque[str] = field(default_factory=lambda: deque(maxlen=5))
 
     hklib_exe: str = None
     witchy_exe: str = None
