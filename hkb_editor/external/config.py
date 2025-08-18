@@ -1,11 +1,13 @@
 import sys
 from os import path
 import yaml
-from dataclasses import dataclass
+from dataclasses import dataclass, field, asdict
 
 
 @dataclass
 class Config:
+    recent_files: list[str] = field(default_factory=list)
+
     hklib_exe: str = None
     witchy_exe: str = None
 
@@ -18,7 +20,7 @@ class Config:
 config: Config = None
 
 
-def reload_config(config_path: str = None):
+def load_config(config_path: str = None):
     global config
     
     if not config_path:
@@ -30,4 +32,12 @@ def reload_config(config_path: str = None):
     config = Config(**cfg)
 
 
-reload_config()
+def save_config(config_path: str = None):
+    if not config_path:
+        config_path = path.join(path.dirname(sys.argv[0]), "config.yaml")
+
+    with open(config_path, "w") as f:
+        yaml.safe_dump(asdict(config), f)
+
+
+load_config()
