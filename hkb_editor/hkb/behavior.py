@@ -1,6 +1,7 @@
 from typing import Any
 from collections import deque
 from dataclasses import dataclass
+import re
 import logging
 from lxml import etree as ET
 import networkx as nx
@@ -230,6 +231,25 @@ class HavokBehavior(Tagfile):
         parts[-1] = animation_name + ".hkx"
 
         return "\\".join(parts)
+
+    def get_character_id(self) -> str:
+        # 1st try: hkbBehaviorGraph's name
+        beh_graph = self.find_first_by_type_name("hkbBehaviorGraph")
+        if beh_graph:
+            name: str = beh_graph["name"].get_value()
+            m = re.match(r"(c[0-9]{4}).hkb", name)
+            if m:
+                return m.group(1)
+
+        # 2nd try: component of full animation names
+        anim_name = self.get_animation(0, True)
+        m = re.match(r".*\\chr\\(c[0-9]{4})\\hkx", anim_name)
+        if m:
+            return m.group(1)
+
+        # TODO 3rd attempt: folder name
+
+        return None
 
     def get_short_animation_name(self, full_anim_name: str) -> str:
         return full_anim_name.rsplit("\\", maxsplit=1)[-1].rsplit(".", maxsplit=1)[0]
