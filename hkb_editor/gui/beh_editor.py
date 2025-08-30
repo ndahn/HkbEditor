@@ -39,7 +39,7 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
-from .helpers import make_copy_menu
+from .helpers import make_copy_menu, center_window
 from . import style
 
 
@@ -183,6 +183,9 @@ class BehaviorEditor(GraphEditor):
                 dpg.add_button(label="Exit", callback=dpg.stop_dearpygui)
                 dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(wnd))
 
+        dpg.split_frame()
+        center_window(wnd)
+
     def create_app_menu(self):
         # File
         with dpg.menu(label="File"):
@@ -191,12 +194,14 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_menu_item(
                 label="Save",
+                shortcut="ctrl-s",
                 callback=self.file_save,
                 enabled=False,
                 tag=f"{self.tag}_menu_file_save",
             )
             dpg.add_menu_item(
                 label="Save as...",
+                shortcut="ctrl-shift-s",
                 callback=self.file_save_as,
                 enabled=False,
                 tag=f"{self.tag}_menu_file_save_as",
@@ -218,17 +223,17 @@ class BehaviorEditor(GraphEditor):
             )
 
             dpg.add_separator()
-            dpg.add_menu_item(label="Exit", callback=self.exit_app)
+            dpg.add_menu_item(label="Exit", shortcut="ctrl-q", callback=self.exit_app)
 
         dpg.add_separator()
 
         # Edit
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
             dpg.add_menu_item(
-                label="Undo (ctrl-z)", callback=lambda: self.attributes_widget.undo()
+                label="Undo", shortcut="ctrl-z", callback=lambda: self.attributes_widget.undo()
             )
             dpg.add_menu_item(
-                label="Redo (ctrl-y)", callback=lambda: self.attributes_widget.redo()
+                label="Redo", shortcut="ctrl-y", callback=lambda: self.attributes_widget.redo()
             )
 
             dpg.add_separator()
@@ -257,7 +262,7 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_menu_item(label="Pin Lost Objects", callback=self.pin_lost_objects)
 
-            dpg.add_menu_item(label="Find Object...", callback=self.open_search_dialog)
+            dpg.add_menu_item(label="Find Object...", shortcut="ctrl-f", callback=self.open_search_dialog)
 
         # Workflows
         with dpg.menu(
@@ -328,10 +333,20 @@ class BehaviorEditor(GraphEditor):
 
     def _on_key_press(self, sender, key: int) -> None:
         if dpg.is_key_down(dpg.mvKey_ModCtrl):
-            if key == dpg.mvKey_Z:
-                self.undo()
-            elif key == dpg.mvKey_Y:
-                self.redo()
+            if dpg.is_key_down(dpg.mvKey_ModShift):
+                if key == dpg.mvKey_S:
+                    self.file_save_as()
+            else:
+                if key == dpg.mvKey_S:
+                    self.file_save()
+                elif key == dpg.mvKey_Q:
+                    self.exit_app()
+                elif key == dpg.mvKey_Z:
+                    self.undo()
+                elif key == dpg.mvKey_Y:
+                    self.redo()
+                elif key == dpg.mvKey_F:
+                    self.open_search_dialog()
 
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
