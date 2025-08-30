@@ -2,7 +2,6 @@ from typing import Any, Callable, Type
 from enum import Enum
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb import HavokBehavior
 from hkb_editor.gui.helpers import create_simple_value_widget
 
 

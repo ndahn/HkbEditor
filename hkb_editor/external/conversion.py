@@ -55,6 +55,28 @@ def pack_binder(behavior_path: str) -> None:
     subprocess.check_call(args)
 
 
+def open_binder(binder_path: str) -> str:
+    if not path.isfile(config.witchy_exe):
+        raise RuntimeError("Could not locate witchybnd")
+
+    if not path.isfile(config.hklib_exe):
+        raise RuntimeError("Could not locate hklib")
+
+    # Unpack the binder
+    args = [config.witchy_exe, binder_path]
+    subprocess.check_call(args)
+
+    p = Path(binder_path)
+    chr = p.name.split(".")[0]
+    binder_dir = p.name.replace(".", "-")
+    behavior_path = p.parent / binder_dir / "Behavior" / f"{chr}.hkx"
+
+    # Convert from hkx to xml
+    args = [config.hklib_exe, behavior_path.as_posix()]
+    subprocess.check_call(args)
+    return behavior_path.parent / f"{chr}.xml"
+
+
 def on_save_behavior(behavior: HavokBehavior, behavior_path: str) -> None:
     try:
         if not config.convert_on_save:

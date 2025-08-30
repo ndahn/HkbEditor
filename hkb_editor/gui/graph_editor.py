@@ -497,7 +497,7 @@ class GraphEditor:
             on_close=lambda: dpg.delete_item(dialog),
             tag=tag,
         ) as dialog:
-            from . import __version__
+            from hkb_editor import __version__
             dpg.add_text(f"HkbEditor v{__version__}", color=rainbow())
             
             dpg.add_separator()
