@@ -2,6 +2,7 @@ from typing import Any
 import os
 from ast import literal_eval
 import logging
+import shutil
 import traceback
 from threading import Thread
 import textwrap
@@ -21,7 +22,7 @@ from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.templates.glue import get_templates
 
-from hkb_editor.external import ChrReloader
+from hkb_editor.external import ChrReloader, Config, load_config, get_config
 
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
@@ -63,6 +64,7 @@ class BehaviorEditor(GraphEditor):
         self.loaded_skeleton_path: str = None
 
         self.chr_reloader = None
+        self.config: Config = load_config()
 
         super().__init__(tag)
 
@@ -144,6 +146,10 @@ class BehaviorEditor(GraphEditor):
         try:
             self.beh = HavokBehavior(file_path)
 
+            self.config.add_recent_file(file_path)
+            self.config.save()
+            self._regenerate_recent_files_menu()
+
             # Fix anything that was amiss in previous versions
             fix_variable_defaults(self.beh)
 
@@ -164,8 +170,13 @@ class BehaviorEditor(GraphEditor):
             dpg.delete_item(loading_screen)
 
     def _do_write_to_file(self, file_path):
+        if self.config.save_backups:
+            shutil.copy(self.beh.file, self.beh.file + ".bak")
+
         self.beh.save_to_file(file_path)
         self.logger.info(f"Saved to {file_path}")
+
+        # TODO repack on save and reload
 
     def _reload_character(self):
         if not self.chr_reloader:
@@ -204,6 +215,7 @@ class BehaviorEditor(GraphEditor):
         # File
         with dpg.menu(label="File"):
             dpg.add_menu_item(label="Open...", callback=self.file_open)
+            dpg.add_menu(label="Recent files", tag=f"{self.tag}_menu_recent_files")
             dpg.add_separator()
 
             dpg.add_menu_item(
@@ -325,10 +337,119 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator(tag=f"{self.tag}_menu_templates_bottom")
             dpg.add_menu_item(label="Reload Templates", callback=self._reload_templates)
 
-        self._create_settings_menu()
+        # Settings
+        with dpg.menu(label="Settings", tag=f"{self.tag}_menu_settings"):
+            dpg.add_menu_item(
+                label="Invert Zoom",
+                check=True,
+                default_value=self.config.invert_zoom,
+                callback=self._update_config,
+                tag=f"{self.tag}_config_invert_zoom",
+            )
+            dpg.add_menu_item(
+                label="Single Branch Mode",
+                check=True,
+                default_value=self.config.single_branch_mode,
+                callback=self._update_config,
+                tag=f"{self.tag}_config_single_branch_mode",
+            )
+            dpg.add_menu_item(
+                label="Save Backups",
+                check=True,
+                default_value=self.config.save_backups,
+                callback=self._update_config,
+                tag=f"{self.tag}_config_save_backups",
+            )
+            dpg.add_menu_item(
+                label="Reload behavior on BND save",
+                check=True,
+                default_value=self.config.reload_on_save,
+                callback=self._update_config,
+                tag=f"{self.tag}_config_reload_on_save",
+            )
 
         dpg.add_separator()
         self._create_dpg_menu()
+
+        self._regenerate_recent_files_menu()
+
+    def _update_config(self, sender: str) -> None:
+        alias = dpg.get_item_alias(sender)
+        key = alias[len(f"{self.tag}_config_"):]
+
+        if not hasattr(self.config, key):
+            raise ValueError(f"Unknown config key {key}")
+
+        setattr(self.config, key, dpg.get_value(sender))
+        self.config.save()
+
+    def _regenerate_recent_files_menu(self) -> None:
+        dpg.delete_item(f"{self.tag}_menu_recent_files", slot=1, children_only=True)
+
+        def load_file(sender: str, app_data: Any, file_path: str) -> None:
+            if self.beh:
+                # A behavior is loaded, save before exiting?
+
+                def save_and_load():
+                    dpg.delete_item(dialog)
+                    self.file_save()
+                    self._do_load_from_file(file_path)
+
+                def save_as_and_load():
+                    dpg.delete_item(dialog)
+                    if self.file_save_as():
+                        self._do_load_from_file(file_path)
+
+                def just_load():
+                    dpg.delete_item(dialog)
+                    self._do_load_from_file(file_path)
+
+                with dpg.window(
+                    label="Continue?",
+                    modal=True,
+                    no_saved_settings=True,
+                    on_close=lambda: dpg.delete_item(dialog),
+                ) as dialog:
+                    dpg.add_text("Save current behavior first?")
+
+                    dpg.add_separator()
+
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(label="Save", callback=save_and_load)
+                        dpg.add_button(label="Save as", callback=save_as_and_load)
+                        dpg.add_button(label="Just do it", callback=just_load)
+
+                dpg.split_frame()
+                center_window(dialog)
+
+        for i in range(10):
+            if i < len(self.config.recent_files):
+                path = self.config.recent_files[i]
+                
+                parts = path.split(os.sep)
+                short = parts[-1]
+                parts = parts[:-1]
+                
+                for p in reversed(parts):
+                    short = os.path.join(p, short)
+                    if len(short) > 70:
+                        short = os.path.join("...", short)
+                        break
+
+                dpg.add_menu_item(
+                    label=short,
+                    parent=f"{self.tag}_menu_recent_files",
+                    callback=load_file,
+                    user_data=path,
+                    tag=f"{self.tag}_menu_recent_files_file{i}",
+                )
+            else:
+                # We need to add menu item stubs, otherwise the additional items will mess up
+                # the dearpygui layout
+                dpg.add_menu_item(
+                    parent=f"{self.tag}_menu_recent_files",
+                    show=False,
+                )
 
     def _reload_templates(self) -> None:
         menu = f"{self.tag}_menu_templates"

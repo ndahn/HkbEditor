@@ -71,7 +71,6 @@ class GraphEditor:
 
     def create_app_menu(self):
         self._create_file_menu()
-        self._create_settings_menu()
         dpg.add_separator()
         self._create_dpg_menu()
 
@@ -130,30 +129,6 @@ class GraphEditor:
 
             dpg.add_separator()
             dpg.add_menu_item(label="Exit", callback=self.exit_app)
-
-    def _create_settings_menu(self):
-        def set_invert_zoom():
-            self.canvas.invert_zoom = dpg.get_value(f"{self.tag}_settings_invert_zoom")
-
-        def set_single_branch_mode():
-            self.canvas.single_branch_mode = dpg.get_value(
-                f"{self.tag}_settings_single_branch_mode"
-            )
-
-        with dpg.menu(label="Settings", tag=f"{self.tag}_menu_settings"):
-            dpg.add_menu_item(
-                label="Invert Zoom",
-                check=True,
-                tag=f"{self.tag}_settings_invert_zoom",
-                callback=set_invert_zoom,
-            )
-            dpg.add_menu_item(
-                label="Single Branch Mode",
-                check=True,
-                default_value=True,
-                callback=set_single_branch_mode,
-                tag=f"{self.tag}_settings_single_branch_mode",
-            )
 
     def _create_dpg_menu(self):
         with dpg.menu(label="Help"):
@@ -250,7 +225,7 @@ class GraphEditor:
         self._do_write_to_file(self.loaded_file)
         self.last_save = time()
 
-    def file_save_as(self):
+    def file_save_as(self) -> bool:
         ret = save_file_dialog(
             default_dir=path.dirname(self.loaded_file or ""),
             default_file=path.basename(self.loaded_file or ""),
@@ -261,6 +236,9 @@ class GraphEditor:
             self._do_write_to_file(ret)
             self.loaded_file = ret
             self.last_save = time()
+            return True
+
+        return False
 
     def _do_write_to_file(self, file_path: str) -> None:
         pass

@@ -3,6 +3,8 @@ from dearpygui import dearpygui as dpg
 import networkx as nx
 import math
 
+from hkb_editor.external import get_config
+
 from .graph_layout import GraphLayout, Node
 from . import style
 from .helpers import estimate_drawn_text_size
@@ -49,7 +51,6 @@ class GraphWidget:
         self.rainbow_edges = rainbow_edges
         self.select_enabled = select_enabled
         self.hover_enabled = hover_enabled
-        self.single_branch_mode = single_branch_mode
         self.tag = tag
 
         self.color_generator = style.HighContrastColorGenerator()
@@ -66,7 +67,6 @@ class GraphWidget:
         self.zoom_level = 0
         self.zoom_min = -3
         self.zoom_max = 3
-        self.invert_zoom = False
 
         self._setup_content(width, height)
         self.set_graph(graph)
@@ -309,7 +309,7 @@ class GraphWidget:
         if not dpg.is_item_hovered(self.canvas):
             return
 
-        if self.invert_zoom:
+        if get_config().invert_zoom:
             wheel_delta = -wheel_delta
 
         # +/-1 only
@@ -435,7 +435,7 @@ class GraphWidget:
         if not node or node not in self.nodes.values():
             return
 
-        if self.single_branch_mode:
+        if get_config().single_branch_mode:
             if node != self.selected_node:
                 if self.selected_node:
                     self._set_node_highlight(self.selected_node, False)

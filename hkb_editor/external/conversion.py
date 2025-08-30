@@ -4,7 +4,7 @@ import logging
 import subprocess
 
 from hkb_editor.hkb import HavokBehavior
-from hkb_editor.external.config import config
+from hkb_editor.external.config import _config
 from hkb_editor.external.reload import reload_character
 
 
@@ -27,21 +27,21 @@ def _convert(input_path: str, hklib_exe: str) -> str:
 
 
 def xml_to_hkx(xml_path: str) -> str:
-    if not path.isfile(config.hklib_exe):
+    if not path.isfile(_config.hklib_exe):
         raise RuntimeError("Could not locate hklib")
 
-    return _convert(xml_path, config.hklib_exe)
+    return _convert(xml_path, _config.hklib_exe)
 
 
 def hkx_to_xml(hkx_path: str) -> str:
-    if not path.isfile(config.hklib_exe):
+    if not path.isfile(_config.hklib_exe):
         raise RuntimeError("Could not locate hklib")
 
-    return _convert(hkx_path, config.hklib_exe)
+    return _convert(hkx_path, _config.hklib_exe)
 
 
 def pack_binder(behavior_path: str) -> None:
-    if not path.isfile(config.witchy_exe):
+    if not path.isfile(_config.witchy_exe):
         raise RuntimeError("Could not locate witchybnd")
 
     p = Path(behavior_path)
@@ -51,19 +51,19 @@ def pack_binder(behavior_path: str) -> None:
     if not p.parent.parent.name.endswith("-behbnd-dcx"):
         raise RuntimeError("Behavior is not located inside a binder folder")
 
-    args = [config.witchy_exe, behavior_path]
+    args = [_config.witchy_exe, behavior_path]
     subprocess.check_call(args)
 
 
 def open_binder(binder_path: str) -> str:
-    if not path.isfile(config.witchy_exe):
+    if not path.isfile(_config.witchy_exe):
         raise RuntimeError("Could not locate witchybnd")
 
-    if not path.isfile(config.hklib_exe):
+    if not path.isfile(_config.hklib_exe):
         raise RuntimeError("Could not locate hklib")
 
     # Unpack the binder
-    args = [config.witchy_exe, binder_path]
+    args = [_config.witchy_exe, binder_path]
     subprocess.check_call(args)
 
     p = Path(binder_path)
@@ -72,24 +72,24 @@ def open_binder(binder_path: str) -> str:
     behavior_path = p.parent / binder_dir / "Behavior" / f"{chr}.hkx"
 
     # Convert from hkx to xml
-    args = [config.hklib_exe, behavior_path.as_posix()]
+    args = [_config.hklib_exe, behavior_path.as_posix()]
     subprocess.check_call(args)
     return behavior_path.parent / f"{chr}.xml"
 
 
 def on_save_behavior(behavior: HavokBehavior, behavior_path: str) -> None:
     try:
-        if not config.convert_on_save:
+        if not _config.convert_on_save:
             return
         
         xml_to_hkx(behavior_path)
 
-        if not config.pack_on_save:
+        if not _config.pack_on_save:
             return
 
         pack_binder(behavior_path)
 
-        if not config.reload_on_save:
+        if not _config.reload_on_save:
             return
 
         chr = behavior.get_character_id()
