@@ -1,5 +1,6 @@
 from typing import Any
 import os
+from ast import literal_eval
 import logging
 import traceback
 from threading import Thread
@@ -19,6 +20,8 @@ from hkb_editor.hkb.hkb_types import (
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.templates.glue import get_templates
+
+from hkb_editor.hkb.version_updates import fix_variable_defaults
 
 from .graph_editor import GraphEditor, Node
 from .attributes_widget import AttributesWidget
@@ -136,6 +139,10 @@ class BehaviorEditor(GraphEditor):
 
         try:
             self.beh = HavokBehavior(file_path)
+            
+            # Fix anything that was amiss in previous versions
+            fix_variable_defaults(self.beh)
+
             filename = os.path.basename(file_path)
             dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
 
@@ -705,7 +712,7 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_add(idx: int, new_value: tuple[str, VariableType, int, int]):
+        def on_add(idx: int, new_value: tuple[str, VariableType, int, int, str]):
             if self.beh.find_variable(new_value[0], None):
                 self.logger.warning(
                     "A variable named '%s' already exists (%d)", new_value[0], idx
@@ -715,32 +722,46 @@ class BehaviorEditor(GraphEditor):
                 # TODO show warning dialog listing affected variables
                 pass
 
+            new_value = list(new_value)
+            try:
+                new_value[4] = literal_eval(new_value[4])
+            except Exception:
+                # Assume it's actually a string
+                pass
+
             self.beh.create_variable(*new_value, idx)
             undo_manager.on_create_variable(self.beh, new_value, idx)
 
         def on_update(
             idx: int,
-            old_value: tuple[str, VariableType, int, int],
-            new_value: tuple[str, VariableType, int, int],
+            old_value: tuple[str, VariableType, int, int, str],
+            new_value: tuple[str, VariableType, int, int, str],
         ):
+            new_value = list(new_value)
+            try:
+                new_value[4] = literal_eval(new_value[4])
+            except Exception:
+                # Assume it's actually a string
+                pass
+
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
             undo_manager.on_update_variable(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
             # TODO list variable bindings affected by this
-            self.beh.delete_variable(idx)
             undo_manager.on_delete_variable(self.beh, idx)
+            self.beh.delete_variable(idx)
 
         edit_simple_array_dialog(
             [
-                (v.name, v.vtype.value, v.vmin, v.vmax)
+                (v.name, v.vtype.value, v.vmin, v.vmax, str(v.default))
                 for v in self.beh.get_variables(full_info=True)
             ],
-            {"Name": str, "Type": VariableType, "Min": int, "Max": int},
+            {"Name": str, "Type": VariableType, "Min": int, "Max": int, "Default": str},
             title="Edit Variables",
             help="""\
-                NOTE that variables are referenced by their index in VariableBindingSets. Deleting or inserting names may invalidate your behavior.
+                NOTE that variables are referenced by their index in bindings and TAE. Deleting or inserting names may invalidate your behavior!
                 
                 Remember to run "File/Update name ID Files" after adding new entries!
                 """,

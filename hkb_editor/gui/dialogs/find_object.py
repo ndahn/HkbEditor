@@ -356,7 +356,7 @@ def select_variable(
                 yield (idx, var)
 
     def item_to_row(item: tuple[int, HkbVariable]) -> tuple[str, ...]:
-        return (item[0], *item[1].astuple())
+        return (item[0], *[str(v) for v in item[1].astuple()])
 
     def on_okay(sender: str, selected: tuple[int, HkbVariable], user_data: Any):
         on_variable_selected(

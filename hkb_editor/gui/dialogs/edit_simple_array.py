@@ -1,7 +1,7 @@
 from typing import Any, Callable, Type
+import logging
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb import HavokBehavior
 from hkb_editor.gui.helpers import center_window, create_simple_value_widget, table_sort, add_paragraphs
 from hkb_editor.gui import style
 from .make_tuple import new_tuple_dialog
@@ -17,6 +17,7 @@ def edit_simple_array_dialog(
     on_add: Callable[[int, str], bool] = None,
     on_update: Callable[[int, str, str], bool] = None,
     on_delete: Callable[[int], bool] = None,
+    final_only: bool = True,
     on_close: Callable[[str, list[str], Any], None] = None,
     get_item_hint: Callable[[int], list[str]] = None,
     item_limit: int = None,
@@ -43,9 +44,12 @@ def edit_simple_array_dialog(
         center_window(popup, dialog)
 
     def add_entry(sender, new_value: tuple, index: int):
-        # May return True as a veto
-        if on_add and on_add(index, new_value):
-            return
+        if index is None:
+            index = len(items)
+
+        # May raise as a veto
+        if on_add:
+            on_add(index, new_value)
 
         items.insert(index, new_value)
         fill_table()
@@ -70,17 +74,25 @@ def edit_simple_array_dialog(
         new_value_tuple[val_idx] = new_value
         new_value_tuple = tuple(new_value_tuple)
 
-        # May return True as a veto
-        if on_update and on_update(item_idx, old_value_tuple, new_value_tuple):
-            return
+        # May raise as a veto
+        if on_update:
+            try:
+                on_update(item_idx, old_value_tuple, new_value_tuple)
+            except Exception as e:
+                # Rejected, regenerate the table before chickening out
+                fill_table()
+                logging.getLogger().error(f"Value update rejected: {e}")
+                return
 
         items[item_idx] = new_value_tuple
-        #fill_table()
 
     def delete_entry(sender: str, app_data: Any, index: int):
-        # May return True as a veto
-        if on_delete and on_delete(index):
-            return
+        if index is None:
+            index = len(items) - 1
+
+        # May raise as a veto
+        if on_delete:
+            on_delete(index)
 
         del items[index]
         fill_table()
@@ -123,24 +135,29 @@ def edit_simple_array_dialog(
                         width=-1,
                     )
 
-                with dpg.group(horizontal=True, horizontal_spacing=2):
-                    dpg.add_button(
-                        label="(-)",
-                        small=True,
-                        callback=delete_entry,
-                        user_data=item_idx,
-                    )
-                    dpg.add_button(
-                        label="(+)",
-                        callback=new_entry_dialog,
-                        user_data=item_idx + 1,
-                    )
-                    if get_item_hint:
-                        dpg.add_button(
-                            label="(?)",
-                            callback=show_item_hint,
-                            user_data=item_idx,
-                        )
+                if not final_only or get_item_hint:
+                    with dpg.group(horizontal=True, horizontal_spacing=2):
+                        if not final_only:
+                            dpg.add_button(
+                                label="(-)",
+                                small=True,
+                                callback=delete_entry,
+                                user_data=item_idx,
+                            )
+                            dpg.add_button(
+                                label="(+)",
+                                small=True,
+                                callback=new_entry_dialog,
+                                user_data=item_idx + 1,
+                            )
+
+                        if get_item_hint:
+                            dpg.add_button(
+                                label="(?)",
+                                small=True,
+                                callback=show_item_hint,
+                                user_data=item_idx,
+                            )
 
     def close_dialog():
         if on_close:
@@ -152,10 +169,10 @@ def edit_simple_array_dialog(
 
     with dpg.window(
         width=600,
-        height=400,
+        height=460,
         label=title,
         on_close=close_dialog,
-        autosize=True,
+        #autosize=True,
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
@@ -172,10 +189,10 @@ def edit_simple_array_dialog(
         with dpg.table(
             delay_search=True,
             resizable=True,
-            policy=dpg.mvTable_SizingStretchSame,
+            policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
-            width=600,
-            height=250,
+            width=-1,
+            height=300,
             sortable=True,
             # sort_tristate=True,
             sort_multi=True,
@@ -186,6 +203,19 @@ def edit_simple_array_dialog(
             for col in columns.keys():
                 dpg.add_table_column(label=col, width_stretch=True)
             dpg.add_table_column()
+
+        if final_only:
+            with dpg.group(horizontal=True):
+                dpg.add_button(
+                    label="Add New",
+                    callback=new_entry_dialog,
+                    user_data=None,
+                )
+                dpg.add_button(
+                    label="Delete Last",
+                    callback=delete_entry,
+                    user_data=None,
+                )
 
         if help:
             dpg.add_separator()

@@ -1,4 +1,4 @@
-from typing import Any, Type, Generator, Iterator, Mapping
+from typing import Any, Type, Generator, Iterator, Mapping, Generic, TypeVar
 import struct
 from lxml import etree as ET
 
@@ -43,6 +43,9 @@ class XmlValueHandler:
 
     def __str__(self) -> str:
         return str(self.get_value())
+
+
+T = TypeVar("T", bound=XmlValueHandler)
 
 
 class HkbString(XmlValueHandler):
@@ -229,13 +232,13 @@ class HkbPointer(XmlValueHandler):
         return f"Pointer -> {self.get_value()} ({self.subtype_name})"
 
 
-class HkbArray(XmlValueHandler):
+class HkbArray(XmlValueHandler, Generic[T]):
     @classmethod
     def new(
         cls,
         tagfile: Tagfile,
         type_id: str,
-        items: list[XmlValueHandler] = None,
+        items: list[T] = None,
     ) -> "HkbArray":
         if items is None:
             items = []
@@ -285,26 +288,33 @@ class HkbArray(XmlValueHandler):
     def __len__(self) -> int:
         return self._count
 
-    def __iter__(self) -> Generator[XmlValueHandler, None, None]:
+    def __iter__(self) -> Generator[T, None, None]:
         for i in range(self._count):
             yield self[i]
 
-    def __getitem__(self, index: int) -> XmlValueHandler:
+    def __getitem__(self, key: int | slice) -> T | list[T]:
+        if isinstance(key, int):
+            if key < 0:
+                key = len(self) + key
+
+            try:
+                item = next(e for i, e in enumerate(self.element) if i == key)
+            except StopIteration:
+                raise IndexError(f"Invalid index {key}")
+
+            return wrap_element(self.tagfile, item, self.element_type_id)
+        
+        elif isinstance(key, slice):
+            return [self[i] for i in range(*key.indices(len(self)))]
+
+        else:
+            raise KeyError(f"Invalid key {key}")
+
+    def __setitem__(self, index: int, value: T | Any) -> None:
         if index < 0:
             index = len(self) + index
 
-        try:
-            item = next(e for i, e in enumerate(self.element) if i == index)
-        except StopIteration:
-            raise IndexError(f"Invalid index {index}")
-
-        return wrap_element(self.tagfile, item, self.element_type_id)
-
-    def __setitem__(self, index: int, value: XmlValueHandler | Any) -> None:
-        if index < 0:
-            index = len(self) + index
-
-        if isinstance(value, XmlValueHandler):
+        if isinstance(value, T):
             self._verify_compatible(value)
             value = value.get_value()
 
@@ -318,7 +328,7 @@ class HkbArray(XmlValueHandler):
 
         self._count -= 1
 
-    def _verify_compatible(self, value: XmlValueHandler) -> None:
+    def _verify_compatible(self, value: T) -> None:
         if value.type_id == self.element_type_id:
             return True
 
@@ -335,7 +345,7 @@ class HkbArray(XmlValueHandler):
             f"Non-matching value type {value.type_id} ({val_type}), expected {self.element_type_id} ({exp_type})"
         )
 
-    def _wrap_value(self, value: Any) -> XmlValueHandler:
+    def _wrap_value(self, value: Any) -> T:
         if self.is_pointer_array and isinstance(value, HkbRecord):
             return HkbPointer.new(self.tagfile, self.element_type_id, value.object_id)
 
@@ -347,13 +357,13 @@ class HkbArray(XmlValueHandler):
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return Handler.new(self.tagfile, self.element_type_id, value)
 
-    def get_value(self) -> list[XmlValueHandler]:
+    def get_value(self) -> list[T]:
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return [
             Handler(self.tagfile, elem, self.element_type_id) for elem in self.element
         ]
 
-    def set_value(self, values: "HkbArray | list[XmlValueHandler | Any]") -> None:
+    def set_value(self, values: "HkbArray | list[T | Any]") -> None:
         values = [self._wrap_value(v) for v in values]
 
         for v in values:
@@ -368,7 +378,7 @@ class HkbArray(XmlValueHandler):
 
         self._count = len(values)
 
-    def index(self, value: XmlValueHandler | Any) -> int:
+    def index(self, value: T | Any) -> int:
         if isinstance(value, XmlValueHandler):
             self._verify_compatible(value)
             value = value.get_value()
@@ -379,7 +389,7 @@ class HkbArray(XmlValueHandler):
 
         raise IndexError("Item not found")
 
-    def append(self, value: XmlValueHandler | Any) -> None:
+    def append(self, value: T | Any) -> None:
         if isinstance(value, XmlValueHandler):
             self._verify_compatible(value)
 
@@ -387,7 +397,7 @@ class HkbArray(XmlValueHandler):
         self.element.append(value.element)
         self._count += 1
 
-    def insert(self, index: int, value: XmlValueHandler | Any) -> None:
+    def insert(self, index: int, value: T | Any) -> None:
         if index < 0:
             index = len(self) + index
 
@@ -398,7 +408,7 @@ class HkbArray(XmlValueHandler):
         self.element.insert(index, value.element)
         self._count += 1
 
-    def pop(self, index: int) -> XmlValueHandler:
+    def pop(self, index: int) -> T:
         ret = self[index]
         del self[index]
         return ret
@@ -545,7 +555,7 @@ class HkbRecord(XmlValueHandler):
 
     def as_object(self, id: str = None) -> ET._Element:
         if not id and not self.object_id:
-            raise ValueError(f"Object does not have an ID and no ID was provided")
+            raise ValueError("Object does not have an ID and no ID was provided")
 
         if not id:
             id = self.object_id
