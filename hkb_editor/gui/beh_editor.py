@@ -21,6 +21,8 @@ from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.templates.glue import get_templates
 
+from hkb_editor.external import ChrReloader
+
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
 from .graph_editor import GraphEditor, Node
@@ -59,6 +61,8 @@ class BehaviorEditor(GraphEditor):
         self.pinned_objects_table: str = None
         self.min_notification_severity = logging.INFO
         self.loaded_skeleton_path: str = None
+
+        self.chr_reloader = None
 
         super().__init__(tag)
 
@@ -139,7 +143,7 @@ class BehaviorEditor(GraphEditor):
 
         try:
             self.beh = HavokBehavior(file_path)
-            
+
             # Fix anything that was amiss in previous versions
             fix_variable_defaults(self.beh)
 
@@ -162,6 +166,16 @@ class BehaviorEditor(GraphEditor):
     def _do_write_to_file(self, file_path):
         self.beh.save_to_file(file_path)
         self.logger.info(f"Saved to {file_path}")
+
+    def _reload_character(self):
+        if not self.chr_reloader:
+            self.chr_reloader = ChrReloader()
+
+        chr = self.beh.get_character_id()
+        try:
+            self.chr_reloader.reload_character(chr)
+        except Exception as e:
+            self.logger.error(f"Reloading {chr} failed: {e}")
 
     def exit_app(self):
         with dpg.window(
@@ -215,6 +229,16 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             dpg.add_menu_item(
+                label="Force game reload",
+                shortcut="f5",
+                callback=self._reload_character,
+                enabled=False,
+                tag=f"{self.tag}_menu_chr_reload",
+            )
+
+            dpg.add_separator()
+
+            dpg.add_menu_item(
                 label="Save layout as default", callback=self._save_app_layout
             )
             dpg.add_menu_item(
@@ -230,10 +254,14 @@ class BehaviorEditor(GraphEditor):
         # Edit
         with dpg.menu(label="Edit", enabled=False, tag=f"{self.tag}_menu_edit"):
             dpg.add_menu_item(
-                label="Undo", shortcut="ctrl-z", callback=lambda: self.attributes_widget.undo()
+                label="Undo",
+                shortcut="ctrl-z",
+                callback=lambda: self.attributes_widget.undo(),
             )
             dpg.add_menu_item(
-                label="Redo", shortcut="ctrl-y", callback=lambda: self.attributes_widget.redo()
+                label="Redo",
+                shortcut="ctrl-y",
+                callback=lambda: self.attributes_widget.redo(),
             )
 
             dpg.add_separator()
@@ -262,7 +290,11 @@ class BehaviorEditor(GraphEditor):
 
             dpg.add_menu_item(label="Pin Lost Objects", callback=self.pin_lost_objects)
 
-            dpg.add_menu_item(label="Find Object...", shortcut="ctrl-f", callback=self.open_search_dialog)
+            dpg.add_menu_item(
+                label="Find Object...",
+                shortcut="ctrl-f",
+                callback=self.open_search_dialog,
+            )
 
         # Workflows
         with dpg.menu(
@@ -332,27 +364,35 @@ class BehaviorEditor(GraphEditor):
         )
 
     def _on_key_press(self, sender, key: int) -> None:
-        if dpg.is_key_down(dpg.mvKey_ModCtrl):
-            if dpg.is_key_down(dpg.mvKey_ModShift):
-                if key == dpg.mvKey_S:
-                    self.file_save_as()
-            else:
-                if key == dpg.mvKey_S:
-                    self.file_save()
-                elif key == dpg.mvKey_Q:
-                    self.exit_app()
-                elif key == dpg.mvKey_Z:
-                    self.undo()
-                elif key == dpg.mvKey_Y:
-                    self.redo()
-                elif key == dpg.mvKey_F:
-                    self.open_search_dialog()
+        if dpg.is_key_down(dpg.mvKey_ModShift) and dpg.is_key_down(dpg.mvKey_ModCtrl):
+            if key == dpg.mvKey_S:
+                self.file_save_as()
+
+        elif dpg.is_key_down(dpg.mvKey_ModCtrl):
+            if key == dpg.mvKey_S:
+                self.file_save()
+            elif key == dpg.mvKey_Q:
+                self.exit_app()
+            elif key == dpg.mvKey_Z:
+                self.undo()
+            elif key == dpg.mvKey_Y:
+                self.redo()
+            elif key == dpg.mvKey_F:
+                self.open_search_dialog()
+
+        elif dpg.is_key_down(dpg.mvKey_ModShift):
+            pass
+
+        else:
+            if key == dpg.mvKey_F5:
+                self._reload_character()
 
     def _set_menus_enabled(self, enabled: bool) -> None:
         func = dpg.enable_item if enabled else dpg.disable_item
         func(f"{self.tag}_menu_file_save")
         func(f"{self.tag}_menu_file_save_as")
         func(f"{self.tag}_menu_file_update_name_ids")
+        func(f"{self.tag}_menu_chr_reload")
         func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_workflows")
         func(f"{self.tag}_menu_templates")
@@ -585,7 +625,7 @@ class BehaviorEditor(GraphEditor):
     def _copy_hierarchy(self, node: Node) -> None:
         g = self.beh.build_graph(node.id)
         sm = self.get_active_statemachine(node.id)
-        xml = f"<behavior_tree sm=\"{sm.object_id}\">\n"
+        xml = f'<behavior_tree sm="{sm.object_id}">\n'
         todo = [node.id]
 
         while todo:

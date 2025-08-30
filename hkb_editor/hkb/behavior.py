@@ -463,6 +463,7 @@ class HavokBehavior(Tagfile):
         return "\\".join(parts)
 
     def get_character_id(self) -> str:
+        """Returns the character ID of this behavior, e.g. c0000."""
         # 1st try: hkbBehaviorGraph's name
         beh_graph = self.find_first_by_type_name("hkbBehaviorGraph")
         if beh_graph:

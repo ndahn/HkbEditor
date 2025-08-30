@@ -14,7 +14,7 @@ Key components:
 > https://github.com/A1steaksa/Elden-Ring-HKS-Hotloader
 """
 
-
+import logging
 import struct
 import psutil
 
@@ -241,6 +241,7 @@ class ChrReloader:
 
     def __init__(self):
         self.memory_manager = MemoryManager()
+        self.logger = logging.getLogger("Reload")
 
     def reload_character(self, chr_name: str) -> bool:
         """
@@ -252,70 +253,55 @@ class ChrReloader:
         Returns:
             True if the reload was initiated successfully, False otherwise
         """
+        chr_name_bytes = chr_name.encode("utf-16le")
+
+        # Attach to Elden Ring process
+        if not self.memory_manager.attach_to_process("eldenring"):
+            if not self.memory_manager.attach_to_process("start_protected_game"):
+                raise ValueError("Unable to find Elden Ring process")
+
+        if not self.memory_manager.process_handle:
+            raise ValueError("No process handle available")
+
+        # Allocate memory for shellcode and data structures
+        chr_reload = MemoryOperations.allocate_memory(
+            self.memory_manager.process_handle, 256, PAGE_EXECUTE_READWRITE
+        )
+        chr_reload_data_setup = MemoryOperations.allocate_memory(
+            self.memory_manager.process_handle, 256, PAGE_READWRITE
+        )
+
+        if not chr_reload or not chr_reload_data_setup:
+            raise ValueError("Failed to allocate memory")
+
         try:
-            chr_name_bytes = chr_name.encode("utf-16le")
+            if not self.memory_manager.world_chr_man_ptr:
+                raise ValueError("Could not find WorldChrMan pointer")
 
-            # Attach to Elden Ring process
-            if not self.memory_manager.attach_to_process("eldenring"):
-                if not self.memory_manager.attach_to_process("start_protected_game"):
-                    print("Unable to find Elden Ring process")
-                    return False
+            # Setup data structure for character reload
+            if not self._setup_reload_data(chr_reload_data_setup, chr_name_bytes):
+                raise ValueError("Failed to setup reload data")
 
-            if not self.memory_manager.process_handle:
-                print("No process handle available")
-                return False
+            # Apply crash fix if available
+            self._apply_crash_fix()
 
-            # Allocate memory for shellcode and data structures
-            chr_reload = MemoryOperations.allocate_memory(
-                self.memory_manager.process_handle, 256, PAGE_EXECUTE_READWRITE
-            )
-            chr_reload_data_setup = MemoryOperations.allocate_memory(
-                self.memory_manager.process_handle, 256, PAGE_READWRITE
-            )
+            # Create and execute shellcode
+            if not self._execute_reload_shellcode(
+                chr_reload, chr_reload_data_setup
+            ):
+                raise ValueError("Shellcode execution failed")
 
-            if not chr_reload or not chr_reload_data_setup:
-                print("Failed to allocate memory")
-                return False
-
-            try:
-                if not self.memory_manager.world_chr_man_ptr:
-                    print("Could not find WorldChrMan pointer")
-                    return False
-
-                # Setup data structure for character reload
-                if not self._setup_reload_data(chr_reload_data_setup, chr_name_bytes):
-                    return False
-
-                # Apply crash fix if available
-                self._apply_crash_fix()
-
-                # Create and execute shellcode
-                if not self._execute_reload_shellcode(
-                    chr_reload, chr_reload_data_setup
-                ):
-                    return False
-
-                return True
-
-            finally:
-                # Clean up allocated memory
-                if chr_reload:
-                    MemoryOperations.free_memory(
-                        self.memory_manager.process_handle, chr_reload, 256
-                    )
-                if chr_reload_data_setup:
-                    MemoryOperations.free_memory(
-                        self.memory_manager.process_handle, chr_reload_data_setup, 256
-                    )
-
-        except Exception as e:
-            print(f"Error during character reload: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return False
-
-        return False
+            return True
+        finally:
+            # Clean up allocated memory
+            if chr_reload:
+                MemoryOperations.free_memory(
+                    self.memory_manager.process_handle, chr_reload, 256
+                )
+            if chr_reload_data_setup:
+                MemoryOperations.free_memory(
+                    self.memory_manager.process_handle, chr_reload_data_setup, 256
+                )
 
     def _setup_reload_data(self, data_setup_addr: int, chr_name_bytes: bytes) -> bool:
         """Setup the data structure required for character reload."""
@@ -323,23 +309,23 @@ class ChrReloader:
             self.memory_manager.world_chr_man_ptr + WorldChrMan_StructOffset
         )
 
-        print(f"Reading data pointer from: 0x{data_pointer_addr:X}")
+        self.logger.debug(f"Reading data pointer from: 0x{data_pointer_addr:X}")
         first_level_ptr = MemoryOperations.read_int64(
             self.memory_manager.process_handle, data_pointer_addr
         )
-        print(f"First level pointer: 0x{first_level_ptr:X}")
+        self.logger.debug(f"First level pointer: 0x{first_level_ptr:X}")
 
         if first_level_ptr == 0:
-            print("First level pointer is null")
+            self.logger.error("First level pointer is null")
             return False
 
         data_pointer = MemoryOperations.read_int64(
             self.memory_manager.process_handle, first_level_ptr
         )
-        print(f"Final data pointer: 0x{data_pointer:X}")
+        self.logger.debug(f"Final data pointer: 0x{data_pointer:X}")
 
         if data_pointer == 0:
-            print("Final data pointer is null")
+            self.logger.error("Final data pointer is null")
             return False
 
         # Write data structure
@@ -363,14 +349,14 @@ class ChrReloader:
     def _apply_crash_fix(self):
         """Apply crash fix patch if available."""
         if self.memory_manager.crash_fix_ptr:
-            print(f"Applying crash fix at: 0x{self.memory_manager.crash_fix_ptr:X}")
+            self.logger.debug(f"Applying crash fix at: 0x{self.memory_manager.crash_fix_ptr:X}")
             MemoryOperations.write_bytes(
                 self.memory_manager.process_handle,
                 self.memory_manager.crash_fix_ptr,
                 CrashPatchOffset_Bytes,
             )
         else:
-            print("Warning: No crash fix pointer found")
+            self.logger.warning("Warning: No crash fix pointer found")
 
     def _execute_reload_shellcode(
         self, shellcode_addr: int, data_setup_addr: int
@@ -421,14 +407,14 @@ class ChrReloader:
         )
         shellcode[12:20] = world_chr_man_bytes
 
-        print(f"Writing shellcode to: 0x{shellcode_addr:X}")
-        print(f"Shellcode size: {len(shellcode)} bytes")
+        self.logger.debug(f"Writing shellcode to: 0x{shellcode_addr:X}")
+        self.logger.debug(f"Shellcode size: {len(shellcode)} bytes")
 
         # Write shellcode to allocated memory
         if not MemoryOperations.write_bytes(
             self.memory_manager.process_handle, shellcode_addr, bytes(shellcode)
         ):
-            print("Failed to write shellcode")
+            self.logger.error("Failed to write shellcode")
             return False
 
         # Create and execute remote thread
@@ -437,13 +423,13 @@ class ChrReloader:
         )
 
         if thread_handle:
-            print(f"Created remote thread: 0x{thread_handle:X}")
+            self.logger.debug(f"Created remote thread: 0x{thread_handle:X}")
             wait_result = MemoryOperations.wait_for_thread(thread_handle)
-            print(f"Thread wait result: {wait_result}")
+            self.logger.debug(f"Thread wait result: {wait_result}")
             MemoryOperations.close_handle(thread_handle)
             return True
         else:
-            print("Failed to create remote thread")
+            self.logger.error("Failed to create remote thread")
             return False
 
 
