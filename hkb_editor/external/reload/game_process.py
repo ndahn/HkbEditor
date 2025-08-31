@@ -51,6 +51,9 @@ class MemoryManager:
         self.world_chr_man_ptr = 0
         self.crash_fix_ptr = 0
 
+        self.logger = logging.getLogger("ChrReloader")
+        self.logger.setLevel(logging.INFO)
+
     def attach_to_process(self, process_name: str) -> bool:
         """Attach to the specified process and find its base address."""
         if self.attached_process and self.attached_process.is_running():
@@ -76,19 +79,18 @@ class MemoryManager:
                     )
 
                     if self.process_handle:
-                        print(
+                        self.logger.debug(
                             f"Attached to {process_name} (PID: {proc.pid}, Base: 0x{self.base_address:X})"
                         )
                         self._scan_game_patterns()
                         return True
                     else:
-                        print(f"Failed to open process handle for PID {proc.pid}")
+                        self.logger.error(f"Failed to open process handle for PID {proc.pid}")
 
                 except Exception as e:
-                    print(f"Error attaching to process: {e}")
+                    self.logger.error(f"Error attaching to process: {e}")
                     self._cleanup()
 
-        print(f"Could not find process: {process_name}")
         return False
 
     def _find_base_address(self, proc: psutil.Process, process_name: str) -> int:
@@ -99,10 +101,10 @@ class MemoryManager:
                 if process_name.lower() in mmap.path.lower():
                     addr_parts = mmap.addr.split("-")
                     base_addr = int(addr_parts[0], 16)
-                    print(f"Found base address via memory_maps: 0x{base_addr:X}")
+                    self.logger.debug(f"Found base address via memory_maps: 0x{base_addr:X}")
                     return base_addr
         except Exception as e:
-            print(f"Memory maps method failed: {e}")
+            self.logger.warning(f"Memory maps method failed: {e}")
 
         # Method 2: Try using exe() to get the main executable info
         try:
@@ -111,14 +113,14 @@ class MemoryManager:
                 if exe_path.lower() in mmap.path.lower():
                     addr_parts = mmap.addr.split("-")
                     base_addr = int(addr_parts[0], 16)
-                    print(f"Found base address via exe path: 0x{base_addr:X}")
+                    self.logger.debug(f"Found base address via exe path: 0x{base_addr:X}")
                     return base_addr
         except Exception as e:
-            print(f"Exe path method failed: {e}")
+            self.logger.warning(f"Exe path method failed: {e}")
 
         # Method 3: Use common default base address for Windows executables
         default_base = 0x140000000
-        print(f"Using default base address: 0x{default_base:X}")
+        self.logger.warning(f"Using default base address: 0x{default_base:X}")
         return default_base
 
     def _scan_game_patterns(self):
@@ -126,7 +128,7 @@ class MemoryManager:
         try:
             # Determine module size for scanning
             module_size = self._get_module_size()
-            print(
+            self.logger.debug(
                 f"Creating AOB scanner for base: 0x{self.base_address:X}, size: 0x{module_size:X}"
             )
 
@@ -140,7 +142,7 @@ class MemoryManager:
             self._find_crash_patch_location(scanner)
 
         except Exception as e:
-            print(f"Error scanning patterns: {e}")
+            self.logger.error(f"Error scanning patterns: {e}")
             import traceback
 
             traceback.print_exc()
@@ -159,13 +161,13 @@ class MemoryManager:
                     if start_addr == self.base_address:
                         return end_addr - start_addr
         except Exception as e:
-            print(f"Could not get module size: {e}")
+            self.logger.error(f"Could not get module size: {e}")
 
         return 0x10000000  # Default large size
 
     def _find_world_chr_man_pointer(self, scanner: AOBScanner):
         """Find the WorldChrMan pointer using AOB scanning."""
-        print(f"Scanning for WorldChrMan with pattern: {WorldChrManPtr_AOB}")
+        self.logger.debug(f"Scanning for WorldChrMan with pattern: {WorldChrManPtr_AOB}")
 
         pointer_addr = self._scan_relative_address(
             scanner,
@@ -175,28 +177,28 @@ class MemoryManager:
         )
 
         if pointer_addr:
-            print(f"Found WorldChrMan pattern at: 0x{pointer_addr:X}")
+            self.logger.debug(f"Found WorldChrMan pattern at: 0x{pointer_addr:X}")
             # Read the actual pointer value
             actual_ptr = MemoryOperations.read_int64(self.process_handle, pointer_addr)
             self.world_chr_man_ptr = actual_ptr
-            print(f"WorldChrMan pointer value: 0x{self.world_chr_man_ptr:X}")
+            self.logger.debug(f"WorldChrMan pointer value: 0x{self.world_chr_man_ptr:X}")
         else:
-            print("Could not find WorldChrMan pattern")
+            self.logger.error("Could not find WorldChrMan pattern")
 
     def _find_crash_patch_location(self, scanner: AOBScanner):
         """Find the crash patch location using AOB scanning."""
         pattern = AOBScanner.parse_pattern(CrashPatchOffset_AOB)
 
-        print(f"Scanning for crash patch with pattern: {CrashPatchOffset_AOB}")
+        self.logger.debug(f"Scanning for crash patch with pattern: {CrashPatchOffset_AOB}")
         crash_location = scanner.scan(pattern)
 
         if crash_location:
             self.crash_fix_ptr = (
                 crash_location + len(pattern) - CrashPatchOffset_JumpEnd
             )
-            print(f"Found crash patch at: 0x{self.crash_fix_ptr:X}")
+            self.logger.debug(f"Found crash patch at: 0x{self.crash_fix_ptr:X}")
         else:
-            print("Could not find crash patch pattern")
+            self.logger.error("Could not find crash patch pattern")
 
     def _scan_relative_address(
         self, scanner: AOBScanner, pattern_str: str, addr_offset: int, end_offset: int
@@ -206,10 +208,10 @@ class MemoryManager:
         location = scanner.scan(pattern)
 
         if location == 0:
-            print(f"AOB pattern not found: {pattern_str}")
+            self.logger.error(f"AOB pattern not found: {pattern_str}")
             return 0
 
-        print(f"AOB pattern found at: 0x{location:X}")
+        self.logger.debug(f"AOB pattern found at: 0x{location:X}")
 
         # Read the relative address (32-bit)
         rel_addr_location = location + addr_offset
@@ -219,10 +221,10 @@ class MemoryManager:
         instruction_end = location + end_offset
         absolute_addr = (instruction_end + rel_addr) & 0xFFFFFFFFFFFFFFFF
 
-        print(
+        self.logger.debug(
             f"Relative address: 0x{rel_addr:X}, Instruction end: 0x{instruction_end:X}"
         )
-        print(f"Calculated absolute address: 0x{absolute_addr:X}")
+        self.logger.debug(f"Calculated absolute address: 0x{absolute_addr:X}")
 
         return absolute_addr
 
@@ -241,7 +243,8 @@ class ChrReloader:
 
     def __init__(self):
         self.memory_manager = MemoryManager()
-        self.logger = logging.getLogger("Reload")
+        self.logger = logging.getLogger("ChrReloader")
+        self.logger.setLevel(logging.INFO)
 
     def reload_character(self, chr_name: str) -> bool:
         """

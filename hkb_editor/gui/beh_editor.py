@@ -50,7 +50,7 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
-from .helpers import make_copy_menu, center_window
+from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
 
@@ -212,16 +212,6 @@ class BehaviorEditor(GraphEditor):
         self.beh.save_to_file(file_path)
         self.logger.info(f"Saved to {file_path}")
 
-    def _reload_character(self) -> None:
-        if not self.chr_reloader:
-            self.chr_reloader = ChrReloader()
-
-        chr = self.beh.get_character_id()
-        try:
-            self.chr_reloader.reload_character(chr)
-        except Exception as e:
-            self.logger.error(f"Reloading {chr} failed: {e}")
-
     def _locate_witchy(self) -> str:
         if not self.config.witchy_exe or not os.path.isfile(self.config.witchy_exe):
             witchy_exe = open_file_dialog(
@@ -248,28 +238,26 @@ class BehaviorEditor(GraphEditor):
 
         return self.config.hklib_exe
 
+    def _reload_character(self) -> None:
+        if not self.chr_reloader:
+            self.chr_reloader = ChrReloader()
+
+        chr = self.beh.get_character_id()
+        loading = common_loading_indicator(f"Reloading {chr}...", style.red)
+
+        try:
+            self.chr_reloader.reload_character(chr)
+        except Exception as e:
+            self.logger.error(f"Reloading {chr} failed: {e}")
+        finally:
+            dpg.delete_item(loading)
+
     def _repack_binder(self) -> None:
         # Locate external tools
         self._locate_witchy()
         self._locate_hklib()
 
-        with dpg.window(
-            modal=True,
-            min_size=(50, 20),
-            no_close=True,
-            no_move=True,
-            no_collapse=True,
-            no_title_bar=True,
-            no_resize=True,
-            no_scroll_with_mouse=True,
-            no_scrollbar=True,
-            no_saved_settings=True,
-        ) as dialog:
-            with dpg.group(horizontal=True):
-                dpg.add_loading_indicator(color=style.red)
-                with dpg.group():
-                    dpg.add_spacer(height=5)
-                    dpg.add_text("Repacking binder")
+        loading = common_loading_indicator("Repacking binder...", style.red)
 
         try:
             self.logger.info("Converting XML to HKX...")
@@ -278,7 +266,7 @@ class BehaviorEditor(GraphEditor):
             pack_binder(self.beh.file)
             self.logger.info("Done!")
         finally:
-            dpg.delete_item(dialog)
+            dpg.delete_item(loading)
 
     def exit_app(self):
         with dpg.window(

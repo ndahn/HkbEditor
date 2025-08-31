@@ -650,3 +650,25 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
         )
 
     dpg.reorder_items(sender, 1, rows)
+
+
+def common_loading_indicator(label: str, color: tuple[int, int, int, int]) -> str:
+    with dpg.window(
+        modal=True,
+        min_size=(50, 20),
+        no_close=True,
+        no_move=True,
+        no_collapse=True,
+        no_title_bar=True,
+        no_resize=True,
+        no_scroll_with_mouse=True,
+        no_scrollbar=True,
+        no_saved_settings=True,
+    ) as dialog:
+        with dpg.group(horizontal=True):
+            dpg.add_loading_indicator(color=color)
+            with dpg.group():
+                dpg.add_spacer(height=5)
+                dpg.add_text(label)
+
+    return dialog
