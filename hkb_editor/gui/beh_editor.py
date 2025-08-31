@@ -28,7 +28,7 @@ from hkb_editor.external import (
     load_config,
     xml_to_hkx,
     hkx_to_xml,
-    open_binder,
+    unpack_binder,
     pack_binder,
 )
 
@@ -123,6 +123,14 @@ class BehaviorEditor(GraphEditor):
 
         Thread(target=remove_notification, daemon=True).start()
 
+    def get_supported_file_extensions(self):
+        return {
+            "All supported files": ["*.xml", "*.hkx", "*.behbnd.dcx"],
+            "Behavior XML": "*.xml",
+            "Behavior HKX": "*.hkx",
+            "DCX Binder": "*.behbnd.dcx",
+        }
+
     def _do_load_from_file(self, file_path: str):
         self.logger.debug("======================================")
         self.logger.info("Loading file %s", file_path)
@@ -155,6 +163,18 @@ class BehaviorEditor(GraphEditor):
         self.close_all_dialogs()
 
         try:
+            if file_path.lower().endswith(".hkx"):
+                self._locate_hklib()
+                self.logger.info("Converting HKX to XML...")
+                file_path = hkx_to_xml(file_path)
+
+            elif file_path.lower().endswith(".behbnd.dcx"):
+                self._locate_witchy()
+                self._locate_hklib()
+                self.logger.info("Opening binder...")
+                file_path = unpack_binder(file_path)
+
+            self.logger.info("Loading behavior...")
             self.beh = HavokBehavior(file_path)
 
             self.config.add_recent_file(file_path)
@@ -202,19 +222,7 @@ class BehaviorEditor(GraphEditor):
         except Exception as e:
             self.logger.error(f"Reloading {chr} failed: {e}")
 
-    def _repack_binder(self) -> None:
-        # Locate HKLib.exe
-        if not self.config.hklib_exe or not os.path.isfile(self.config.hklib_exe):
-            hklib_exe = open_file_dialog(
-                title="Locate HKLib.exe", filetypes={"HKLib": "HKLib.CLI.exe"}
-            )
-            if not hklib_exe:
-                self.logger.error("HKLib is required for repacking behavior")
-
-            self.config.hklib_exe = hklib_exe
-            self.config.save()
-
-        # Locate WitchyBND
+    def _locate_witchy(self) -> str:
         if not self.config.witchy_exe or not os.path.isfile(self.config.witchy_exe):
             witchy_exe = open_file_dialog(
                 title="Locate WitchyBND.exe", filetypes={"WitchyBND": "WitchyBND.exe"}
@@ -225,8 +233,29 @@ class BehaviorEditor(GraphEditor):
             self.config.witchy_exe = witchy_exe
             self.config.save()
 
+        return self.config.witchy_exe
+
+    def _locate_hklib(self) -> str:
+        if not self.config.hklib_exe or not os.path.isfile(self.config.hklib_exe):
+            hklib_exe = open_file_dialog(
+                title="Locate HKLib.exe", filetypes={"HKLib": "HKLib.CLI.exe"}
+            )
+            if not hklib_exe:
+                self.logger.error("HKLib is required for repacking behavior")
+
+            self.config.hklib_exe = hklib_exe
+            self.config.save()
+
+        return self.config.hklib_exe
+
+    def _repack_binder(self) -> None:
+        # Locate external tools
+        self._locate_witchy()
+        self._locate_hklib()
+
         with dpg.window(
             modal=True,
+            min_size=(50, 20),
             no_close=True,
             no_move=True,
             no_collapse=True,
@@ -236,8 +265,11 @@ class BehaviorEditor(GraphEditor):
             no_scrollbar=True,
             no_saved_settings=True,
         ) as dialog:
-            dpg.add_loading_indicator(color=style.green, radius=2, circle_count=5, style=0)
-            dpg.add_text("Repacking binder")
+            with dpg.group(horizontal=True):
+                dpg.add_loading_indicator(color=style.red)
+                with dpg.group():
+                    dpg.add_spacer(height=5)
+                    dpg.add_text("Repacking binder")
 
         try:
             self.logger.info("Converting XML to HKX...")
@@ -585,9 +617,6 @@ class BehaviorEditor(GraphEditor):
 
         with dpg.handler_registry():
             dpg.add_key_press_handler(dpg.mvKey_None, callback=self._on_key_press)
-
-    def get_supported_file_extensions(self):
-        return {"Behavior XML": "*.xml"}
 
     def _setup_content(self) -> None:
         super()._setup_content()

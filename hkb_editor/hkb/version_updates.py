@@ -12,7 +12,6 @@ def fix_variable_defaults(behavior: HavokBehavior):
     missing = len(behavior._variables) - len(words)
     if missing <= 0:
         # We have a default for each variable, nothing to do
-        print("### VERSION UPDATE nothing to do", missing)
         return
 
     logger = logging.getLogger()

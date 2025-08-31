@@ -1,11 +1,8 @@
 from os import path
 from pathlib import Path
-import logging
 import subprocess
 
-from hkb_editor.hkb import HavokBehavior
 from hkb_editor.external.config import get_config
-from hkb_editor.external.reload import reload_character
 
 
 def _convert(input_path: str, hklib_exe: str) -> str:
@@ -63,7 +60,7 @@ def pack_binder(behavior_path: str) -> None:
     subprocess.check_call(args)
 
 
-def open_binder(binder_path: str) -> str:
+def unpack_binder(binder_path: str) -> str:
     config = get_config()
     if not path.isfile(config.witchy_exe):
         raise RuntimeError("Could not locate witchybnd")
@@ -72,42 +69,22 @@ def open_binder(binder_path: str) -> str:
         raise RuntimeError("Could not locate hklib")
 
     # Unpack the binder
-    args = [config.witchy_exe, binder_path]
-    subprocess.check_call(args)
+    args = [config.witchy_exe, "--passive", binder_path]
+    try:
+        subprocess.check_call(args)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"WitchyBND failed: {e.output}") from e
 
     p = Path(binder_path)
     chr = p.name.split(".")[0]
     binder_dir = p.name.replace(".", "-")
-    behavior_path = p.parent / binder_dir / "Behavior" / f"{chr}.hkx"
+    behavior_path = p.parent / binder_dir / "Behaviors" / f"{chr}.hkx"
 
     # Convert from hkx to xml
-    args = [config.hklib_exe, behavior_path.as_posix()]
-    subprocess.check_call(args)
-    return behavior_path.parent / f"{chr}.xml"
-
-
-def on_save_behavior(behavior: HavokBehavior, behavior_path: str) -> None:
-    config = get_config()
+    args = [config.hklib_exe, str(behavior_path)]
     try:
-        if not config.convert_on_save:
-            return
-        
-        xml_to_hkx(behavior_path)
-
-        if not config.pack_on_save:
-            return
-
-        pack_binder(behavior_path)
-
-        if not config.reload_on_save:
-            return
-
-        chr = behavior.get_character_id()
-        if not chr:
-            raise RuntimeError("Could not identify chr ID")
-
-        reload_character(chr)
-    except RuntimeError as e:
-        logging.getLogger().warning(f"Could not run configured conversion: {e}")
+        subprocess.check_call(args)
     except subprocess.CalledProcessError as e:
-        logging.getLogger().error(f"{e.cmd} failed ({e.returncode}): {e.output}")
+        raise RuntimeError(f"HKLib failed: {e.output}") from e
+
+    return str(behavior_path.parent / f"{chr}.xml")

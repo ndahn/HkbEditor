@@ -16,6 +16,7 @@ def main():
     logfile = os.path.join(os.path.dirname(sys.argv[0]), "log.txt")
     logging.basicConfig(
         level=logging.DEBUG,
+        format="[%(levelname)s]\t%(message)s",
         handlers=[
             logging.FileHandler(logfile),
             logging.StreamHandler(),
