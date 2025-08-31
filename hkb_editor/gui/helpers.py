@@ -652,7 +652,7 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
     dpg.reorder_items(sender, 1, rows)
 
 
-def common_loading_indicator(label: str, color: tuple[int, int, int, int]) -> str:
+def common_loading_indicator(label: str, color: tuple[int, int, int, int] = style.red) -> str:
     with dpg.window(
         modal=True,
         min_size=(50, 20),

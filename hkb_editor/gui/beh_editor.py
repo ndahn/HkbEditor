@@ -206,11 +206,16 @@ class BehaviorEditor(GraphEditor):
             dpg.delete_item(loading_screen)
 
     def _do_write_to_file(self, file_path):
-        if self.config.save_backups:
-            shutil.copy(self.beh.file, self.beh.file + ".bak")
+        loading = common_loading_indicator("Saving")
 
-        self.beh.save_to_file(file_path)
-        self.logger.info(f"Saved to {file_path}")
+        try:
+            if self.config.save_backups:
+                shutil.copy(self.beh.file, self.beh.file + ".bak")
+
+            self.beh.save_to_file(file_path)
+            self.logger.info(f"Saved to {file_path}")
+        finally:
+            dpg.delete_item(loading)
 
     def _locate_witchy(self) -> str:
         if not self.config.witchy_exe or not os.path.isfile(self.config.witchy_exe):
@@ -243,7 +248,7 @@ class BehaviorEditor(GraphEditor):
             self.chr_reloader = ChrReloader()
 
         chr = self.beh.get_character_id()
-        loading = common_loading_indicator(f"Reloading {chr}...", style.red)
+        loading = common_loading_indicator(f"Reloading {chr}...")
 
         try:
             self.chr_reloader.reload_character(chr)
@@ -257,7 +262,7 @@ class BehaviorEditor(GraphEditor):
         self._locate_witchy()
         self._locate_hklib()
 
-        loading = common_loading_indicator("Repacking binder...", style.red)
+        loading = common_loading_indicator("Repacking binder...")
 
         try:
             self.logger.info("Converting XML to HKX...")
