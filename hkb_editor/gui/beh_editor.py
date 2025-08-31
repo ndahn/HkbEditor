@@ -22,7 +22,15 @@ from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.templates.glue import get_templates
 
-from hkb_editor.external import ChrReloader, Config, load_config, get_config
+from hkb_editor.external import (
+    ChrReloader,
+    Config,
+    load_config,
+    xml_to_hkx,
+    hkx_to_xml,
+    open_binder,
+    pack_binder,
+)
 
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
@@ -116,6 +124,9 @@ class BehaviorEditor(GraphEditor):
         Thread(target=remove_notification, daemon=True).start()
 
     def _do_load_from_file(self, file_path: str):
+        self.logger.debug("======================================")
+        self.logger.info("Loading file %s", file_path)
+
         with dpg.window(
             modal=True,
             no_close=True,
@@ -156,6 +167,11 @@ class BehaviorEditor(GraphEditor):
             filename = os.path.basename(file_path)
             dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
 
+            self.loaded_file = file_path
+            self.last_save = 0.0
+            self.canvas.clear()
+            self._update_roots()
+
             self._reload_templates()
             self._set_menus_enabled(True)
 
@@ -176,9 +192,7 @@ class BehaviorEditor(GraphEditor):
         self.beh.save_to_file(file_path)
         self.logger.info(f"Saved to {file_path}")
 
-        # TODO repack on save and reload
-
-    def _reload_character(self):
+    def _reload_character(self) -> None:
         if not self.chr_reloader:
             self.chr_reloader = ChrReloader()
 
@@ -187,6 +201,52 @@ class BehaviorEditor(GraphEditor):
             self.chr_reloader.reload_character(chr)
         except Exception as e:
             self.logger.error(f"Reloading {chr} failed: {e}")
+
+    def _repack_binder(self) -> None:
+        # Locate HKLib.exe
+        if not self.config.hklib_exe or not os.path.isfile(self.config.hklib_exe):
+            hklib_exe = open_file_dialog(
+                title="Locate HKLib.exe", filetypes={"HKLib": "HKLib.CLI.exe"}
+            )
+            if not hklib_exe:
+                self.logger.error("HKLib is required for repacking behavior")
+
+            self.config.hklib_exe = hklib_exe
+            self.config.save()
+
+        # Locate WitchyBND
+        if not self.config.witchy_exe or not os.path.isfile(self.config.witchy_exe):
+            witchy_exe = open_file_dialog(
+                title="Locate WitchyBND.exe", filetypes={"WitchyBND": "WitchyBND.exe"}
+            )
+            if not witchy_exe:
+                self.logger.error("WitchyBND is required for repacking behavior")
+
+            self.config.witchy_exe = witchy_exe
+            self.config.save()
+
+        with dpg.window(
+            modal=True,
+            no_close=True,
+            no_move=True,
+            no_collapse=True,
+            no_title_bar=True,
+            no_resize=True,
+            no_scroll_with_mouse=True,
+            no_scrollbar=True,
+            no_saved_settings=True,
+        ) as dialog:
+            dpg.add_loading_indicator(color=style.green, radius=2, circle_count=5, style=0)
+            dpg.add_text("Repacking binder")
+
+        try:
+            self.logger.info("Converting XML to HKX...")
+            xml_to_hkx(self.beh.file)
+            self.logger.info("Repacking Binder...")
+            pack_binder(self.beh.file)
+            self.logger.info("Done!")
+        finally:
+            dpg.delete_item(dialog)
 
     def exit_app(self):
         with dpg.window(
@@ -241,11 +301,18 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             dpg.add_menu_item(
+                label="Repack Binder",
+                shortcut="f4",
+                callback=self._repack_binder,
+                enabled=False,
+                tag=f"{self.tag}_menu_repack_binder",
+            )
+            dpg.add_menu_item(
                 label="Force game reload",
                 shortcut="f5",
                 callback=self._reload_character,
                 enabled=False,
-                tag=f"{self.tag}_menu_chr_reload",
+                tag=f"{self.tag}_menu_reload_character",
             )
 
             dpg.add_separator()
@@ -360,13 +427,6 @@ class BehaviorEditor(GraphEditor):
                 callback=self._update_config,
                 tag=f"{self.tag}_config_save_backups",
             )
-            dpg.add_menu_item(
-                label="Reload behavior on BND save",
-                check=True,
-                default_value=self.config.reload_on_save,
-                callback=self._update_config,
-                tag=f"{self.tag}_config_reload_on_save",
-            )
 
         dpg.add_separator()
         self._create_dpg_menu()
@@ -375,7 +435,7 @@ class BehaviorEditor(GraphEditor):
 
     def _update_config(self, sender: str) -> None:
         alias = dpg.get_item_alias(sender)
-        key = alias[len(f"{self.tag}_config_"):]
+        key = alias[len(f"{self.tag}_config_") :]
 
         if not hasattr(self.config, key):
             raise ValueError(f"Unknown config key {key}")
@@ -385,6 +445,7 @@ class BehaviorEditor(GraphEditor):
 
     def _regenerate_recent_files_menu(self) -> None:
         dpg.delete_item(f"{self.tag}_menu_recent_files", slot=1, children_only=True)
+        #dpg.split_frame()
 
         def load_file(sender: str, app_data: Any, file_path: str) -> None:
             if self.beh:
@@ -421,15 +482,17 @@ class BehaviorEditor(GraphEditor):
 
                 dpg.split_frame()
                 center_window(dialog)
+            else:
+                self._do_load_from_file(file_path)
 
         for i in range(10):
             if i < len(self.config.recent_files):
                 path = self.config.recent_files[i]
-                
+
                 parts = path.split(os.sep)
                 short = parts[-1]
                 parts = parts[:-1]
-                
+
                 for p in reversed(parts):
                     short = os.path.join(p, short)
                     if len(short) > 70:
@@ -441,7 +504,6 @@ class BehaviorEditor(GraphEditor):
                     parent=f"{self.tag}_menu_recent_files",
                     callback=load_file,
                     user_data=path,
-                    tag=f"{self.tag}_menu_recent_files_file{i}",
                 )
             else:
                 # We need to add menu item stubs, otherwise the additional items will mess up
@@ -505,7 +567,9 @@ class BehaviorEditor(GraphEditor):
             pass
 
         else:
-            if key == dpg.mvKey_F5:
+            if key == dpg.mvKey_F4:
+                self._repack_binder()
+            elif key == dpg.mvKey_F5:
                 self._reload_character()
 
     def _set_menus_enabled(self, enabled: bool) -> None:
@@ -513,7 +577,8 @@ class BehaviorEditor(GraphEditor):
         func(f"{self.tag}_menu_file_save")
         func(f"{self.tag}_menu_file_save_as")
         func(f"{self.tag}_menu_file_update_name_ids")
-        func(f"{self.tag}_menu_chr_reload")
+        func(f"{self.tag}_menu_repack_binder")
+        func(f"{self.tag}_menu_reload_character")
         func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_workflows")
         func(f"{self.tag}_menu_templates")

@@ -1,6 +1,7 @@
 import sys
 from os import path
 import yaml
+import inspect
 from dataclasses import dataclass, field, asdict
 
 
@@ -14,7 +15,6 @@ class Config:
     invert_zoom: bool = False
     single_branch_mode: bool = True
     save_backups: bool = True
-    reload_on_save: bool = False
 
     def add_recent_file(self, behavior_path: str) -> None:
         behavior_path = path.normpath(path.abspath(behavior_path))
@@ -53,7 +53,15 @@ def load_config(config_path: str = None) -> Config:
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
         
-        _config = Config(**cfg)
+        sig = inspect.signature(Config.__init__)
+        kw = {}
+        
+        # Match the args from the config to the current implementation in case it changed
+        for key, val in cfg.items():
+            if key in sig.parameters:
+                kw[key] = val
+
+        _config = Config(**kw)
     else:
         # TODO print warning
         _config = Config()

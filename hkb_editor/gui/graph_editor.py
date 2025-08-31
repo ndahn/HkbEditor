@@ -179,15 +179,12 @@ class GraphEditor:
         )
 
         if ret:
-            self.logger.debug("======================================")
-            self.logger.info("Loading file %s", ret)
             self._do_load_from_file(ret)
-            self.loaded_file = ret
-            self.last_save = 0.0
-            self.canvas.clear()
-            self._update_roots()
 
     def _do_load_from_file(self, file_path: str) -> None:
+        self.logger.debug("======================================")
+        self.logger.info("Loading file %s", file_path)
+
         # Just some test data
         g = nx.DiGraph()
 
@@ -220,6 +217,10 @@ class GraphEditor:
         g.add_edge("AB2C1", "AB2C1D2")
 
         self._on_root_selected("", True, "A")
+        self.loaded_file = file_path
+        self.last_save = 0.0
+        self.canvas.clear()
+        self._update_roots()
 
     def file_save(self):
         self._do_write_to_file(self.loaded_file)
