@@ -1,12 +1,13 @@
 from typing import Any, Callable, Type
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from copy import deepcopy
 from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb import HavokBehavior, HkbPointer, HkbRecord
+from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
+from hkb_editor.hkb import HkbPointer, HkbRecord
 from hkb_editor.gui import style
 from hkb_editor.gui.graph_widget import GraphWidget
 from hkb_editor.gui.workflows.undo import UndoManager
@@ -34,22 +35,31 @@ _animation_attributes = {
 
 @dataclass
 class HierarchyConflicts:
-    events: dict[tuple[int, str | int], str] = None
-    variables: dict[tuple[int, str | int], str] = None
-    animations: dict[tuple[int, str | int], str] = None
-    objects: dict[HkbRecord, str] = None
-    state_ids: dict[int, int] = None
+    events: dict[tuple[int, str], str | int] = field(default_factory=dict)
+    variables: dict[tuple[int, str], str | int] = field(default_factory=dict)
+    animations: dict[tuple[int, str], str | int] = field(default_factory=dict)
+    objects: dict[HkbRecord, str] = field(default_factory=dict)
+    state_ids: dict[HkbRecord, str] = field(default_factory=dict)
 
     def __bool__(self) -> bool:
-        return self.events or self.variables or self.animations or self.objects
+        return self.events or self.variables or self.animations or self.objects or self.state_ids
+
+
+@dataclass
+class ConflictSolution:
+    events: dict[int, int] = field(default_factory=dict)
+    variables: dict[int, int] = field(default_factory=dict)
+    animations: dict[int, int] = field(default_factory=dict)
+    objects: dict[str, HkbRecord] = field(default_factory=dict)
+    state_ids: dict[HkbRecord, int] = field(default_factory=dict)
 
 
 def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     g = behavior.build_graph(root_id)
 
-    events = {}
-    variables = {}
-    animations = {}
+    events: dict[int, str] = {}
+    variables: dict[int, HkbVariable] = {}
+    animations: dict[int, str] = {}
     objects = []
 
     todo = [root_id]
@@ -72,8 +82,8 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
             for path in _variable_attributes[obj.type_name]:
                 variable_idx = obj.get_field(path, resolve=True)
                 if variable_idx >= 0:
-                    variable_name = behavior.get_variable(variable_idx)
-                    variables[variable_idx] = variable_name
+                    variable = behavior.get_variable(variable_idx)
+                    variables[variable_idx] = variable
 
         if obj.type_name in _animation_attributes:
             for path in _animation_attributes[obj.type_name]:
@@ -92,13 +102,14 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     xml_animations = ET.SubElement(root, "animations")
     xml_objects = ET.SubElement(root, "objects", graph=str(nx.to_edgelist(g)))
 
-    for idx, evt in events:
+    for idx, evt in events.items():
         ET.SubElement(xml_events, "event", idx=idx, name=evt)
 
-    for idx, var in variables:
-        ET.SubElement(xml_variables, "variable", idx=idx, name=var)
+    for idx, var in variables.items():
+        # TODO need to include ALL variable attributes
+        ET.SubElement(xml_variables, "variable", idx=idx, name=var.name)
 
-    for idx, anim in animations:
+    for idx, anim in animations.items():
         ET.SubElement(xml_animations, "animation", idx=idx, name=anim)
 
     for obj in objects:
@@ -121,23 +132,23 @@ def paste_hierarchy(
     if xml.tag != "behavior_hierarchy":
         raise ValueError("Not a valid behavior hierarchy")
 
-    objects = xml.find("objects").getchildren()
-    root_type = objects[0].attrib["typeid"]
+    root = xml.find("objects").getchildren()[0]
+    root_type = root.attrib["typeid"]
 
     if not target_pointer.will_accept(root_type):
         raise ValueError("Hierarchy is not compatible with target pointer")
 
     conflicts = find_conflicts(behavior, xml)
     if conflicts:
-        resolve_merge_dialog(behavior, xml, conflicts, undo_manager)
+        resolve_merge_dialog(behavior, xml, target_pointer, conflicts, undo_manager)
 
-    # TODO add objects
+    # TODO add objects from conflicts
 
 
 def find_conflicts(
     behavior: HavokBehavior, hierarchy: ET.Element
 ) -> HierarchyConflicts:
-    conflicts = HierarchyConflicts({}, {}, {}, {})
+    conflicts = HierarchyConflicts()
 
     # For events, variables and animations we check if there is already one with a matching name.
     # If there is no match it probably has to be created. If it exists but the index is different
@@ -172,6 +183,7 @@ def find_conflicts(
         # Find pointers in the behavior referencing this object's ID. If more than one
         # other object is already referencing it, it is most likely a reused object like
         # e.g. DefaultTransition.
+        # FIXME since we're editing conflicting objects we need to add ALL objects here
         if obj.object_id in behavior.objects:
             references = list(behavior.find_referees(obj))
             default = "<reuse>" if len(references) > 1 else "<new>"
@@ -183,16 +195,17 @@ def find_conflicts(
         # hkbStateMachine::StateInfo
         #   - stateId
         if obj.type_name == "hkbStateMachine::StateInfo":
+            # TODO state IDs cannot be in conflict if the statemachine they belong to is 
+            # part of the pasted hierarchy
             obj_state_id = obj["stateId"].get_value()
-            statemachine = behavior.find_parent_object_for(obj.object_id, sm_type)
+            statemachine = behavior.find_hierarchy_parent_for(obj.object_id, sm_type)
             state_ptr: HkbPointer
 
             for state_ptr in statemachine["states"]:
                 state = state_ptr.get_target()
                 target_state_id = state["stateId"].get_value()
                 if target_state_id == obj_state_id:
-                    # TODO these should be specific to the statemachine
-                    conflicts.state_ids[obj_state_id] = "<new>"
+                    conflicts.state_ids[obj] = "<new>"
                     break
 
         # These will need some corrections, but will not result in additional conflicts
@@ -204,8 +217,10 @@ def find_conflicts(
 
 
 def resolve_conflicts(
-    behavior: HavokBehavior, conflicts: HierarchyConflicts, undo_manager: UndoManager
+    behavior: HavokBehavior, target_pointer: HkbPointer, conflicts: HierarchyConflicts, undo_manager: UndoManager,
 ):
+    solution = ConflictSolution()
+
     with undo_manager.combine():
         # TODO add undo actions
         # Create missing events, variables and animations. If the value is not "<new>" we can
@@ -213,48 +228,50 @@ def resolve_conflicts(
         for (idx, evt), new_idx in conflicts.events.items():
             if new_idx == "<new>":
                 new_idx = behavior.create_event(evt)
-                conflicts.events[(idx, evt)] = new_idx
+                solution.events[idx] = new_idx
             elif not isinstance(new_idx, int):
                 raise ValueError(f"Invalid mapping for event {idx} ({evt}): {new_idx}")
 
         for (idx, var), new_idx in conflicts.variables.items():
             if new_idx == "<new>":
                 new_idx = behavior.create_variable(var)
-                conflicts.variables[(idx, var)] = new_idx
+                solution.variables[idx] = new_idx
             elif not isinstance(new_idx, int):
                 raise ValueError(f"Invalid mapping for variable {idx} ({var}): {new_idx}")
 
         for (idx, anim), new_idx in conflicts.animations.items():
             if new_idx == "<new>":
                 new_idx = behavior.create_animation(anim)
-                conflicts.animations[(idx, anim)] = new_idx
+                solution.animations[idx] = new_idx
             elif not isinstance(new_idx, int):
                 raise ValueError(f"Invalid mapping for animation {idx} ({anim}): {new_idx}")
 
+        # StateInfo IDs (must be unique within the target statemachine)
+        for obj, action in conflicts.state_ids.items():
+            new_state_id = -1
+            solution.state_ids[obj] = new_state_id
+
         # Handle conflicting objects
-        # Iterate over a list of keys so we can remove items that are no longer in conflict
-        for obj in list[conflicts.objects.keys()]:
-            action = conflicts.objects[obj]
+        for obj, action in conflicts.objects.items():
             if action == "<new>":
-                new_id = behavior.new_id()
-                conflicts.objects[obj.object_id] = new_id
-                obj.object_id = new_id
+                solution.objects[obj.object_id] = obj
+                obj.object_id = behavior.new_id()
             elif action == "<reuse>":
-                del conflicts.objects[obj.object_id]
+                shared_obj = behavior.objects[obj.object_id]
+                solution.objects[obj.object_id] = shared_obj
             elif action == "<skip>":
-                # Don't use None so objects.get() can tell if a mapping exists
-                conflicts.objects[obj.object_id] = ""
+                solution.objects[obj.object_id] = None
             else:
                 raise ValueError(f"Invalid action for object {obj}: {action}")
 
-        for obj, action in conflicts.objects.items():
+        for obj in conflicts.objects.values():
             # Fix any pointers pointing to conflicting objects
             ptr: HkbPointer
             for ptr in obj.find_fields_by_type(HkbPointer):
                 target_id = ptr.get_value()
-                new_id = conflicts.objects.get(target_id)
-                if new_id is not None:
-                    ptr.set_value(new_id)
+                if target_id in solution.objects:
+                    new_target = solution.objects[target_id]
+                    ptr.set_value(new_target)
 
             # Type-specific fixes
 
@@ -263,6 +280,7 @@ def resolve_conflicts(
             if obj.type_name == "hkbStateMachine::StateInfo":
                 obj_state_id = obj["stateId"].get_value()
                 new_id = conflicts.state_ids.get(obj_state_id)
+                # TODO create new state_id if <new>
                 if new_id is not None:
                     obj["stateId"].set_value(new_id)
 
@@ -315,13 +333,14 @@ def resolve_conflicts(
 def resolve_merge_dialog(
     behavior: HavokBehavior,
     xml: ET.Element,
+    target_pointer: HkbPointer,
     conflicts: HierarchyConflicts,
     undo_manager: UndoManager,
     *,
     tag: str = None,
 ) -> None:
     def resolve():
-        resolve_conflicts(behavior, conflicts, undo_manager)
+        resolve_conflicts(behavior, target_pointer, conflicts, undo_manager)
         # TODO callback
 
     def close():

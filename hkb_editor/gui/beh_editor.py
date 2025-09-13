@@ -905,7 +905,7 @@ class BehaviorEditor(GraphEditor):
             return obj
 
         return next(
-            (sm for sm in self.beh.find_parent_object_for(for_object_id, sm_type)), None
+            (sm for sm in self.beh.find_hierarchy_parent_for(for_object_id, sm_type)), None
         )
 
     def find_lost_objects(self) -> list[str]:

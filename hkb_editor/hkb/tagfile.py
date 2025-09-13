@@ -63,7 +63,7 @@ class Tagfile:
 
         return None
 
-    def find_record_for(self, item: "XmlValueHandler" | ET._Element) -> "HkbRecord":
+    def find_object_for(self, item: "XmlValueHandler" | ET._Element) -> "HkbRecord":
         if isinstance(item, XmlValueHandler):
             item = item.element
 
@@ -118,7 +118,7 @@ class Tagfile:
             if obj.type_id in compatible:
                 yield obj
 
-    def find_parent_object_for(
+    def find_hierarchy_parent_for(
         self, object_id: str, parent_type: str
     ) -> Generator["HkbRecord", None, None]:
         candidates = [object_id]
