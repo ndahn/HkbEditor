@@ -27,7 +27,6 @@ class GraphWidget:
         rainbow_edges: bool = False,
         select_enabled: bool = True,
         hover_enabled: bool = True,
-        single_branch_mode: bool = True,
         width: int = 800,
         height: int = 800,
         tag: str = None,

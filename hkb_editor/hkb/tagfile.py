@@ -1,4 +1,5 @@
 from typing import Callable, Generator, TYPE_CHECKING, Any
+
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
 
@@ -6,7 +7,7 @@ from .type_registry import TypeRegistry
 from .query import query_objects
 
 if TYPE_CHECKING:
-    from .hkb_types import HkbRecord
+    from .hkb_types import HkbRecord, HkbPointer, XmlValueHandler
 
 
 class Tagfile:
@@ -25,13 +26,13 @@ class Tagfile:
 
         # Some versions of HKLib seem to decompile floats with commas
         self.floats_use_commas = bool(root.xpath("(//real[contains(@dec, ',')])[1]"))
-        
+
         self.type_registry = TypeRegistry()
         self.type_registry.load_types(root)
 
         # TODO hide behind a property, changing this dict should also affect the xml
         self.objects = {
-            obj.attrib["id"]: HkbRecord.from_object(self, obj)
+            obj.get("id"): HkbRecord.from_object(self, obj)
             for obj in root.findall(".//object")
         }
 
@@ -62,7 +63,49 @@ class Tagfile:
 
         return None
 
-    # TODO include subtypes
+    def find_record_for(self, item: "XmlValueHandler" | ET._Element) -> "HkbRecord":
+        if isinstance(item, XmlValueHandler):
+            item = item.element
+
+        parent: ET._Element = item
+
+        while parent and not parent.tag == "object":
+            parent = parent.getparent()
+
+        if parent:
+            oid = parent.get("id")
+            return self.objects.get(oid)
+
+        return None
+
+    def find_referees(
+        self, object_id: str | "HkbRecord"
+    ) -> Generator["HkbPointer", None, None]:
+        from .hkb_types import HkbPointer
+
+        if isinstance(object_id, HkbRecord):
+            object_id = object_id.object_id
+
+        if not object_id:
+            return
+
+        # We could search for the pointer itself, but to return it properly we need at
+        # the very least the pointer's specific type, for which we need the parent record
+        for xmlrecord in self._tree.xpath(f"/*/object[.//pointer[@id='{object_id}']]"):
+            record = self.objects[xmlrecord.get("id")]
+            ptr: HkbPointer
+
+            for ptr in record.find_fields_by_type(HkbPointer):
+                if ptr.get_value == object_id:
+                    yield ptr
+
+    def find_first_by_type_name(
+        self, type_name: str, default: Any = None
+    ) -> "HkbRecord":
+        # Used often enough to create a helper
+        type_id = self.type_registry.find_first_type_by_name(type_name)
+        return next(self.find_objects_by_type(type_id), default)
+
     def find_objects_by_type(
         self, type_id: str, include_derived: bool = False
     ) -> Generator["HkbRecord", None, None]:
@@ -75,14 +118,7 @@ class Tagfile:
             if obj.type_id in compatible:
                 yield obj
 
-    def find_first_by_type_name(
-        self, type_name: str, default: Any = None
-    ) -> "HkbRecord":
-        # Used often enough to create a helper
-        type_id = self.type_registry.find_first_type_by_name(type_name)
-        return next(self.find_objects_by_type(type_id), default)
-
-    def find_parents_by_type(
+    def find_parent_object_for(
         self, object_id: str, parent_type: str
     ) -> Generator["HkbRecord", None, None]:
         candidates = [object_id]
@@ -97,15 +133,15 @@ class Tagfile:
             )
 
             for parent_elem in parents:
-                pid = parent_elem.attrib["id"]
+                oid = parent_elem.get("id")
 
-                if parent_elem.attrib["typeid"] == parent_type:
-                    yield self.objects[pid]
+                if parent_elem.get("typeid") == parent_type:
+                    yield self.objects[oid]
 
                 # Parent didn't match, but might still have a matching parent
-                if pid not in visited:
-                    candidates.append(pid)
-                    visited.add(pid)
+                if oid not in visited:
+                    candidates.append(oid)
+                    visited.add(oid)
 
         return None
 
@@ -147,12 +183,12 @@ class Tagfile:
 
         if parent is None:
             parent = self._tree.getroot()
-        
+
         # Make sure to not leave an empty <object> tag behind!
         if parent.tag == "object":
             object_elem = parent
             parent.getparent().remove(object_elem)
         else:
             parent.remove(obj.element)
-        
+
         return obj

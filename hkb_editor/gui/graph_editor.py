@@ -292,7 +292,6 @@ class GraphEditor:
                 on_node_selected=self.on_node_selected,
                 node_menu_func=self.open_node_menu,
                 get_node_frontpage=self.get_node_frontpage,
-                single_branch_mode=True,
                 tag=f"{self.tag}_canvas",
             )
 

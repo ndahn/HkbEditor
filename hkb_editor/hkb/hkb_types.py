@@ -181,14 +181,18 @@ class HkbPointer(XmlValueHandler):
     def subtype_name(self) -> str:
         return self.tagfile.type_registry.get_name(self.subtype)
 
-    def will_accept(self, record: "HkbRecord", check_subtypes: bool = True) -> bool:
-        if self.subtype == record.type_id:
+    def will_accept(
+        self, type_id: "HkbRecord" | str, check_subtypes: bool = True
+    ) -> bool:
+        if isinstance(type_id, HkbRecord):
+            type_id = HkbRecord.type_id
+
+        if self.subtype == type_id:
             return True
 
         if (
             check_subtypes
-            and record.type_id
-            in self.tagfile.type_registry.get_compatible_types(self.subtype)
+            and type_id in self.tagfile.type_registry.get_compatible_types(self.subtype)
         ):
             return True
 
@@ -205,7 +209,9 @@ class HkbPointer(XmlValueHandler):
         if isinstance(value, HkbRecord) and value.object_id:
             # verify the record is compatible
             if not self.will_accept(value):
-                raise ValueError(f"Incompatible record type {value.type_name}, expected {self.subtype_name}")
+                raise ValueError(
+                    f"Incompatible record type {value.type_name}, expected {self.subtype_name}"
+                )
             value = value.object_id
         elif isinstance(value, HkbPointer):
             value = value.get_value()
@@ -245,12 +251,12 @@ class HkbArray(XmlValueHandler, Generic[T]):
 
         elem_type_id = None
         temp_type = type_id
-        
+
         while elem_type_id is None:
             # Sometimes the subtype is inherited (e.g. type85/hkVector4 in Sekiro)
             elem_type_id = tagfile.type_registry.get_subtype(temp_type)
             temp_type = tagfile.type_registry.get_parent(temp_type)
-        
+
         elem = ET.Element("array", count=str(len(items)), elementtypeid=elem_type_id)
         elem.extend(item.element for item in items)
 
@@ -303,7 +309,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
                 raise IndexError(f"Invalid index {key}")
 
             return wrap_element(self.tagfile, item, self.element_type_id)
-        
+
         elif isinstance(key, slice):
             return [self[i] for i in range(*key.indices(len(self)))]
 
@@ -350,7 +356,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
             return HkbPointer.new(self.tagfile, self.element_type_id, value.object_id)
 
         if isinstance(value, XmlValueHandler):
-            # Always make a copy to avoid moving the xml element away from its 
+            # Always make a copy to avoid moving the xml element away from its
             # original parent
             return value.new(self.tagfile, value.type_id, value.get_value())
 
@@ -483,7 +489,7 @@ class HkbRecord(XmlValueHandler):
     def set_value(self, values: "HkbRecord | dict[str, XmlValueHandler]") -> None:
         if isinstance(values, HkbRecord):
             values = values.get_value()
-        
+
         for key, val in values.items():
             self[key] = val
 
@@ -541,6 +547,18 @@ class HkbRecord(XmlValueHandler):
         # Just delegate to the value handler
         handler = self.get_field(path, resolve=False)
         handler.set_value(value)
+
+    def find_fields_by_type(self, field_type: T) -> Generator[T, None, None]:
+        todo: list[HkbRecord] = [self]
+
+        while todo:
+            rec = todo.pop()
+            for field_name in rec.fields:
+                field = rec[field_name]
+                if isinstance(field, HkbRecord):
+                    todo.append(field)
+
+                yield field
 
     def __getitem__(self, name: str) -> XmlValueHandler:
         ftype = self.get_field_type(name)
