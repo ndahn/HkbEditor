@@ -34,9 +34,9 @@ _animation_attributes = {
 
 @dataclass
 class HierarchyConflicts:
-    events: dict[tuple[int, str], str] = None
-    variables: dict[tuple[int, str], str] = None
-    animations: dict[tuple[int, str], str] = None
+    events: dict[tuple[int, str | int], str] = None
+    variables: dict[tuple[int, str | int], str] = None
+    animations: dict[tuple[int, str | int], str] = None
     objects: dict[HkbRecord, str] = None
     state_ids: dict[int, int] = None
 
@@ -131,13 +131,15 @@ def paste_hierarchy(
     if conflicts:
         resolve_merge_dialog(behavior, xml, conflicts, undo_manager)
 
-    # TODO add objects, apply remappings according to conflict solutions
+    # TODO add objects
 
 
-def find_conflicts(behavior: HavokBehavior, hierarchy: ET.Element) -> HierarchyConflicts:
+def find_conflicts(
+    behavior: HavokBehavior, hierarchy: ET.Element
+) -> HierarchyConflicts:
     conflicts = HierarchyConflicts({}, {}, {}, {})
-    
-    # For events, variables and animations we check if there is already one with a matching name. 
+
+    # For events, variables and animations we check if there is already one with a matching name.
     # If there is no match it probably has to be created. If it exists but the index is different
     # we still treat it as a conflict, albeit one that has a likely solution.
     for evt in hierarchy.findall(".//event"):
@@ -166,19 +168,22 @@ def find_conflicts(behavior: HavokBehavior, hierarchy: ET.Element) -> HierarchyC
 
     for xmlobj in reversed(hierarchy.find("objects").getchildren()):
         obj = HkbRecord.from_object(behavior, xmlobj)
-        
+
+        # Find pointers in the behavior referencing this object's ID. If more than one
+        # other object is already referencing it, it is most likely a reused object like
+        # e.g. DefaultTransition.
         if obj.object_id in behavior.objects:
-            # Find pointers in the behavior referencing this object's ID. If more than one other 
-            # object is already referencing it, it is most likely a reused object like e.g.
-            # DefaultTransition.
             references = list(behavior.find_referees(obj))
             default = "<reuse>" if len(references) > 1 else "<new>"
 
             conflicts.objects[obj] = default
 
-        # type-specific conflicts
+        # Type-specific conflicts
+
+        # hkbStateMachine::StateInfo
+        #   - stateId
         if obj.type_name == "hkbStateMachine::StateInfo":
-            obj_state_id = obj["stateId"]
+            obj_state_id = obj["stateId"].get_value()
             statemachine = behavior.find_parent_object_for(obj.object_id, sm_type)
             state_ptr: HkbPointer
 
@@ -186,10 +191,125 @@ def find_conflicts(behavior: HavokBehavior, hierarchy: ET.Element) -> HierarchyC
                 state = state_ptr.get_target()
                 target_state_id = state["stateId"].get_value()
                 if target_state_id == obj_state_id:
+                    # TODO these should be specific to the statemachine
                     conflicts.state_ids[obj_state_id] = "<new>"
                     break
 
+        # These will need some corrections, but will not result in additional conflicts
+        # - hkbStateMachine
+        # - hkbStateMachine::TransitionInfoArray
+        # - hkbClipGenerator
+
     return conflicts
+
+
+def resolve_conflicts(
+    behavior: HavokBehavior, conflicts: HierarchyConflicts, undo_manager: UndoManager
+):
+    with undo_manager.combine():
+        # TODO add undo actions
+        # Create missing events, variables and animations. If the value is not "<new>" we can
+        # expect that a mapping to another value has been applied
+        for (idx, evt), new_idx in conflicts.events.items():
+            if new_idx == "<new>":
+                new_idx = behavior.create_event(evt)
+                conflicts.events[(idx, evt)] = new_idx
+            elif not isinstance(new_idx, int):
+                raise ValueError(f"Invalid mapping for event {idx} ({evt}): {new_idx}")
+
+        for (idx, var), new_idx in conflicts.variables.items():
+            if new_idx == "<new>":
+                new_idx = behavior.create_variable(var)
+                conflicts.variables[(idx, var)] = new_idx
+            elif not isinstance(new_idx, int):
+                raise ValueError(f"Invalid mapping for variable {idx} ({var}): {new_idx}")
+
+        for (idx, anim), new_idx in conflicts.animations.items():
+            if new_idx == "<new>":
+                new_idx = behavior.create_animation(anim)
+                conflicts.animations[(idx, anim)] = new_idx
+            elif not isinstance(new_idx, int):
+                raise ValueError(f"Invalid mapping for animation {idx} ({anim}): {new_idx}")
+
+        # Handle conflicting objects
+        # Iterate over a list of keys so we can remove items that are no longer in conflict
+        for obj in list[conflicts.objects.keys()]:
+            action = conflicts.objects[obj]
+            if action == "<new>":
+                new_id = behavior.new_id()
+                conflicts.objects[obj.object_id] = new_id
+                obj.object_id = new_id
+            elif action == "<reuse>":
+                del conflicts.objects[obj.object_id]
+            elif action == "<skip>":
+                # Don't use None so objects.get() can tell if a mapping exists
+                conflicts.objects[obj.object_id] = ""
+            else:
+                raise ValueError(f"Invalid action for object {obj}: {action}")
+
+        for obj, action in conflicts.objects.items():
+            # Fix any pointers pointing to conflicting objects
+            ptr: HkbPointer
+            for ptr in obj.find_fields_by_type(HkbPointer):
+                target_id = ptr.get_value()
+                new_id = conflicts.objects.get(target_id)
+                if new_id is not None:
+                    ptr.set_value(new_id)
+
+            # Type-specific fixes
+
+            # hkbStateMachine::StateInfo
+            #   - stateId
+            if obj.type_name == "hkbStateMachine::StateInfo":
+                obj_state_id = obj["stateId"].get_value()
+                new_id = conflicts.state_ids.get(obj_state_id)
+                if new_id is not None:
+                    obj["stateId"].set_value(new_id)
+
+            # hkbStateMachine::TransitionInfoArray
+            #   - transitions:*/toStateId
+            #   - transitions:*/fromNestedStateId
+            #   - transitions:*/toNestedStateId
+            elif obj.type_name == "hkbStateMachine::TransitionInfoArray":
+                transition_ptr: HkbPointer
+
+                for transition_ptr in obj["transitions"]:
+                    transition = transition_ptr.get_target()
+
+                    for attr in ["toStateId", "fromNestedStateId", "toNestedStateId"]:
+                        attr_id = transition[attr].get_value()
+                        new_id = conflicts.state_ids.get(attr_id)
+                        if new_id is not None:
+                            transition[attr].set_value(new_id)
+
+            # - hkbStateMachine
+            #   - eventToSendWhenStateOrTransitionChanges/id (?)
+            #   - startStateId
+            elif obj.type_name == "hkbStateMachine":
+                transition_change_event = obj.get_field("eventToSendWhenStateOrTransitionChanges/id", resolve=True)
+                start_state_id = obj["startStateId"].get_value()
+
+                if transition_change_event >= 0:
+                    new_event = conflicts.events.get(transition_change_event)
+                    if new_event is not None:
+                        obj.set_field("eventToSendWhenStateOrTransitionChanges/id", new_event)
+
+                if start_state_id >= 0:
+                    new_id = conflicts.state_ids.get(start_state_id)
+                    if new_id is not None:
+                        obj["startStateId"].set_value(new_id)
+                
+            # - hkbClipGenerator
+            #   - animationInternalId
+            elif obj.type_name == "hkbClipGenerator":
+                anim_idx = obj["animationInternalId"].get_value()
+                new_idx = conflicts.animations.get(anim_idx)
+                
+                if new_idx is not None:
+                    obj["animationInternalId"].set_value(new_idx)
+                    # While the index into the animations array may have changed, we can assume
+                    # that the animation name has not, so animationName and the clip's name don't
+                    # need to be changed. The same is true for the CMSG owning this clip.
 
 
 def resolve_merge_dialog(
@@ -201,48 +321,11 @@ def resolve_merge_dialog(
     tag: str = None,
 ) -> None:
     def resolve():
-        with undo_manager.combine():
-            # TODO add undo actions
-            # Create missing events, variables and animations. If the value is not "<new>" we can 
-            # expect that a mapping to another value has been applied
-            for (idx, evt), new_idx in conflicts.events.items():
-                if new_idx == "<new>":
-                    new_idx = behavior.create_event(evt)
-                    conflicts.events[(idx, evt)] = new_idx
+        resolve_conflicts(behavior, conflicts, undo_manager)
+        # TODO callback
 
-            for (idx, var), new_idx in conflicts.variables.items():
-                if new_idx == "<new>":
-                    new_idx = behavior.create_variable(var)
-                    conflicts.variables[(idx, var)] = new_idx
-
-            for (idx, anim), new_idx in conflicts.animations.items():
-                if new_idx == "<new>":
-                    new_idx = behavior.create_animation(anim)
-                    conflicts.animations[(idx, anim)] = new_idx
-            
-            # Handle conflicting objects
-            for obj, action in conflicts.objects.items():
-                if action == "<new>":
-                    new_id = behavior.new_id()
-                    # TODO how to handle this here?
-                    conflicts.objects[obj.object_id] = new_id
-                    obj.object_id = new_id
-                elif action == "<reuse>":
-                    conflicts.objects[obj.object_id] = obj.object_id
-                elif action == "<skip>":
-                    conflicts.objects[obj.object_id] = None
-
-            # TODO handlers for specific types
-            # - hkbClipGenerator names
-            # - CMSG animId
-            # - hkbStateMachine::StateInfo stateId
-            # - hkbStateMachine::TransitionInfoArray
-            #   - transitions:*/toStateId
-            #   - transitions:*/fromNestedStateId
-            #   - transitions:*/toNestedStateId
-            # - hkbStateMachine
-            #   - eventToSendWhenStateOrTransitionChanges/id (?)
-            #   - startStateId
+    def close():
+        dpg.delete_item(dialog)
 
     # Window content
     with dpg.window(
@@ -250,7 +333,7 @@ def resolve_merge_dialog(
         height=400,
         label="Merge Hierarchy",
         modal=False,
-        on_close=lambda: dpg.delete_item(dialog),
+        on_close=close,
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
@@ -271,7 +354,9 @@ def resolve_merge_dialog(
                             for _, name in conflicts.events.keys():
                                 with dpg.table_row():
                                     dpg.add_checkbox(label=name, default_value=True)
-                                    dpg.add_combo(["Create", "Remap"], callback=None)  # TODO cb
+                                    dpg.add_combo(
+                                        ["Create", "Remap"], callback=None
+                                    )  # TODO cb
 
                 # TODO variables
                 # TODO animations
