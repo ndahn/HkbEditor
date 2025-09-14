@@ -1,7 +1,10 @@
 from typing import Callable, Generator, TYPE_CHECKING, Any
+import logging
+from collections import deque
 
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
+import networkx as nx
 
 from .type_registry import TypeRegistry
 from .query import query_objects
@@ -50,6 +53,45 @@ class Tagfile:
         self._tree.write(file_path)
         self.file = file_path
 
+    def build_graph(self, root_id: str):
+        g = nx.DiGraph()
+
+        visited = set()
+        todo: deque[tuple[str, ET.Element]] = deque()
+
+        def expand(elem: ET.Element, parent_id: str) -> None:
+            if parent_id in visited:
+                return
+
+            todo.extend(
+                (parent_id, ptr)
+                for ptr in elem.findall(".//pointer")
+                if ptr.attrib["id"] != "object0"
+            )
+            visited.add(parent_id)
+
+        root = self.objects[root_id]
+        expand(root.element, root_id)
+        g.add_node(root_id)
+
+        logger = logging.getLogger()
+
+        while todo:
+            # popleft: breadth first, pop(right): depth first
+            parent_id, pointer_elem = todo.pop()
+            pointer_id = pointer_elem.attrib["id"]
+
+            obj = self.objects.get(pointer_id)
+            if obj:
+                g.add_edge(parent_id, pointer_id)
+                expand(obj.element, obj.object_id)
+            else:
+                logger.warning(
+                    f"Object {parent_id} is referencing non-existing object {pointer_id}"
+                )
+
+        return g
+
     def retrieve_object(self, object_id: str) -> "HkbRecord":
         from .hkb_types import HkbRecord
 
@@ -64,6 +106,8 @@ class Tagfile:
         return None
 
     def find_object_for(self, item: "XmlValueHandler" | ET._Element) -> "HkbRecord":
+        from .hkb_types import XmlValueHandler
+        
         if isinstance(item, XmlValueHandler):
             item = item.element
 
@@ -119,8 +163,13 @@ class Tagfile:
                 yield obj
 
     def find_hierarchy_parent_for(
-        self, object_id: str, parent_type: str
+        self, object_id: "HkbRecord" | str, parent_type: str
     ) -> Generator["HkbRecord", None, None]:
+        from .hkb_types import HkbRecord
+
+        if isinstance(object_id, HkbRecord):
+            object_id = object_id.object_id
+
         candidates = [object_id]
         visited = set(candidates)
 
@@ -150,8 +199,18 @@ class Tagfile:
         query_str: str,
         *,
         object_filter: Callable[["HkbRecord"], bool] = None,
+        search_root: HkbRecord | str = None,
     ) -> Generator["HkbRecord", None, None]:
-        yield from query_objects(self.objects.values(), query_str, object_filter)
+        if search_root:
+            if isinstance(search_root, HkbRecord):
+                search_root = search_root.object_id
+
+            g = self.build_graph(search_root)
+            objects = [self.objects[node] for node in g.nodes()]
+        else:
+            objects = self.objects.values()
+
+        yield from query_objects(objects, query_str, object_filter)
 
     def new_id(self, offset: int = 0) -> str:
         new_id = self._next_object_id + offset

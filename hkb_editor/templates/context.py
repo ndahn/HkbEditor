@@ -140,7 +140,7 @@ class TemplateContext(CommonActionsMixin):
         """
         return list(self._behavior.query(query))
 
-    def find(self, query: str, default: Any = _undefined) -> HkbRecord:
+    def find(self, query: str, default: Any = _undefined, start_from: HkbRecord | str = None) -> HkbRecord:
         """Returns the first object matching the specified query.
 
         Parameters
@@ -149,6 +149,8 @@ class TemplateContext(CommonActionsMixin):
             The query string. See :py:meth:`hkb.Tagfile.query` for details.
         default : Any
             The value to return if no match is found.
+        start_from : HkbRecord | str
+            Only search part of the hierarchy starting at this node.
 
         Raises
         ------
@@ -161,7 +163,7 @@ class TemplateContext(CommonActionsMixin):
             A matching :py:class:`HkbRecord` object.
         """
         try:
-            return next(self._behavior.query(query))
+            return next(self._behavior.query(query, search_root=start_from))
         except StopIteration:
             if default != _undefined:
                 return default

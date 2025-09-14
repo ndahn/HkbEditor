@@ -45,6 +45,7 @@ def run(
     """
     gesture_base_name = f"Gesture_{gesture_id:03}"
 
+    # TODO use SM to speed up other searches
     gesture_sm = ctx.find("name:EventGesture_SM")
     state1_id = ctx.get_next_state_id(gesture_sm)
     state2_id = state1_id + 1

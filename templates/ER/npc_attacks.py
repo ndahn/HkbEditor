@@ -30,7 +30,7 @@ def run(
     num_attacks : int, optional
         How many new CMSGs to generate.
     """
-    statemachine = ctx.find("Attack_SM")
+    statemachine = ctx.find("name:Attack_SM")
     base_state_id = ctx.get_next_state_id(statemachine)
 
     for i in range(num_attacks):

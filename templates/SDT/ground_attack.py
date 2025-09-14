@@ -30,7 +30,7 @@ def run(
     event : Event
         The event to trigger the animation.
     """
-    sm = ctx.find("GroundAttack_SM")
+    sm = ctx.find("name:GroundAttack_SM")
     state_id = ctx.get_next_state_id(sm)
 
     default_transition = ctx.find("TaeBlend")

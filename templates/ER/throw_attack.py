@@ -29,11 +29,12 @@ def run(
     animation : Animation
         The animation to use.
     """
+    throw_sm = ctx.find("name:Throw_SM")
     throw_id = int(animation.name.split("_")[1])
 
     try:
         # Check if the throw ID is already in use somewhere
-        ctx.find(f"type_name:hkbBlenderGeneratorChild weight:{throw_id}")
+        ctx.find(f"type_name:hkbBlenderGeneratorChild weight:{throw_id}", start_from=throw_sm)
         raise ValueError(f"throw_id {throw_id} already in use")
     except KeyError:
         pass
@@ -52,5 +53,5 @@ def run(
         weight=throw_id,
     )
 
-    parent = ctx.find("name:ThrowAtk_Blend")
+    parent = ctx.find("name:ThrowAtk_Blend", start_from=throw_sm)
     ctx.array_add(parent, "children", blender)

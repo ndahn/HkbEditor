@@ -58,6 +58,7 @@ def run(
         animeEndEventType=AnimeEndEventType.NONE,
     )
     # Item_SM
+    # TODO searches can be accelerated by searching from the appropriate statemachine
     selftrans_gen = ctx.find("name:ItemOneshot_SelfTrans type_name:hkbBlenderGenerator")
     ctx.array_add(selftrans_gen, "children", selftrans_blend)
 
