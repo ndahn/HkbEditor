@@ -512,6 +512,11 @@ class HkbRecord(XmlValueHandler):
 
         return None
 
+    def set_field(self, path: str, value: XmlValueHandler | Any) -> None:
+        # Just delegate to the value handler
+        handler = self.get_field(path, resolve=False)
+        handler.set_value(value)
+
     def get_field(
         self,
         path: str,
@@ -543,10 +548,74 @@ class HkbRecord(XmlValueHandler):
 
         return obj
 
-    def set_field(self, path: str, value: XmlValueHandler | Any) -> None:
-        # Just delegate to the value handler
-        handler = self.get_field(path, resolve=False)
-        handler.set_value(value)
+    def get_fields(
+        self,
+        paths: list[str] | str,
+        *,
+        resolve: bool = False,
+        follow_pointers: bool = True,
+    ) -> dict[str, list[XmlValueHandler | Any]]:
+        """Special version of get_fields that can handle multiple paths and also handles * asterisk wildcards. 
+
+        Parameters
+        ----------
+        paths : list[str] | str
+            Paths to resolve.
+        resolve : bool, optional
+            Whether to resolve XmlValueHelper values or return them as objects.
+        follow_pointers : bool, optional
+            Whether to follow pointers during recursion.
+
+        Returns
+        -------
+        dict[str, list[XmlValueHandler | Any]]
+            A mapping from paths to results.
+
+        Raises
+        ------
+        KeyError
+            If one of the paths could not be resolved.
+        """
+        def _get_fields_recursive(obj, keys, key_index):
+            if key_index >= len(keys):
+                if resolve:
+                    return [obj.get_value()]
+                return [obj]
+            
+            results = []
+            k = keys[key_index]
+            
+            if follow_pointers and isinstance(obj, HkbPointer):
+                obj = obj.get_target()
+            
+            if ":" in k:
+                field, idx = k.split(":")
+                array = obj[field]
+                
+                if idx == "*":
+                    # Wildcard: recurse for all indices
+                    for i in range(len(array)):
+                        results.extend(_get_fields_recursive(array[i], keys, key_index + 1))
+                else:
+                    # Specific index
+                    results.extend(_get_fields_recursive(array[int(idx)], keys, key_index + 1))
+            else:
+                # Regular field access
+                results.extend(_get_fields_recursive(obj[k], keys, key_index + 1))
+            
+            return results
+        
+        if isinstance(paths, str):
+            paths = [paths]
+
+        ret = {}
+
+        for path in paths:
+            keys = path.split("/")
+            try:
+                ret[path] = _get_fields_recursive(self, keys, 0)
+            except (AttributeError, KeyError, IndexError):
+                raise KeyError(f"Failed to resolve path '{path}'")
 
     def find_fields_by_type(self, field_type: T) -> Generator[T, None, None]:
         todo: list[HkbRecord] = [self]
