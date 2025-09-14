@@ -23,7 +23,7 @@ def run(
     Note that jump attacks will only be registered if right, both, and/or dual are checked.
 
     Author: Managarm
-    
+
     Status: confident
 
     Parameters
@@ -54,11 +54,16 @@ def run(
     if not 0 <= category <= 999:
         raise ValueError("Category must be in [0..999]")
 
+    attack_sm = ctx.find("name:Attack_SM")
+
     def register_anim(anim_id: int):
         anim = ctx.animation(f"{cat}_{anim_id:06d}")
 
         # Find the CMSG the animation should be registered in
-        cmsg = ctx.find(f"type_name:CustomManualSelectorGenerator animId:{anim_id}")
+        cmsg = ctx.find(
+            f"type_name:CustomManualSelectorGenerator animId:{anim_id}",
+            start_from=attack_sm,
+        )
         if not cmsg:
             raise ValueError(f"Could not find CMSG for animId={anim_id}")
 
@@ -66,7 +71,7 @@ def run(
             if ptr.get_target()["animationName"] == anim.name:
                 # Clip already exists
                 return
-        
+
         if True:
             clip = ctx.new_clip(anim)
             cmsg["generators"].append(clip)
@@ -74,11 +79,45 @@ def run(
     cat = f"a{category:03d}"
 
     if right:
-        for anim_id in [30000, 30010, 30020, 30030, 30040, 30050, 30200, 30210, 30300, 30400, 30500, 30501, 30505, 30510, 30515, 30700]:
+        for anim_id in [
+            30000,
+            30010,
+            30020,
+            30030,
+            30040,
+            30050,
+            30200,
+            30210,
+            30300,
+            30400,
+            30500,
+            30501,
+            30505,
+            30510,
+            30515,
+            30700,
+        ]:
             register_anim(anim_id)
 
     if both:
-        for anim_id in [32000, 32010, 32020, 32032, 32040, 32050, 32200, 32210, 32320, 32400, 32500, 32501, 32505, 32510, 32515, 32700]:
+        for anim_id in [
+            32000,
+            32010,
+            32020,
+            32032,
+            32040,
+            32050,
+            32200,
+            32210,
+            32320,
+            32400,
+            32500,
+            32501,
+            32505,
+            32510,
+            32515,
+            32700,
+        ]:
             register_anim(anim_id)
 
     if dual:
@@ -88,7 +127,7 @@ def run(
     if left:
         for anim_id in [35000, 35010, 35020, 35030, 35040, 35050, 35200]:
             register_anim(anim_id)
-    
+
     if backstab:
         for anim_id in [31700, 31710, 31719, 31720, 31730, 31750, 31760]:
             register_anim(anim_id)
@@ -111,15 +150,52 @@ def run(
 
     if jump:
         if right:
-            for anim_id in [31030, 31040, 31050, 31060, 31070, 31230, 31240, 31250, 31260, 31270]:
+            for anim_id in [
+                31030,
+                31040,
+                31050,
+                31060,
+                31070,
+                31230,
+                31240,
+                31250,
+                31260,
+                31270,
+            ]:
                 register_anim(anim_id)
         if both:
-            for anim_id in [33030, 33040, 33050, 33060, 33070, 33230, 33240, 33250, 33260, 33270]:
+            for anim_id in [
+                33030,
+                33040,
+                33050,
+                33060,
+                33070,
+                33230,
+                33240,
+                33250,
+                33260,
+                33270,
+            ]:
                 register_anim(anim_id)
         if dual:
             for anim_id in [34530, 34540, 34550, 34560, 34570]:
                 register_anim(anim_id)
 
     if ride:
-        for anim_id in [38000, 38010, 38020, 38100, 38110, 38200, 38300, 39000, 39010, 39020, 39100, 39110, 39200, 39300]:
+        for anim_id in [
+            38000,
+            38010,
+            38020,
+            38100,
+            38110,
+            38200,
+            38300,
+            39000,
+            39010,
+            39020,
+            39100,
+            39110,
+            39200,
+            39300,
+        ]:
             register_anim(anim_id)
