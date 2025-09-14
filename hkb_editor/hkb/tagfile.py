@@ -228,6 +228,9 @@ class Tagfile:
             else:
                 id = self.new_id()
 
+        if id in self.objects:
+            raise ValueError(f"An object with ID {id} already exists")
+            
         record.object_id = id
         self._tree.getroot().append(record.as_object())
         self.objects[id] = record

@@ -56,33 +56,6 @@ class MergeHierarchy:
     state_ids: dict[str, Resolution] = field(default_factory=dict)
 
 
-@dataclass
-class HierarchyConflicts:
-    events: dict[tuple[int, str], str | int] = field(default_factory=dict)
-    variables: dict[tuple[int, str], str | int] = field(default_factory=dict)
-    animations: dict[tuple[int, str], str | int] = field(default_factory=dict)
-    objects: dict[HkbRecord, str] = field(default_factory=dict)
-    state_ids: dict[HkbRecord, str] = field(default_factory=dict)
-
-    def __bool__(self) -> bool:
-        return (
-            self.events
-            or self.variables
-            or self.animations
-            or self.objects
-            or self.state_ids
-        )
-
-
-@dataclass
-class ConflictSolution:
-    events: dict[int, int] = field(default_factory=dict)
-    variables: dict[int, int] = field(default_factory=dict)
-    animations: dict[int, int] = field(default_factory=dict)
-    objects: dict[str, HkbRecord] = field(default_factory=dict)
-    state_ids: dict[int, int] = field(default_factory=dict)
-
-
 def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     g = behavior.build_graph(root_id)
 
@@ -162,6 +135,7 @@ def paste_hierarchy(
     target_pointer: HkbPointer,
     hierarchy: str,
     undo_manager: UndoManager,
+    interactive: bool = True,
 ) -> None:
     try:
         xml = ET.fromstring(hierarchy)
@@ -180,14 +154,19 @@ def paste_hierarchy(
     hierarchy = find_conflicts(behavior, xml)
 
     with undo_manager.combine():
-        resolve_merge_dialog(behavior, xml, target_pointer, hierarchy)
+        def add_objects():
+            # Events, variables, etc. have already been created as needed, 
+            # just need to add the objects
+            for res in hierarchy.objects.values():
+                obj: HkbRecord = res.result
+                if obj:
+                    behavior.add_object(obj)
 
-        # Events, variables, etc. have already been created as needed, 
-        # just need to add the objects
-        for res in hierarchy.objects.values():
-            obj: HkbRecord = res.result
-            if obj:
-                behavior.add_object(obj)
+        if interactive:
+            resolve_merge_dialog(behavior, xml, target_pointer, hierarchy, add_objects)
+        else:
+            resolve_conflicts(behavior, target_pointer, hierarchy)
+            add_objects()
 
 
 def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
@@ -239,7 +218,8 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
     for xmlobj in reversed(xml.find("objects").getchildren()):
         try:
             obj = HkbRecord.from_object(behavior, xmlobj)
-            # TODO verify object has the expected fields
+            # Verify object has the expected fields
+            behavior.type_registry.verify_object(obj)
         except Exception as e:
             raise ValueError(f"Object {xmlobj.get("id")} with type_id {xmlobj.get("typeid")} does not match this behavior's type registry: {e}")
 
@@ -345,8 +325,6 @@ def resolve_conflicts(
             resolution.result = resolution.original
         elif resolution.action == "<reuse>":
             resolution.result = behavior.objects[object_id]
-        elif resolution.action == "<keep>":
-            resolution.result = resolution.original
         elif resolution.action == "<skip>":
             resolution.result = None
         else:
@@ -477,12 +455,13 @@ def resolve_merge_dialog(
     xml: ET.Element,
     target_pointer: HkbPointer,
     hierarchy: MergeHierarchy,
+    callback: Callable[[], None],
     *,
     tag: str = None,
 ) -> None:
     def resolve():
         resolve_conflicts(behavior, target_pointer, hierarchy)
-        # TODO callback
+        callback()
 
     def close():
         dpg.delete_item(dialog)

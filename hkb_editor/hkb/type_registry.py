@@ -1,7 +1,10 @@
-from typing import Any, Generator
+from typing import TYPE_CHECKING, Any, Generator
 from logging import getLogger
 from functools import cache
 from lxml import etree as ET
+
+if TYPE_CHECKING:
+    from .hkb_types import HkbRecord
 
 
 _logger = getLogger(__name__)
@@ -131,3 +134,17 @@ class TypeRegistry:
                     parents.append(tid)
 
         return res
+
+    def verify_object(self, obj: "HkbRecord") -> None:
+        elem = obj.element
+        fields = self.get_field_types(obj.type_id).keys()
+
+        missing = [f for f in fields if not next(elem.xpath(".//field[@name='{f}']"), None)]
+        extra = [c.get("name") for c in elem.xpath(".//field") if c.get("name") not in fields]
+        # TODO check for fields with wrong type
+
+        if missing or extra:
+            raise ValueError(f"""\
+Failed to verify object {obj.object_id} ({obj.type_id} / {obj.type_name})
+ - missing fields: {missing}
+ - extra fields: {extra}""")
