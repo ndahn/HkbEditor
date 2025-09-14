@@ -555,7 +555,7 @@ class HkbRecord(XmlValueHandler):
         resolve: bool = False,
         follow_pointers: bool = True,
     ) -> dict[str, list[XmlValueHandler | Any]]:
-        """Special version of get_fields that can handle multiple paths and also handles * asterisk wildcards. 
+        """Special version of get_fields that can handle multiple paths and also handles * asterisk wildcards.
 
         Parameters
         ----------
@@ -576,35 +576,48 @@ class HkbRecord(XmlValueHandler):
         KeyError
             If one of the paths could not be resolved.
         """
-        def _get_fields_recursive(obj, keys, key_index):
+
+        def _get_fields_recursive(
+            obj: HkbRecord, keys: list[str], key_index: int, current_path: str
+        ):
             if key_index >= len(keys):
-                if resolve:
-                    return [obj.get_value()]
-                return [obj]
-            
-            results = []
+                value = obj.get_value() if resolve else obj
+                return {current_path: value}
+
+            results = {}
             k = keys[key_index]
-            
+
             if follow_pointers and isinstance(obj, HkbPointer):
                 obj = obj.get_target()
-            
+
             if ":" in k:
                 field, idx = k.split(":")
                 array = obj[field]
-                
+
                 if idx == "*":
                     # Wildcard: recurse for all indices
                     for i in range(len(array)):
-                        results.extend(_get_fields_recursive(array[i], keys, key_index + 1))
+                        key = f"{field}:{i}"
+                        path = f"{current_path}/{key}" if current_path else key
+                        results.update(
+                            _get_fields_recursive(array[i], keys, key_index + 1, path)
+                        )
                 else:
                     # Specific index
-                    results.extend(_get_fields_recursive(array[int(idx)], keys, key_index + 1))
+                    key = f"{field}:{idx}"
+                    path = f"{current_path}/{key}" if current_path else key
+                    results.update(
+                        _get_fields_recursive(
+                            array[int(idx)], keys, key_index + 1, path
+                        )
+                    )
             else:
                 # Regular field access
-                results.extend(_get_fields_recursive(obj[k], keys, key_index + 1))
-            
+                path = f"{current_path}/{k}" if current_path else k
+                results.update(_get_fields_recursive(obj[k], keys, key_index + 1, path))
+
             return results
-        
+
         if isinstance(paths, str):
             paths = [paths]
 
