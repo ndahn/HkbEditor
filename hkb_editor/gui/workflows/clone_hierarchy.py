@@ -1,4 +1,4 @@
-from typing import Any, Callable, Type
+from typing import Any, Callable
 import logging
 from dataclasses import dataclass, field
 from copy import deepcopy
@@ -163,7 +163,7 @@ def paste_hierarchy(
                     behavior.add_object(obj)
 
         if interactive:
-            resolve_merge_dialog(behavior, xml, target_pointer, hierarchy, add_objects)
+            merge_hierarchy_dialog(behavior, xml, target_pointer, hierarchy, add_objects)
         else:
             resolve_conflicts(behavior, target_pointer, hierarchy)
             add_objects()
@@ -182,7 +182,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         
         match_idx = behavior.find_event(name, -1)
         action = "<new>" if match_idx < 0 else "<reuse>"
-        hierarchy.events[idx] = Resolution(name, action, match_idx)
+        hierarchy.events[idx] = Resolution((idx, name), action, (match_idx, name))
 
     for evt in xml.findall(".//variable"):
         idx = evt.get("idx")
@@ -202,9 +202,9 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         match_idx = behavior.find_variable(name, -1)
         
         if match_idx < 0:
-            hierarchy.variables[idx] = Resolution(var, "<new>", -1)
+            hierarchy.variables[idx] = Resolution((idx, var), "<new>", (-1, var))
         else:
-            hierarchy.variables[idx] = Resolution(var, "<reuse>", match_idx)
+            hierarchy.variables[idx] = Resolution((idx, var), "<reuse>", (match_idx, var))
 
     for evt in xml.findall(".//animation"):
         idx = evt.get("idx")
@@ -212,7 +212,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         
         match_idx = behavior.find_animation(name, -1)
         action = "<new>" if match_idx < 0 else "<reuse>"
-        hierarchy.animations[idx] = Resolution(name, action, match_idx)
+        hierarchy.animations[idx] = Resolution((idx, name), action, (match_idx, name))
 
     # Find objects with IDs that already exist
     for xmlobj in reversed(xml.find("objects").getchildren()):
@@ -280,37 +280,45 @@ def resolve_conflicts(
     # Create missing events, variables and animations. If the value is not "<new>" we can
     # expect that a mapping to another value has been applied
     for idx, resolution in hierarchy.events.items():
+        name = resolution.original[1]
         if resolution.action == "<new>":
-            resolution.result = behavior.create_event(resolution.original)
+            new_idx = (behavior.create_event(name))
+            resolution.result = (new_idx, name)
         elif resolution.action == "<reuse>":
-            resolution.result = behavior.find_event(resolution.original)
+            new_idx = behavior.find_event(name)
+            resolution.result = (new_idx, name)
         elif resolution.action == "<keep>":
-            resolution.result = idx
+            resolution.result = resolution.original
         else:
             raise ValueError(
                 f"Invalid action {resolution.action} for event {idx} ({resolution.original})"
             )
 
     for idx, resolution in hierarchy.variables.items():
+        var: HkbVariable = resolution.original[1]
         if resolution.action == "<new>":
-            var: HkbVariable = resolution.original
-            resolution.result = behavior.create_variable(*var.astuple())
+            new_idx = behavior.create_variable(*var.astuple())
+            resolution.result = (new_idx, var)
         elif resolution.action == "<reuse>":
-            resolution.result = behavior.find_variable(resolution.original)
+            new_idx = behavior.find_variable(var.name)
+            resolution.result = (new_idx, var)
         elif resolution.action == "<keep>":
-            resolution.result = idx
+            resolution.result = resolution.original
         else:
             raise ValueError(
                 f"Invalid action {resolution.action} for variable {idx} ({resolution.original})"
             )
 
     for idx, resolution in hierarchy.animations.items():
+        name = resolution.original[1]
         if resolution.action == "<new>":
-            resolution.result = behavior.create_animation(resolution.original)
+            new_idx = behavior.create_animation(name)
+            resolution.result = (new_idx, name)
         elif resolution.action == "<reuse>":
-            resolution.result = behavior.find_animation(resolution.original)
+            new_idx = behavior.find_animation(resolution.original)
+            resolution.result = (new_idx, name)
         elif resolution.action == "<keep>":
-            resolution.result = idx
+            resolution.result = resolution.original
         else:
             raise ValueError(
                 f"Invalid action {resolution.action} for animation {idx} ({resolution.original})"
@@ -396,26 +404,24 @@ def resolve_conflicts(
         # Make sure to handle paths with * wildcards
         if obj.type_name in _event_attributes:
             paths = _event_attributes[obj.type_name]
-            for path, evt in obj.get_fields(paths, resolve=True).items():
-                new_id = hierarchy.events.get(evt)
-                if new_id is not None:
-                    obj.set_field(path, new_id.result)
+            for path, evt_idx in obj.get_fields(paths, resolve=True).items():
+                evt_res = hierarchy.events.get(evt_idx)
+                if evt_res is not None:
+                    obj.set_field(path, evt_res.result[0])
 
         if obj.type_name in _variable_attributes:
             paths = _variable_attributes[obj.type_name]
-            for path, var in obj.get_fields(paths, resolve=True).items():
-                var = obj.get_field(path, resolve=True)
-                new_id = hierarchy.variables.get(var)
-                if new_id is not None:
-                    obj.set_field(path, new_id.result)
+            for path, var_idx in obj.get_fields(paths, resolve=True).items():
+                var_res = hierarchy.variables.get(var_idx)
+                if var_res is not None:
+                    obj.set_field(path, var_res.result[0])
 
         if obj.type_name in _animation_attributes:
             paths = _animation_attributes[obj.type_name]
-            for path, anim in obj.get_fields(paths, resolve=True).items():
-                anim = obj.get_field(path, resolve=True)
-                new_id = hierarchy.animations.get(anim)
-                if new_id is not None:
-                    obj.set_field(path, new_id.result)
+            for path, anim_idx in obj.get_fields(paths, resolve=True).items():
+                anim_res = hierarchy.animations.get(anim_idx)
+                if anim_res is not None:
+                    obj.set_field(path, anim_res.result[0])
 
         # hkbStateMachine::TransitionInfoArray
         # - transitions:*/toStateId
@@ -450,7 +456,7 @@ def resolve_conflicts(
                     obj["startStateId"].set_value(new_id)
                     
 
-def resolve_merge_dialog(
+def merge_hierarchy_dialog(
     behavior: HavokBehavior,
     xml: ET.Element,
     target_pointer: HkbPointer,
@@ -484,24 +490,62 @@ def resolve_merge_dialog(
                 gw = GraphWidget(graph, on_node_selected=None, width=400, height=400)
 
             with dpg.group():
-                if hierarchy.events:
-                    with dpg.tree_node(label="Unresolved Events", default_open=True):
-                        with dpg.table(header_row=False):
-                            dpg.add_table_column(label="Event")
-                            dpg.add_table_column(label="Remap")
+                with dpg.tree_node(label="Events", default_open=True):
+                    with dpg.table(header_row=False):
+                        dpg.add_table_column(label="idx0")
+                        dpg.add_table_column(label="name0")
+                        dpg.add_table_column(label="button")
+                        dpg.add_table_column(label="idx1")
+                        dpg.add_table_column(label="name1")
+                        dpg.add_table_column(label="action")
 
-                            for _, name in hierarchy.events.keys():
-                                with dpg.table_row():
-                                    dpg.add_checkbox(label=name, default_value=True)
-                                    dpg.add_combo(
-                                        ["Create", "Remap"], callback=None
-                                    )  # TODO cb
+                        for resolution in hierarchy.events.values():
+                            with dpg.table_row():
+                                dpg.add_text(str(resolution.original[0]))
+                                dpg.add_text(resolution.original[1])
+                                dpg.add_button(arrow=True, direction=dpg.mvDir_Right)  # TODO cb
+                                dpg.add_text(str(resolution.result[0]))
+                                dpg.add_text(resolution.result[1])
+                                dpg.add_text(resolution.action)
+                
+                with dpg.tree_node(label="Variables", default_open=True):
+                    with dpg.table(header_row=False):
+                        dpg.add_table_column(label="idx0")
+                        dpg.add_table_column(label="name0")
+                        dpg.add_table_column(label="button")
+                        dpg.add_table_column(label="idx1")
+                        dpg.add_table_column(label="name1")
+                        dpg.add_table_column(label="action")
 
-                # TODO variables
-                # TODO animations
+                        for resolution in hierarchy.variables.values():
+                            with dpg.table_row():
+                                dpg.add_text(str(resolution.original[0]))
+                                dpg.add_text(resolution.original[1].name)
+                                dpg.add_button(arrow=True, direction=dpg.mvDir_Right)  # TODO cb
+                                dpg.add_text(str(resolution.result[0]))
+                                dpg.add_text(resolution.result[1].name)
+                                dpg.add_text(resolution.action)
+                                    
+                with dpg.tree_node(label="Animations", default_open=True):
+                    with dpg.table(header_row=False):
+                        dpg.add_table_column(label="idx0")
+                        dpg.add_table_column(label="name0")
+                        dpg.add_table_column(label="button")
+                        dpg.add_table_column(label="idx1")
+                        dpg.add_table_column(label="name1")
+                        dpg.add_table_column(label="action")
 
+                        for resolution in hierarchy.animations.values():
+                            with dpg.table_row():
+                                dpg.add_text(str(resolution.original[0]))
+                                dpg.add_text(resolution.original[1])
+                                dpg.add_button(arrow=True, direction=dpg.mvDir_Right)  # TODO cb
+                                dpg.add_text(str(resolution.result[0]))
+                                dpg.add_text(resolution.result[1])
+                                dpg.add_text(resolution.action)
+                                    
                 if hierarchy.objects:
-                    with dpg.tree_node(label="Conflicting Objects", default_open=True):
+                    with dpg.tree_node(label="Objects", default_open=True):
                         with dpg.table(header_row=False):
                             dpg.add_table_column(label="Object")
                             dpg.add_table_column(label="Type")
@@ -514,8 +558,6 @@ def resolve_merge_dialog(
 
                                     dpg.add_text(oid)
                                     dpg.add_text(type_name)
-
-                                    dpg.add_combo(["New ID", "Reuse Existing", "Skip"])
 
         dpg.add_separator()
 

@@ -1,6 +1,7 @@
 from hkb_editor.templates import *
 
 
+# See SwordArtsOneShotCategory in c0000.hks
 weapon_variations = [
     200,    # Large
     300,    # Polearm
