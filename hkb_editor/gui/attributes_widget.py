@@ -38,6 +38,7 @@ from .workflows.bind_attribute import (
 )
 from .workflows.aliases import AliasManager
 from .workflows.undo import undo_manager
+from .workflows.clone_hierarchy import paste_hierarchy
 from .helpers import create_flag_checkboxes, add_paragraphs
 from . import style
 
@@ -851,41 +852,9 @@ class AttributesWidget:
             self.logger.error("Clipboard data is not a node hierarchy")
             return
 
-        try:
-            tree = ET.fromstring(data)
-        except Exception as e:
-            self.logger.error("Pasting hierarchy failed", exc_info=e)
-            return
-
-        # Change object ID of element and all references to it before constructing any records
-        for elem in tree.findall(".//object"):
-            old_id = elem.attrib["id"]
-            new_id = self.tagfile.new_id()
-
-            elem.attrib["id"] = new_id
-
-            for reference in tree.xpath(f".//pointer[@id='{old_id}']"):
-                reference.attrib["id"] = new_id
-
-        hierarchy = []
-        with undo_manager.combine():
-            verified = False
-            for elem in tree.findall(".//object"):
-                obj = HkbRecord.from_object(self.tagfile, elem)
-
-                # Make sure the hierarchy root will be compatible with the pointer
-                if not verified and not pointer.will_accept(obj):
-                    self.logger.error(
-                        f"Hierarchy root ({obj.type_name}) is incompatible with pointer ({pointer.subtype_name})"
-                    )
-                    return
-
-                verified = True
-                self.tagfile.add_object(obj)
-                hierarchy.append(obj)
-
-        pointer.set_value(hierarchy[0])
-        self.logger.info(f"Cloned hierarchy of {len(hierarchy)} elements")
+        hierarchy = paste_hierarchy(self.tagfile, pointer, data, undo_manager)
+        new_objects = [r.result for r in hierarchy.objects.values() if r.action == "<new>"]
+        self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
 
         if self.on_graph_changed:
             self.on_graph_changed()

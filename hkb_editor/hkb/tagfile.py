@@ -105,7 +105,7 @@ class Tagfile:
 
         return None
 
-    def find_object_for(self, item: "XmlValueHandler" | ET._Element) -> "HkbRecord":
+    def find_object_for(self, item: "XmlValueHandler | ET._Element") -> "HkbRecord":
         from .hkb_types import XmlValueHandler
         
         if isinstance(item, XmlValueHandler):
@@ -123,7 +123,7 @@ class Tagfile:
         return None
 
     def find_referees(
-        self, object_id: str | "HkbRecord"
+        self, object_id: "str | HkbRecord"
     ) -> Generator["HkbPointer", None, None]:
         from .hkb_types import HkbPointer
 
@@ -163,7 +163,7 @@ class Tagfile:
                 yield obj
 
     def find_hierarchy_parent_for(
-        self, object_id: "HkbRecord" | str, parent_type: str
+        self, object_id: "HkbRecord | str", parent_type: str
     ) -> Generator["HkbRecord", None, None]:
         from .hkb_types import HkbRecord
 
@@ -199,7 +199,7 @@ class Tagfile:
         query_str: str,
         *,
         object_filter: Callable[["HkbRecord"], bool] = None,
-        search_root: HkbRecord | str = None,
+        search_root: "HkbRecord | str" = None,
     ) -> Generator["HkbRecord", None, None]:
         if search_root:
             if isinstance(search_root, HkbRecord):

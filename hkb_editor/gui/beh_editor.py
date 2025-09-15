@@ -50,6 +50,7 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
+from .workflows.clone_hierarchy import copy_hierarchy
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
@@ -831,25 +832,7 @@ class BehaviorEditor(GraphEditor):
             self.logger.warning(f"Copying value failed: {e}", exc_info=e)
 
     def _copy_hierarchy(self, node: Node) -> None:
-        g = self.beh.build_graph(node.id)
-        sm = self.get_active_statemachine(node.id)
-        xml = f'<behavior_tree sm="{sm.object_id}">\n'
-        todo = [node.id]
-
-        while todo:
-            n = todo.pop()
-
-            obj = self.beh.objects.get(n)
-            if not obj:
-                continue
-
-            xml += lxml.etree.tostring(
-                obj.as_object(), pretty_print=True, encoding="unicode"
-            )
-            todo.extend(g.successors(n))
-
-        xml += "\n</behavior_tree>"
-
+        xml = copy_hierarchy(self.beh, node.id)
         self._copy_to_clipboard(xml)
 
     def _on_value_changed(

@@ -106,23 +106,23 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     xml_objects = ET.SubElement(root, "objects", graph=str(nx.to_edgelist(g)))
 
     for idx, evt in events.items():
-        ET.SubElement(xml_events, "event", idx=idx, name=evt)
+        ET.SubElement(xml_events, "event", idx=str(idx), name=evt)
 
     for idx, var in variables.items():
         # Need to include ALL variable attributes so we can reconsruct it if needed
         ET.SubElement(
             xml_variables,
             "variable",
-            idx=idx,
+            idx=str(idx),
             name=var.name,
             vtype=var.vtype.name,
-            min=var.vmin,
-            max=var.vmax,
+            min=str(var.vmin),
+            max=str(var.vmax),
             default=str(var.default),
         )
 
     for idx, anim in animations.items():
-        ET.SubElement(xml_animations, "animation", idx=idx, name=anim)
+        ET.SubElement(xml_animations, "animation", idx=str(idx), name=anim)
 
     for obj in objects:
         xml_objects.append(deepcopy(obj))
@@ -136,7 +136,7 @@ def paste_hierarchy(
     hierarchy: str,
     undo_manager: UndoManager,
     interactive: bool = True,
-) -> None:
+) -> MergeHierarchy:
     try:
         xml = ET.fromstring(hierarchy)
     except Exception as e:
@@ -167,6 +167,8 @@ def paste_hierarchy(
         else:
             resolve_conflicts(behavior, target_pointer, hierarchy)
             add_objects()
+
+    return hierarchy
 
 
 def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
@@ -221,7 +223,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
             # Verify object has the expected fields
             behavior.type_registry.verify_object(obj)
         except Exception as e:
-            raise ValueError(f"Object {xmlobj.get("id")} with type_id {xmlobj.get("typeid")} does not match this behavior's type registry: {e}")
+            raise ValueError(f"Object {xmlobj.get('id')} with type_id {xmlobj.get('typeid')} does not match this behavior's type registry: {e}")
 
         # Find pointers in the behavior referencing this object's ID. If more than one
         # other object is already referencing it, it is most likely a reused object like
@@ -485,7 +487,7 @@ def merge_hierarchy_dialog(
         with dpg.group(horizontal=True):
             graph_data = xml.find("objects").get("graph")
             if graph_data:
-                graph = nx.from_edgelist(graph_data, nx.DiGraph)
+                graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
                 # TODO frontpage, highlight conflict on node select, color nodes if they have conflicts
                 gw = GraphWidget(graph, on_node_selected=None, width=400, height=400)
 

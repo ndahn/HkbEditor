@@ -182,7 +182,7 @@ class HkbPointer(XmlValueHandler):
         return self.tagfile.type_registry.get_name(self.subtype)
 
     def will_accept(
-        self, type_id: "HkbRecord" | str, check_subtypes: bool = True
+        self, type_id: "HkbRecord | str", check_subtypes: bool = True
     ) -> bool:
         if isinstance(type_id, HkbRecord):
             type_id = HkbRecord.type_id
@@ -626,9 +626,11 @@ class HkbRecord(XmlValueHandler):
         for path in paths:
             keys = path.split("/")
             try:
-                ret[path] = _get_fields_recursive(self, keys, 0)
+                ret.update(_get_fields_recursive(self, keys, 0, ""))
             except (AttributeError, KeyError, IndexError):
                 raise KeyError(f"Failed to resolve path '{path}'")
+
+        return ret
 
     def find_fields_by_type(self, field_type: T) -> Generator[T, None, None]:
         todo: list[HkbRecord] = [self]
