@@ -843,7 +843,8 @@ def merge_hierarchy_dialog(
         instructions = """\
 The above hierarchy will be added to the behavior. Items with the "<new>" action will be added
 under a new ID/index, while items with the "<remap>" action will use already existing objects
-from the behavior. Note that events, variables and animations must still have unique names.
+from the behavior. Note that new events, variables and animations must still have unique names -
+you'll have to do this afterwards.
 """
         add_paragraphs(instructions, 150, color=style.light_blue)
         dpg.add_separator()

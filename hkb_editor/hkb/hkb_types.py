@@ -274,9 +274,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
         super().__init__(tagfile, element, type_id)
         self.element_type_id = element.attrib["elementtypeid"]
         # TODO format of element_type_id will be easier to check
-        self.is_pointer_array = (
-            get_value_handler(tagfile.type_registry, self.element_type_id) == HkbPointer
-        )
+        self.is_pointer_array = (self.get_item_wrapper() == HkbPointer)
 
     @property
     def element_type_name(self) -> str:
@@ -362,6 +360,9 @@ class HkbArray(XmlValueHandler, Generic[T]):
 
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
         return Handler.new(self.tagfile, self.element_type_id, value)
+
+    def get_item_wrapper(self) -> Type[T]:
+        return get_value_handler(self.tagfile.type_registry, self.element_type_id)
 
     def get_value(self) -> list[T]:
         Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
@@ -641,6 +642,14 @@ class HkbRecord(XmlValueHandler):
                 field = rec[field_name]
                 if isinstance(field, HkbRecord):
                     todo.append(field)
+
+                if isinstance(field, HkbArray):
+                    item_type = field.get_item_wrapper()
+                    if item_type == field_type:
+                        for item in field:
+                            yield item
+                    elif item_type == HkbRecord:
+                        todo.extend(field)
 
                 if isinstance(field, field_type):
                     yield field
