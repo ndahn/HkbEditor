@@ -10,6 +10,7 @@ import pyperclip
 
 from hkb_editor.hkb import (
     Tagfile,
+    HavokBehavior,
     XmlValueHandler,
     HkbRecord,
     HkbPointer,
@@ -21,9 +22,14 @@ from hkb_editor.hkb import (
     get_value_handler,
 )
 from hkb_editor.hkb import get_hkb_enum, get_hkb_flags
+from hkb_editor.hkb.index_attributes import (
+    is_event_attribute,
+    is_variable_attribute,
+    is_animation_attribute,
+)
 from hkb_editor.templates.common import CommonActionsMixin
 
-from .dialogs import select_object
+from .dialogs import select_object, select_event, select_variable, select_animation
 from .table_tree import (
     table_tree_leaf,
     add_lazy_table_tree_node,
@@ -305,6 +311,67 @@ class AttributesWidget:
 
         self._create_attribute_menu(widget, attribute, path, is_simple)
 
+    def _add_reference_attribute_text(
+        self,
+        label: str,
+        value: str,
+        callback: Callable,
+        theme: int | str,
+        *,
+        tag: str = None,
+    ) -> str:
+        if tag in (0, None, ""):
+            tag = f"reference_attribute_{dpg.generate_uuid()}"
+
+        # Embed in another child_window, otherwise the horizontal group will expand too much
+        # when placed inside another group
+        with dpg.child_window(border=False, auto_resize_y=True):
+            with dpg.group(horizontal=True, filter_key=label, tag=tag) as group:
+                dpg.add_input_text(
+                    default_value=value,
+                    readonly=True,
+                    width=-30,  # TODO is there no better solution?
+                    tag=f"{tag}_input",
+                )
+                dpg.bind_item_theme(dpg.last_item(), theme)
+                dpg.add_button(
+                    arrow=True,
+                    direction=dpg.mvDir_Right,
+                    callback=callback,
+                )
+
+        return group
+
+    def _add_reference_attribute_int(
+        self,
+        label: str,
+        value: str,
+        change_callback: Callable[[str, int, Any], None],
+        button_callback: Callable[[str, str, Any], None],
+        theme: int | str,
+        *,
+        tag: str = None,
+    ) -> str:
+        if tag in (0, None, ""):
+            tag = f"reference_attribute_{dpg.generate_uuid()}"
+
+        # Embed in another child_window, otherwise the horizontal group will expand too much
+        # when placed inside another group
+        with dpg.child_window(border=False, auto_resize_y=True):
+            with dpg.group(horizontal=True):
+                dpg.add_input_int(
+                    filter_key=label,
+                    width=-30,
+                    callback=change_callback,
+                    default_value=value,
+                )
+                dpg.bind_item_theme(dpg.last_item(), theme)
+                dpg.add_button(
+                    arrow=True,
+                    direction=dpg.mvDir_Right,
+                    callback=button_callback,
+                )
+
     def _create_attribute_widget_pointer(
         self,
         pointer: HkbPointer,
@@ -313,7 +380,9 @@ class AttributesWidget:
         label = path.split("/")[-1]
 
         def on_pointer_selected(sender, target: HkbRecord, user_data: Any):
-            self._on_value_changed(sender, target.object_id, pointer)
+            self._on_value_changed(
+                sender, target.object_id if target else None, pointer
+            )
 
             # If the binding set pointer changed we should regenerate all attribute widgets
             vbs_type_id = self.tagfile.type_registry.find_first_type_by_name(
@@ -329,20 +398,13 @@ class AttributesWidget:
                 self.tagfile, pointer.subtype, on_pointer_selected, include_derived=True
             )
 
-        with dpg.group(horizontal=True, filter_key=label) as group:
-            ptr_input = dpg.add_input_text(
-                default_value=pointer.get_value(),
-                readonly=True,
-                width=-30,  # TODO is there no better solution?
-            )
-            dpg.bind_item_theme(ptr_input, style.pointer_attribute_theme)
-            dpg.add_button(
-                arrow=True,
-                direction=dpg.mvDir_Right,
-                callback=open_pointer_dialog,
-            )
-
-        return group
+        widget = self._add_reference_attribute_text(
+            label,
+            pointer.get_value(),
+            open_pointer_dialog,
+            style.pointer_attribute_theme,
+        )
+        return widget
 
     def _create_attribute_widget_vector4(
         self,
@@ -511,12 +573,93 @@ class AttributesWidget:
                         default_value=enum(attribute.get_value()).name,
                     )
                 else:
-                    dpg.add_input_int(
-                        filter_key=label,
-                        callback=self._on_value_changed,
-                        user_data=attribute,
-                        default_value=attribute.get_value(),
-                    )
+                    if isinstance(self.tagfile, HavokBehavior):
+
+                        # Event index
+                        if is_event_attribute(self.record, path):
+
+                            def on_event_selected(
+                                sender: str, new_idx: int, user_data: Any
+                            ):
+                                if new_idx is None:
+                                    self._on_value_changed(sender, -1, attribute)
+                                else:
+                                    self._on_value_changed(sender, new_idx, attribute)
+
+                                self.clear()
+                                self._update_attributes()
+
+                            self._add_reference_attribute_int(
+                                label,
+                                attribute.get_value(),
+                                on_event_selected,
+                                lambda s, a, u: select_event(
+                                    self.tagfile, on_event_selected
+                                ),
+                                style.index_attribute_theme,
+                            )
+
+                        # Variable index
+                        elif is_variable_attribute(self.record, path):
+
+                            def on_variable_selected(
+                                sender: str, new_idx: int, user_data: Any
+                            ):
+                                if new_idx is None:
+                                    self._on_value_changed(sender, -1, attribute)
+                                else:
+                                    self._on_value_changed(sender, new_idx, attribute)
+
+                                self.clear()
+                                self._update_attributes()
+
+                            self._add_reference_attribute_int(
+                                label,
+                                attribute.get_value(),
+                                on_variable_selected,
+                                lambda s, a, u: select_variable(
+                                    self.tagfile, on_variable_selected
+                                ),
+                                style.index_attribute_theme,
+                            )
+
+                        # Animation index
+                        elif is_animation_attribute(self.record, path):
+
+                            def on_animation_selected(
+                                sender: str, new_idx: int, user_data: Any
+                            ):
+                                if new_idx is None:
+                                    self._on_value_changed(sender, -1, attribute)
+                                else:
+                                    self._on_value_changed(sender, new_idx, attribute)
+
+                                self.clear()
+                                self._update_attributes()
+
+                            self._add_reference_attribute_int(
+                                label,
+                                attribute.get_value(),
+                                on_animation_selected,
+                                lambda s, a, u: select_animation(
+                                    self.tagfile, on_animation_selected
+                                ),
+                                style.index_attribute_theme,
+                            )
+                        else:
+                            dpg.add_input_int(
+                                filter_key=label,
+                                callback=self._on_value_changed,
+                                user_data=attribute,
+                                default_value=attribute.get_value(),
+                            )
+                    else:
+                        dpg.add_input_int(
+                            filter_key=label,
+                            callback=self._on_value_changed,
+                            user_data=attribute,
+                            default_value=attribute.get_value(),
+                        )
 
             elif isinstance(attribute, HkbFloat):
                 dpg.add_input_double(
@@ -587,9 +730,34 @@ class AttributesWidget:
                         f"bound: {bound_var_name}",
                         color=style.pink,
                     )
-                elif type_name == "hkInt32":
-                    # TODO could show here what the name would be if it was a variable, event or animation ID
-                    pass
+                elif isinstance(self.tagfile, HavokBehavior):
+                    if is_event_attribute(self.record, path):
+                        idx = attribute.get_value()
+                        name = self.tagfile.get_event(idx) if idx >= 0 else "<none>"
+                        dpg.add_text(
+                            f"event: {name}",
+                            color=style.green,
+                        )
+
+                    elif is_variable_attribute(self.record, path):
+                        idx = attribute.get_value()
+                        name = (
+                            self.tagfile.get_variable_name(idx)
+                            if idx >= 0
+                            else "<none>"
+                        )
+                        dpg.add_text(
+                            f"variable: {name}",
+                            color=style.green,
+                        )
+
+                    elif is_animation_attribute(self.record, path):
+                        idx = attribute.get_value()
+                        name = self.tagfile.get_animation(idx) if idx >= 0 else "<none>"
+                        dpg.add_text(
+                            f"animation: {name}",
+                            color=style.green,
+                        )
 
             # Copy & paste
             dpg.add_separator()
@@ -855,7 +1023,9 @@ class AttributesWidget:
             return
 
         def on_hierarchy_merged(hierarchy):
-            new_objects = [r.result for r in hierarchy.objects.values() if r.action == "<new>"]
+            new_objects = [
+                r.result for r in hierarchy.objects.values() if r.action == "<new>"
+            ]
             self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
 
             if hierarchy.pin_objects and self.pin_object_callback:

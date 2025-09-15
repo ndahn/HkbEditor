@@ -8,35 +8,16 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
+from hkb_editor.hkb.index_attributes import (
+    event_attributes,
+    variable_attributes,
+    animation_attributes,
+)
 from hkb_editor.hkb import HkbPointer, HkbRecord
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui import style
 from hkb_editor.gui.workflows.undo import UndoManager
 from hkb_editor.gui.helpers import common_loading_indicator, add_paragraphs
-
-
-_event_attributes = {
-    "hkbManualSelectorGenerator": [
-        "endOfClipEventId",
-    ],
-    "hkbStateMachine": ["eventToSendWhenStateOrTransitionChanges/id"],
-    "hkbStateMachine::TransitionInfoArray": ["transitions:*/eventId"],
-}
-
-_variable_attributes = {
-    "hkbVariableBindingSet": [
-        "bindings:*/variableIndex",
-    ]
-}
-
-_animation_attributes = {
-    "hkbClipGenerator": [
-        # While the index into the animations array may have changed, we can assume
-        # that the animation name has not, so animationName and the clip's name don't
-        # need to be changed. The same is true for the CMSG owning this clip.
-        "animationInternalId",
-    ]
-}
 
 
 @dataclass
@@ -76,22 +57,22 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
             continue
 
         # Make sure to handle paths with * wildcards
-        if obj.type_name in _event_attributes:
-            paths = _event_attributes[obj.type_name]
+        if obj.type_name in event_attributes:
+            paths = event_attributes[obj.type_name]
             for evt in obj.get_fields(paths, resolve=True).values():
                 if evt >= 0:
                     event_name = behavior.get_event(evt)
                     events[evt] = event_name
 
-        if obj.type_name in _variable_attributes:
-            paths = _variable_attributes[obj.type_name]
+        if obj.type_name in variable_attributes:
+            paths = variable_attributes[obj.type_name]
             for var in obj.get_fields(paths, resolve=True).values():
                 if var >= 0:
                     variable = behavior.get_variable(var)
                     variables[var] = variable
 
-        if obj.type_name in _animation_attributes:
-            paths = _animation_attributes[obj.type_name]
+        if obj.type_name in animation_attributes:
+            paths = animation_attributes[obj.type_name]
             for anim in obj.get_fields(paths, resolve=True).values():
                 if anim >= 0:
                     animation_name = behavior.get_animation(anim)
@@ -334,7 +315,7 @@ def resolve_conflicts(
 ) -> None:
     common = CommonActionsMixin(behavior)
     state_id_map: dict[int, int] = {}
-    
+
     def is_object_included(object_id: str) -> bool:
         # The root object will not have any parents to check
         if object_id == list(hierarchy.objects.keys())[0]:
@@ -342,7 +323,7 @@ def resolve_conflicts(
 
         has_valid_path = False
 
-        # Check parents: if all of them are skipped or reused, 
+        # Check parents: if all of them are skipped or reused,
         # this one should be skipped, too
         for other in hierarchy.objects.values():
             if not other.result or other.result.object_id == object_id:
@@ -360,7 +341,7 @@ def resolve_conflicts(
                 break
 
         return has_valid_path
-            
+
     # TODO add undo actions
     # Create missing events, variables and animations. If the value is not "<new>" we can
     # expect that a mapping to another value has been applied
@@ -412,13 +393,15 @@ def resolve_conflicts(
     # Handle conflicting objects
     for object_id, resolution in hierarchy.objects.items():
         if resolution.action == "<new>":
-            # If the object is set to <new>, but none of its parents are cloned, 
+            # If the object is set to <new>, but none of its parents are cloned,
             # the object will not be included after all
             if not is_object_included(object_id):
                 resolution.action = "<skip>"
-                logging.getLogger().info(f"Skipping object {object_id} as none of its parents are cloned")
+                logging.getLogger().info(
+                    f"Skipping object {object_id} as none of its parents are cloned"
+                )
                 continue
-            
+
             if object_id in behavior.objects:
                 new_id = behavior.new_id()
                 resolution.original.object_id = new_id
@@ -494,22 +477,22 @@ def resolve_conflicts(
 
         # Fix up events, variables and animations
         # Make sure to handle paths with * wildcards
-        if obj.type_name in _event_attributes:
-            paths = _event_attributes[obj.type_name]
+        if obj.type_name in event_attributes:
+            paths = event_attributes[obj.type_name]
             for path, evt_idx in obj.get_fields(paths, resolve=True).items():
                 evt_res = hierarchy.events.get(evt_idx)
                 if evt_res is not None:
                     obj.set_field(path, evt_res.result[0])
 
-        if obj.type_name in _variable_attributes:
-            paths = _variable_attributes[obj.type_name]
+        if obj.type_name in variable_attributes:
+            paths = variable_attributes[obj.type_name]
             for path, var_idx in obj.get_fields(paths, resolve=True).items():
                 var_res = hierarchy.variables.get(var_idx)
                 if var_res is not None:
                     obj.set_field(path, var_res.result[0])
 
-        if obj.type_name in _animation_attributes:
-            paths = _animation_attributes[obj.type_name]
+        if obj.type_name in animation_attributes:
+            paths = animation_attributes[obj.type_name]
             for path, anim_idx in obj.get_fields(paths, resolve=True).items():
                 anim_res = hierarchy.animations.get(anim_idx)
                 if anim_res is not None:
@@ -640,18 +623,18 @@ def open_merge_hierarchy_dialog(
                         obj: HkbRecord = hierarchy.objects[node.id].original
 
                         # Highlight events, variables and animations this object references
-                        if obj.type_name in _event_attributes:
-                            for path in _event_attributes[obj.type_name]:
+                        if obj.type_name in event_attributes:
+                            for path in event_attributes[obj.type_name]:
                                 for evt in obj.get_fields(path, resolve=True).values():
                                     highlight_row("event", evt, event_rows)
 
-                        if obj.type_name in _variable_attributes:
-                            for path in _variable_attributes[obj.type_name]:
+                        if obj.type_name in variable_attributes:
+                            for path in variable_attributes[obj.type_name]:
                                 for var in obj.get_fields(path, resolve=True).values():
                                     highlight_row("variable", var, variable_rows)
 
-                        if obj.type_name in _animation_attributes:
-                            for path in _animation_attributes[obj.type_name]:
+                        if obj.type_name in animation_attributes:
+                            for path in animation_attributes[obj.type_name]:
                                 for anim in obj.get_fields(path, resolve=True).values():
                                     highlight_row("animation", anim, animation_rows)
 
@@ -854,7 +837,9 @@ def open_merge_hierarchy_dialog(
                         dpg.add_table_column(label="name", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for idx, (oid, resolution) in enumerate(hierarchy.objects.items()):
+                        for idx, (oid, resolution) in enumerate(
+                            hierarchy.objects.items()
+                        ):
                             row_tag = f"{tag}_object_row_{oid}"
                             with dpg.table_row(tag=row_tag):
                                 name = resolution.original.get_field("name", "")

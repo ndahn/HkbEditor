@@ -3,12 +3,11 @@ from logging import getLogger
 from contextlib import contextmanager
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
+from hkb_editor.hkb.hkb_types import HkbRecord, HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui.dialogs import select_variable
 from hkb_editor.gui import style
-from hkb_editor.gui.workflows.undo import undo_manager
 
 
 _logger = getLogger(__name__)
@@ -21,7 +20,7 @@ def bindable_attribute(
     **kwargs,
 ) -> Generator[str, None, None]:
     if tag in (0, "", None):
-        tag = dpg.generate_uuid()
+        tag = f"bindable_attribute_{dpg.generate_uuid()}"
 
     try:
         with dpg.group(filter_key=filter_key, tag=tag, **kwargs):

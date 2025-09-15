@@ -53,6 +53,7 @@ get_contrast_color: Callable[[], tuple[int, int, int]] = HighContrastColorGenera
 
 bound_attribute_theme = None
 pointer_attribute_theme = None
+index_attribute_theme = None
 
 notification_info_theme = None
 notification_warning_theme = None
@@ -78,6 +79,7 @@ def setup_styles():
 
     global bound_attribute_theme
     global pointer_attribute_theme
+    global index_attribute_theme
     global notification_info_theme
     global notification_warning_theme
     global notification_error_theme
@@ -92,6 +94,10 @@ def setup_styles():
     with dpg.theme() as pointer_attribute_theme:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Text, blue)
+
+    with dpg.theme() as index_attribute_theme:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Text, green)
 
     with dpg.theme() as notification_info_theme:
         with dpg.theme_component(dpg.mvAll):
