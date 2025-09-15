@@ -53,6 +53,7 @@ class AttributesWidget:
         on_value_changed: Callable[
             [str, XmlValueHandler, tuple[Any, Any]], None
         ] = None,
+        pin_object_callback: Callable[[HkbRecord | str], None] = None,
         hide_title: bool = False,
         tag: str = None,
     ):
@@ -65,6 +66,7 @@ class AttributesWidget:
         self.jump_callback = jump_callback
         self.on_graph_changed = on_graph_changed
         self.on_value_changed = on_value_changed
+        self.pin_object_callback = pin_object_callback
         self.hide_title = hide_title
         self.tag = tag
 
@@ -852,15 +854,18 @@ class AttributesWidget:
             self.logger.error("Clipboard data is not a node hierarchy")
             return
 
-        hierarchy = paste_hierarchy(self.tagfile, pointer, data, undo_manager)
-        new_objects = [r.result for r in hierarchy.objects.values() if r.action == "<new>"]
-        self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
+        def on_hierarchy_merged(hierarchy):
+            new_objects = [r.result for r in hierarchy.objects.values() if r.action == "<new>"]
+            self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
 
-        # TODO check if objects should be pinned
+            if hierarchy.pin_objects and self.pin_object_callback:
+                for obj in new_objects:
+                    self.pin_object_callback(obj)
 
-        if self.on_graph_changed:
-            # TODO not regenerating graph properly
-            self.on_graph_changed()
+            if self.on_graph_changed:
+                self.on_graph_changed()
+
+        paste_hierarchy(self.tagfile, pointer, data, undo_manager, on_hierarchy_merged)
 
     def _copy_to_clipboard(self, data: str):
         try:

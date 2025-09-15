@@ -622,8 +622,9 @@ class BehaviorEditor(GraphEditor):
             self.attributes_widget = AttributesWidget(
                 self.alias_manager,
                 jump_callback=self.jump_to_object,
-                on_graph_changed=self.canvas.regenerate,
+                on_graph_changed=self.regenerate_all,
                 on_value_changed=self._on_value_changed,
+                pin_object_callback=self.add_pinned_object,
                 tag=f"{self.tag}_attributes_widget",
             )
 
@@ -656,6 +657,9 @@ class BehaviorEditor(GraphEditor):
 
         with dpg.item_handler_registry(tag=f"{self.tag}_pin_registry"):
             dpg.add_item_clicked_handler(
+                button=dpg.mvMouseButton_Left, callback=self.show_pin_attributes
+            )
+            dpg.add_item_clicked_handler(
                 button=dpg.mvMouseButton_Right, callback=self.open_pin_menu
             )
 
@@ -678,7 +682,7 @@ class BehaviorEditor(GraphEditor):
             parent=f"{self.tag}_pinned_objects_table",
             tag=f"{self.tag}_pin_{object_id}",
             user_data=object_id,
-        ) as row:
+        ):
             dpg.add_selectable(
                 label=object_id,
                 span_columns=True,
@@ -704,14 +708,18 @@ class BehaviorEditor(GraphEditor):
         for oid in self.find_lost_objects():
             self.add_pinned_object(oid)
 
-    def open_pin_menu(self, sender: str, app_data: str, user_data: Any) -> None:
+    def show_pin_attributes(self, sender: str, app_data: str, user_data: Any) -> None:
         _, selectable = app_data
         object_id = dpg.get_item_user_data(selectable)
         pinned_obj: HkbRecord = self.beh.retrieve_object(object_id)
 
-        def show_attributes():
-            self.canvas.deselect()
-            self.attributes_widget.set_record(pinned_obj)
+        self.canvas.deselect()
+        self.attributes_widget.set_record(pinned_obj)
+
+    def open_pin_menu(self, sender: str, app_data: str, user_data: Any) -> None:
+        _, selectable = app_data
+        object_id = dpg.get_item_user_data(selectable)
+        pinned_obj: HkbRecord = self.beh.retrieve_object(object_id)
 
         # Pin context menu
         with dpg.window(
@@ -737,7 +745,6 @@ class BehaviorEditor(GraphEditor):
                 callback=lambda s, a, u: self.jump_to_object(u),
                 user_data=object_id,
             )
-            dpg.add_selectable(label="Show Attributes", callback=show_attributes)
             make_copy_menu(pinned_obj)
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))

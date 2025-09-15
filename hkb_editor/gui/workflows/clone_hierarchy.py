@@ -54,6 +54,7 @@ class MergeHierarchy:
     type_map: dict[str, Resolution] = field(default_factory=dict)
     objects: dict[str, Resolution] = field(default_factory=dict)
     state_ids: dict[str, Resolution] = field(default_factory=dict)
+    pin_objects: bool = True
 
 
 def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
@@ -139,26 +140,28 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
 def paste_hierarchy(
     behavior: HavokBehavior,
     target_pointer: HkbPointer,
-    hierarchy: str,
+    xml: str,
     undo_manager: UndoManager,
+    callback: Callable[[MergeHierarchy], None] = None,
+    *,
     interactive: bool = True,
 ) -> MergeHierarchy:
     try:
-        xml = ET.fromstring(hierarchy)
+        xmldoc = ET.fromstring(xml)
     except Exception as e:
         raise ValueError(f"Failed to parse hierarchy: {e}")
 
-    if xml.tag != "behavior_hierarchy":
+    if xmldoc.tag != "behavior_hierarchy":
         raise ValueError("Not a valid behavior hierarchy")
 
-    root = xml.find("objects").getchildren()[0]
+    root = xmldoc.find("objects").getchildren()[0]
     root_id = root.get("id")
     root_type = root.get("typeid")
 
     if not target_pointer.will_accept(root_type):
         raise ValueError("Hierarchy is not compatible with target pointer")
 
-    hierarchy = find_conflicts(behavior, xml)
+    hierarchy = find_conflicts(behavior, xmldoc)
 
     with undo_manager.combine():
 
@@ -176,15 +179,17 @@ def paste_hierarchy(
 
                 target_pointer.set_value(new_root)
 
+            if callback:
+                callback(hierarchy)
+
         if interactive:
-            merge_hierarchy_dialog(
-                behavior, xml, target_pointer, hierarchy, add_objects
+            open_merge_hierarchy_dialog(
+                behavior, xmldoc, target_pointer, hierarchy, add_objects
             )
         else:
             resolve_conflicts(behavior, target_pointer, hierarchy)
+            hierarchy.pin_objects = True
             add_objects()
-
-    return hierarchy
 
 
 def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
@@ -539,7 +544,7 @@ def resolve_conflicts(
                     obj["startStateId"].set_value(new_id)
 
 
-def merge_hierarchy_dialog(
+def open_merge_hierarchy_dialog(
     behavior: HavokBehavior,
     xml: ET.Element,
     target_pointer: HkbPointer,
@@ -561,6 +566,7 @@ def merge_hierarchy_dialog(
         try:
             loading = common_loading_indicator("Merging Hierarchy")
             resolve_conflicts(behavior, target_pointer, hierarchy)
+            hierarchy.pin_objects = dpg.get_value(f"{tag}_pin_objects")
             callback()
         finally:
             dpg.delete_item(loading)
@@ -891,7 +897,6 @@ these afterwards.
                 tag=f"{tag}_button_close",
             )
 
-            # TODO handle
             dpg.add_checkbox(
                 label="Pin created objects",
                 default_value=True,
