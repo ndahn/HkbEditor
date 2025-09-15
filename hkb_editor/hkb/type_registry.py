@@ -139,8 +139,9 @@ class TypeRegistry:
         elem = obj.element
         fields = self.get_field_types(obj.type_id).keys()
 
-        missing = [f for f in fields if not next(elem.xpath(".//field[@name='{f}']"), None)]
-        extra = [c.get("name") for c in elem.xpath(".//field") if c.get("name") not in fields]
+        # Only check immediate children
+        missing = [f for f in fields if not elem.xpath(f"./field[@name='{f}']")]
+        extra = [c.get("name") for c in elem.xpath("./field") if c.get("name") not in fields]
         # TODO check for fields with wrong type
 
         if missing or extra:

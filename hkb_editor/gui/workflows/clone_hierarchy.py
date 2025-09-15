@@ -62,7 +62,7 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     events: dict[int, str] = {}
     variables: dict[int, HkbVariable] = {}
     animations: dict[int, str] = {}
-    objects = []
+    objects: list[HkbRecord] = []
 
     todo = [root_id]
 
@@ -125,7 +125,7 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
         ET.SubElement(xml_animations, "animation", idx=str(idx), name=anim)
 
     for obj in objects:
-        xml_objects.append(deepcopy(obj))
+        xml_objects.append(obj.as_object())
 
     return ET.tostring(root, pretty_print=True, encoding="unicode")
 
@@ -222,7 +222,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
             obj = HkbRecord.from_object(behavior, xmlobj)
             # Verify object has the expected fields
             behavior.type_registry.verify_object(obj)
-        except Exception as e:
+        except ValueError as e:
             raise ValueError(f"Object {xmlobj.get('id')} with type_id {xmlobj.get('typeid')} does not match this behavior's type registry: {e}")
 
         # Find pointers in the behavior referencing this object's ID. If more than one
@@ -243,18 +243,22 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         if obj.type_name == "hkbStateMachine::StateInfo":
             # Check if the hierarchy contains a statemachine which references the StateInfo.
             # StateInfo IDs can only be in conflict if they are pasted into a new statemachine.
-            hsm = xml.xpath(
+            hsm: list = xml.xpath(
                 f"/*/object[@type_id='{sm_type}' and .//pointer[@id='{obj.object_id}']]"
             )
-            if next(hsm, None):
+            if hsm:
                 continue
 
             obj_state_id = obj["stateId"].get_value()
-            statemachine = behavior.find_hierarchy_parent_for(obj.object_id, sm_type)
+            statemachine = next(behavior.find_hierarchy_parent_for(obj.object_id, sm_type))
             state_ptr: HkbPointer
 
             for state_ptr in statemachine["states"]:
                 state = state_ptr.get_target()
+                
+                if not state:
+                    continue
+
                 target_state_id = state["stateId"].get_value()
                 if target_state_id == obj_state_id:
                     hierarchy.state_ids[obj.object_id] = Resolution(state, "<new>")
@@ -467,6 +471,9 @@ def merge_hierarchy_dialog(
     *,
     tag: str = None,
 ) -> None:
+    if tag in (0, None, ""):
+        tag = f"mere_hierarchy_dialog_{dpg.generate_uuid()}"
+
     def resolve():
         resolve_conflicts(behavior, target_pointer, hierarchy)
         callback()
@@ -493,12 +500,12 @@ def merge_hierarchy_dialog(
 
             with dpg.group():
                 with dpg.tree_node(label="Events", default_open=True):
-                    with dpg.table(header_row=False):
+                    with dpg.table(header_row=False, borders_innerH=True):
                         dpg.add_table_column(label="idx0")
-                        dpg.add_table_column(label="name0")
+                        dpg.add_table_column(label="name0", width_stretch=True)
                         dpg.add_table_column(label="button")
                         dpg.add_table_column(label="idx1")
-                        dpg.add_table_column(label="name1")
+                        dpg.add_table_column(label="name1", width_stretch=True)
                         dpg.add_table_column(label="action")
 
                         for resolution in hierarchy.events.values():
@@ -510,13 +517,15 @@ def merge_hierarchy_dialog(
                                 dpg.add_text(resolution.result[1])
                                 dpg.add_text(resolution.action)
                 
+                dpg.add_spacer(height=5)
+
                 with dpg.tree_node(label="Variables", default_open=True):
                     with dpg.table(header_row=False):
                         dpg.add_table_column(label="idx0")
-                        dpg.add_table_column(label="name0")
+                        dpg.add_table_column(label="name0", width_stretch=True)
                         dpg.add_table_column(label="button")
                         dpg.add_table_column(label="idx1")
-                        dpg.add_table_column(label="name1")
+                        dpg.add_table_column(label="name1", width_stretch=True)
                         dpg.add_table_column(label="action")
 
                         for resolution in hierarchy.variables.values():
@@ -527,14 +536,16 @@ def merge_hierarchy_dialog(
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1].name)
                                 dpg.add_text(resolution.action)
-                                    
+                
+                dpg.add_spacer(height=5)
+
                 with dpg.tree_node(label="Animations", default_open=True):
                     with dpg.table(header_row=False):
                         dpg.add_table_column(label="idx0")
-                        dpg.add_table_column(label="name0")
+                        dpg.add_table_column(label="name0", width_stretch=True)
                         dpg.add_table_column(label="button")
                         dpg.add_table_column(label="idx1")
-                        dpg.add_table_column(label="name1")
+                        dpg.add_table_column(label="name1", width_stretch=True)
                         dpg.add_table_column(label="action")
 
                         for resolution in hierarchy.animations.values():
@@ -545,7 +556,9 @@ def merge_hierarchy_dialog(
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1])
                                 dpg.add_text(resolution.action)
-                                    
+            
+                dpg.add_spacer(height=5)
+
                 if hierarchy.objects:
                     with dpg.tree_node(label="Objects", default_open=True):
                         with dpg.table(header_row=False):
@@ -553,13 +566,13 @@ def merge_hierarchy_dialog(
                             dpg.add_table_column(label="Type")
                             dpg.add_table_column(label="Action")
 
-                            for oid, xmlobj in hierarchy.objects:
+                            for oid, resolution in hierarchy.objects.items():
                                 with dpg.table_row():
-                                    typeid = xmlobj.get("typeid")
-                                    type_name = behavior.type_registry.get_name(typeid)
+                                    type_name = resolution.original.type_name
 
                                     dpg.add_text(oid)
                                     dpg.add_text(type_name)
+                                    dpg.add_text(resolution.action)
 
         dpg.add_separator()
 

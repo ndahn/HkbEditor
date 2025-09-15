@@ -125,7 +125,7 @@ class Tagfile:
     def find_referees(
         self, object_id: "str | HkbRecord"
     ) -> Generator["HkbPointer", None, None]:
-        from .hkb_types import HkbPointer
+        from .hkb_types import HkbRecord, HkbPointer
 
         if isinstance(object_id, HkbRecord):
             object_id = object_id.object_id

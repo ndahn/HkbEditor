@@ -848,7 +848,7 @@ class AttributesWidget:
     def _paste_hierarchy(self, sender, app_data, pointer: HkbPointer) -> None:
         data = pyperclip.paste()
 
-        if not data.startswith("<behavior_tree"):
+        if not data.startswith("<behavior_hierarchy"):
             self.logger.error("Clipboard data is not a node hierarchy")
             return
 

@@ -35,7 +35,7 @@ class GraphWidget:
             layout = GraphLayout()
 
         if not get_node_frontpage:
-            get_node_frontpage = lambda s: s
+            get_node_frontpage = lambda n: n.id
 
         if tag in (None, 0, ""):
             tag = dpg.generate_uuid()
