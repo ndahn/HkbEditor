@@ -138,9 +138,15 @@ def paste_hierarchy(
     root = xmldoc.find("objects").getchildren()[0]
     root_id = root.get("id")
     root_type = root.get("typeid")
+    root_type_name = xmldoc.xpath(f".//type[@id='{root_type}']")[0].get("name")
 
-    if not target_pointer.will_accept(root_type):
-        raise ValueError("Hierarchy is not compatible with target pointer")
+    try:
+        mapped_root_type = behavior.type_registry.find_first_type_by_name(root_type_name)
+    except StopIteration:
+        raise ValueError(f"Could not map object type {root_type} ({root_type_name}) to a known type ID")
+
+    if not target_pointer.will_accept(mapped_root_type):
+        raise ValueError(f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type}")
 
     hierarchy = find_conflicts(behavior, xmldoc)
 
