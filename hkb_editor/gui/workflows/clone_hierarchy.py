@@ -251,7 +251,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         hierarchy.type_map[tid] = Resolution((tid, name), "<remap>", (new_id, name))
 
     # Find objects with IDs that already exist
-    for xmlobj in reversed(xml.find("objects").getchildren()):
+    for xmlobj in xml.find("objects").getchildren():
         # Remap the typeid. Should only be relevant when cloning between different games or
         # versions of hklib, but in those cases it might just make it work
         old_type_id = xmlobj.get("typeid")
@@ -639,7 +639,8 @@ def merge_hierarchy_dialog(
 
                     # Reveal everything when first showing
                     graph_preview.reveal_all_nodes()
-                    # graph_preview.zoom_show_all() # TODO doesn't work
+                    dpg.split_frame()  # wait for dimensions to be known
+                    graph_preview.zoom_show_all()
 
             # Events
             with dpg.group():
@@ -814,9 +815,7 @@ def merge_hierarchy_dialog(
                         dpg.add_table_column(label="name", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for idx, (oid, resolution) in enumerate(
-                            reversed(hierarchy.objects.items())
-                        ):
+                        for idx, (oid, resolution) in enumerate(hierarchy.objects.items()):
                             row_tag = f"{tag}_object_row_{oid}"
                             with dpg.table_row(tag=row_tag):
                                 name = resolution.original.get_field("name", "")
@@ -843,17 +842,25 @@ def merge_hierarchy_dialog(
         instructions = """\
 The above hierarchy will be added to the behavior. Items with the "<new>" action will be added
 under a new ID/index, while items with the "<remap>" action will use already existing objects
-from the behavior. Note that new events, variables and animations must still have unique names -
-you'll have to do this afterwards.
+from the behavior. 
+
+Note that new events, variables and animations must still have unique names - you'll have to fix
+these afterwards.
 """
         add_paragraphs(instructions, 150, color=style.light_blue)
         dpg.add_separator()
 
         with dpg.group(horizontal=True):
             dpg.add_button(label="Apply", callback=resolve, tag=f"{tag}_button_okay")
-            # Don't call close here, or it will be called again by the window's on_close!
             dpg.add_button(
                 label="Cancel",
-                callback=lambda: dpg.delete_item(dialog),
+                callback=close,
                 tag=f"{tag}_button_close",
+            )
+
+            # TODO handle
+            dpg.add_checkbox(
+                label="Pin created objects",
+                default_value=True,
+                tag=f"{tag}_pin_objects",
             )

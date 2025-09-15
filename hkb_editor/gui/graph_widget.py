@@ -190,15 +190,41 @@ class GraphWidget:
             self.set_zoom(0, (0.0, 0.0))
             return
 
+        # Temporarily set zoom to 0 to get the base layout without zoom scaling.
+        # Expensive, but reliable
+        self.zoom_level = 0
+        self.regenerate()
+        
+        # Get content bounding box at base zoom level
         bbox = self.get_canvas_content_bbox()
-        center_x = bbox[0] + bbox[2] / 2
-        center_y = bbox[1] + bbox[3] / 2
+        content_w = bbox[2]
+        content_h = bbox[3]
+        content_center_x = bbox[0] + content_w / 2
+        content_center_y = bbox[1] + content_h / 2
+        
         canvas_w, canvas_h = dpg.get_item_rect_size(self.tag)
-        zw = math.log(canvas_w / bbox[2], self.layout.zoom_factor)
-        zh = math.log(canvas_h / bbox[3], self.layout.zoom_factor)
-        zoom_level = min(zw, zh)
-
-        self.set_zoom(zoom_level, (center_x, center_y), limits=limits)
+        canvas_center_x = canvas_w / 2
+        canvas_center_y = canvas_h / 2
+        
+        # Calculate zoom level to fit content
+        zoom_w = math.log(canvas_w / content_w, self.layout.zoom_factor)
+        zoom_h = math.log(canvas_h / content_h, self.layout.zoom_factor)
+        zoom_level = min(zoom_w, zoom_h)
+        
+        if limits:
+            zoom_level = min(max(zoom_level, self.zoom_min), self.zoom_max)
+        
+        # Calculate final zoom factor and centered origin
+        final_zoom = self.layout.zoom_factor ** zoom_level
+        
+        # Calculate where to place origin so scaled content center aligns with canvas center
+        new_origin_x = canvas_center_x - content_center_x * final_zoom
+        new_origin_y = canvas_center_y - content_center_y * final_zoom
+        
+        # Apply zoom and centering together
+        self.zoom_level = zoom_level
+        self.set_origin(new_origin_x, new_origin_y)
+        self.regenerate()
 
     # Content setup
     def _setup_content(self, width: int, height: int):

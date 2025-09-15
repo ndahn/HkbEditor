@@ -856,7 +856,10 @@ class AttributesWidget:
         new_objects = [r.result for r in hierarchy.objects.values() if r.action == "<new>"]
         self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
 
+        # TODO check if objects should be pinned
+
         if self.on_graph_changed:
+            # TODO not regenerating graph properly
             self.on_graph_changed()
 
     def _copy_to_clipboard(self, data: str):
