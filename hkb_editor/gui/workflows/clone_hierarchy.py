@@ -509,7 +509,7 @@ def merge_hierarchy_dialog(
     tag: str = None,
 ) -> None:
     if tag in (0, None, ""):
-        tag = f"mere_hierarchy_dialog_{dpg.generate_uuid()}"
+        tag = f"merge_hierarchy_dialog_{dpg.generate_uuid()}"
 
     def update_action(sender: str, action: str, resolution: Resolution):
         print("###", action)
@@ -522,10 +522,16 @@ def merge_hierarchy_dialog(
     def close():
         dpg.delete_item(dialog)
 
+    event_rows: dict[str, int] = {}
+    variable_rows: dict[str, int] = {}
+    animation_rows: dict[str, int] = {}
+    type_rows: dict[str, int] = {}
+    object_rows: dict[str, int] = {}
+
     # Window content
     with dpg.window(
-        width=900,
-        height=500,
+        width=1100,
+        height=600,
         label="Merge Hierarchy",
         modal=False,
         on_close=close,
@@ -534,10 +540,18 @@ def merge_hierarchy_dialog(
     ) as dialog:
         with dpg.group(horizontal=True):
             graph_data = xml.find("objects").get("graph")
+
             if graph_data:
                 from hkb_editor.gui.graph_widget import GraphWidget
 
                 graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
+                highlighted_rows: dict[str, list[int]] = {}
+                highlight_color = list(style.yellow)
+
+                if len(highlight_color) < 3:
+                    highlight_color.append(100)
+                else:
+                    highlight_color[3] = 100
 
                 def get_node_frontpage(node):
                     obj: HkbRecord = hierarchy.objects[node.id].original
@@ -548,19 +562,52 @@ def merge_hierarchy_dialog(
 
                     return [obj.type_name, obj.object_id]
 
+                def highlight_row(table_type: str, key: str, row_map: dict[str, int]):
+                    table = f"{tag}_{table_type}_table"
+                    row = f"{tag}_{table_type}_row_{key}"
+                    row_idx = row_map[row]
+
+                    dpg.highlight_table_row(table, row_idx, highlight_color)
+                    highlighted_rows.setdefault(table, []).append(row_idx)
+
                 def on_node_selected(node):
-                    # TODO highlight corresponding conflicts
-                    pass
+                    for table, rows in highlighted_rows.items():
+                        for row in rows:
+                            dpg.unhighlight_table_row(table, row)
+                        rows.clear()
+
+                    if node:
+                        obj: HkbRecord = hierarchy.objects[node.id].original
+
+                        # Highlight events, variables and animations this object references
+                        if obj.type_name in _event_attributes:
+                            for path in _event_attributes[obj.type_name]:
+                                for evt in obj.get_fields(path, resolve=True).values():
+                                    highlight_row("event", evt, event_rows)
+
+                        if obj.type_name in _variable_attributes:
+                            for path in _variable_attributes[obj.type_name]:
+                                for var in obj.get_fields(path, resolve=True).values():
+                                    highlight_row("variable", var, variable_rows)
+
+                        if obj.type_name in _animation_attributes:
+                            for path in _animation_attributes[obj.type_name]:
+                                for anim in obj.get_fields(path, resolve=True).values():
+                                    highlight_row("animation", anim, animation_rows)
+
+                        highlight_row("type", obj.type_id, type_rows)
+                        highlight_row("object", obj.object_id, object_rows)
 
                 # TODO color nodes if they have conflicts
                 # TODO unfold all, disable folding
                 with dpg.child_window(auto_resize_x=True, auto_resize_y=True):
                     gw = GraphWidget(
                         graph,
-                        get_node_frontpage=get_node_frontpage,
                         on_node_selected=on_node_selected,
-                        width=400,
-                        height=400,
+                        get_node_frontpage=get_node_frontpage,
+                        hover_enabled=True,
+                        width=500,
+                        height=500,
                     )
 
             with dpg.group():
@@ -569,16 +616,20 @@ def merge_hierarchy_dialog(
                         header_row=False,
                         policy=dpg.mvTable_SizingFixedFit,
                         borders_innerH=True,
+                        tag=f"{tag}_event_table",
                     ):
-                        dpg.add_table_column(label="idx0", width=25, width_fixed=True)
+                        dpg.add_table_column(label="idx0", width_fixed=True)
                         dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="to", width=10, width_fixed=True)
-                        dpg.add_table_column(label="idx1", width=25, width_fixed=True)
+                        dpg.add_table_column(label="to", width_fixed=True)
+                        dpg.add_table_column(label="idx1", width_fixed=True)
                         dpg.add_table_column(label="name1", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for resolution in hierarchy.events.values():
-                            with dpg.table_row():
+                        for idx, (key, resolution) in enumerate(
+                            hierarchy.events.items()
+                        ):
+                            row_tag = f"{tag}_event_row_{key}"
+                            with dpg.table_row(tag=row_tag):
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text(resolution.original[1])
                                 dpg.add_text("->")
@@ -591,6 +642,8 @@ def merge_hierarchy_dialog(
                                     user_data=resolution,
                                 )
 
+                            event_rows[row_tag] = idx
+
                 dpg.add_spacer(height=10)
 
                 with dpg.tree_node(label="Variables", default_open=True):
@@ -598,16 +651,20 @@ def merge_hierarchy_dialog(
                         header_row=False,
                         policy=dpg.mvTable_SizingFixedFit,
                         borders_innerH=True,
+                        tag=f"{tag}_variable_table",
                     ):
-                        dpg.add_table_column(label="idx0", width=25, width_fixed=True)
+                        dpg.add_table_column(label="idx0", width_fixed=True)
                         dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="to", width=10, width_fixed=True)
-                        dpg.add_table_column(label="idx1", width=25, width_fixed=True)
+                        dpg.add_table_column(label="to", width_fixed=True)
+                        dpg.add_table_column(label="idx1", width_fixed=True)
                         dpg.add_table_column(label="name1", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for resolution in hierarchy.variables.values():
-                            with dpg.table_row():
+                        for idx, (key, resolution) in enumerate(
+                            hierarchy.variables.items()
+                        ):
+                            row_tag = f"{tag}_variable_row_{key}"
+                            with dpg.table_row(tag=row_tag):
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text(resolution.original[1].name)
                                 dpg.add_text("->")
@@ -620,6 +677,8 @@ def merge_hierarchy_dialog(
                                     user_data=resolution,
                                 )
 
+                            variable_rows[row_tag] = idx
+
                 dpg.add_spacer(height=10)
 
                 with dpg.tree_node(label="Animations", default_open=True):
@@ -627,16 +686,20 @@ def merge_hierarchy_dialog(
                         header_row=False,
                         policy=dpg.mvTable_SizingFixedFit,
                         borders_innerH=True,
+                        tag=f"{tag}_animation_table",
                     ):
-                        dpg.add_table_column(label="idx0", width=25, width_fixed=True)
+                        dpg.add_table_column(label="idx0", width_fixed=True)
                         dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="to", width=10, width_fixed=True)
-                        dpg.add_table_column(label="idx1", width=25, width_fixed=True)
+                        dpg.add_table_column(label="to", width_fixed=True)
+                        dpg.add_table_column(label="idx1", width_fixed=True)
                         dpg.add_table_column(label="name1", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for resolution in hierarchy.animations.values():
-                            with dpg.table_row():
+                        for idx, (key, resolution) in enumerate(
+                            hierarchy.animations.items()
+                        ):
+                            row_tag = f"{tag}_animation_row_{key}"
+                            with dpg.table_row(tag=row_tag):
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text(resolution.original[1])
                                 dpg.add_text("->")
@@ -649,6 +712,8 @@ def merge_hierarchy_dialog(
                                     user_data=resolution,
                                 )
 
+                            animation_rows[row_tag] = idx
+
                 dpg.add_spacer(height=10)
 
                 with dpg.tree_node(label="Types", default_open=True):
@@ -656,25 +721,31 @@ def merge_hierarchy_dialog(
                         header_row=False,
                         policy=dpg.mvTable_SizingFixedFit,
                         borders_innerH=True,
+                        tag=f"{tag}_type_table",
                     ):
-                        dpg.add_table_column(label="id0", width=25, width_fixed=True)
-                        dpg.add_table_column(label="to", width=10, width_fixed=True)
-                        dpg.add_table_column(label="id1", width=25, width_fixed=True)
+                        dpg.add_table_column(label="id0", width_fixed=True)
+                        dpg.add_table_column(label="to", width_fixed=True)
+                        dpg.add_table_column(label="id1", width_fixed=True)
                         dpg.add_table_column(label="name", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for resolution in hierarchy.type_map.values():
-                            with dpg.table_row():
+                        for idx, (key, resolution) in enumerate(
+                            hierarchy.type_map.items()
+                        ):
+                            row_tag = f"{tag}_type_row_{key}"
+                            with dpg.table_row(tag=row_tag):
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text("->")
                                 dpg.add_text(resolution.result[0])
-                                dpg.add_text(resolution.result[1])
+                                dpg.add_text(f"({resolution.result[1]})")
                                 dpg.add_combo(
                                     ["<remap>"],
                                     default_value=resolution.action,
                                     callback=update_action,
                                     user_data=resolution,
                                 )
+
+                            type_rows[row_tag] = idx
 
                 dpg.add_spacer(height=10)
 
@@ -684,23 +755,31 @@ def merge_hierarchy_dialog(
                             header_row=False,
                             policy=dpg.mvTable_SizingFixedFit,
                             borders_innerH=True,
+                            tag=f"{tag}_object_table",
                         ):
-                            dpg.add_table_column(label="oid", width=25, width_fixed=True)
-                            dpg.add_table_column(label="tid", width_stretch=True)
-                            dpg.add_table_column(label="action", init_width_or_weight=100)
+                            dpg.add_table_column(label="oid", width_fixed=True)
+                            dpg.add_table_column(label="name", width_stretch=True)
+                            dpg.add_table_column(
+                                label="action", init_width_or_weight=100
+                            )
 
-                            for oid, resolution in hierarchy.objects.items():
-                                with dpg.table_row():
-                                    type_name = resolution.original.type_name
+                            for idx, (oid, resolution) in enumerate(
+                                reversed(hierarchy.objects.items())
+                            ):
+                                row_tag = f"{tag}_object_row_{oid}"
+                                with dpg.table_row(tag=row_tag):
+                                    name = resolution.original.get_field("name", "")
 
                                     dpg.add_text(oid)
-                                    dpg.add_text(type_name)
+                                    dpg.add_text(name)
                                     dpg.add_combo(
                                         ["<new>", "<reuse>", "<skip>"],
                                         default_value=resolution.action,
                                         callback=update_action,
                                         user_data=resolution,
                                     )
+
+                                object_rows[row_tag] = idx
 
         dpg.add_separator()
 
