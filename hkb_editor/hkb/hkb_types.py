@@ -226,10 +226,10 @@ class HkbPointer(XmlValueHandler):
 
     def get_target(self) -> "HkbRecord":
         oid = self.get_value()
-        if not oid:
-            return None
+        if oid:
+            return self.tagfile.objects[oid]
 
-        return self.tagfile.objects[oid]
+        return None
 
     def is_set(self) -> bool:
         return bool(self.get_value())

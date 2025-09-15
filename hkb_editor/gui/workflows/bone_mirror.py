@@ -21,7 +21,7 @@ def bone_mirror_dialog(
     tag: str = None,
 ) -> HkbArray:
     if tag in (None, 0, ""):
-        tag = dpg.generate_uuid()
+        tag = f"bone_mirror_dialog_{dpg.generate_uuid()}"
 
     bones: list[str] = None
     mirror_info: HkbRecord = None

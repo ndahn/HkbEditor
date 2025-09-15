@@ -26,7 +26,7 @@ def apply_template_dialog(
     user_data: Any = None,
 ) -> str:
     if tag in (None, 0, ""):
-        tag = dpg.generate_uuid()
+        tag = f"apply_template_dialog_{dpg.generate_uuid()}"
 
     logger = logging.getLogger(os.path.splitext(os.path.basename(template_file))[0])
     template = TemplateContext(behavior, template_file)

@@ -20,7 +20,7 @@ def register_clip_dialog(
     user_data: Any = None,
 ) -> None:
     if tag in (0, "", None):
-        tag = dpg.generate_uuid()
+        tag = f"register_clip_dialog_{dpg.generate_uuid()}"
 
     util = CommonActionsMixin(behavior)
     selected_cmsg: HkbRecord = None

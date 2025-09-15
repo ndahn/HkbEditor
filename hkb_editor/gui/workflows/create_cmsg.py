@@ -39,7 +39,7 @@ def create_cmsg_dialog(
     # - select an appropriate transition object (e.g. TaeBlend)
 
     if tag in (0, "", None):
-        tag = dpg.generate_uuid()
+        tag = f"create_cmsg_dialog_{dpg.generate_uuid()}"
 
     util = CommonActionsMixin(behavior)
     types = behavior.type_registry

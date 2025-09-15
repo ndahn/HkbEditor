@@ -25,7 +25,7 @@ def create_object_dialog(
     user_data: Any = None,
 ) -> str:
     if tag in (None, 0, ""):
-        tag = dpg.generate_uuid()
+        tag = f"create_object_dialog_{dpg.generate_uuid()}"
 
     type_registry = tagfile.type_registry
     record: HkbRecord = None
