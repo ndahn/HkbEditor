@@ -12,6 +12,7 @@ from hkb_editor.hkb import HkbPointer, HkbRecord
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui import style
 from hkb_editor.gui.workflows.undo import UndoManager
+from hkb_editor.gui.helpers import common_loading_indicator
 
 
 _event_attributes = {
@@ -151,7 +152,8 @@ def paste_hierarchy(
         raise ValueError("Not a valid behavior hierarchy")
 
     root = xml.find("objects").getchildren()[0]
-    root_type = root.attrib["typeid"]
+    root_id = root.get("id")
+    root_type = root.get("typeid")
 
     if not target_pointer.will_accept(root_type):
         raise ValueError("Hierarchy is not compatible with target pointer")
@@ -161,12 +163,17 @@ def paste_hierarchy(
     with undo_manager.combine():
 
         def add_objects():
-            # Events, variables, etc. have already been created as needed,
-            # just need to add the objects
-            for res in hierarchy.objects.values():
-                obj: HkbRecord = res.result
-                if obj:
-                    behavior.add_object(obj)
+            new_root: HkbRecord = hierarchy.objects[root_id].result
+
+            if new_root:
+                # Events, variables, etc. have already been created as needed,
+                # just need to add the objects
+                for res in hierarchy.objects.values():
+                    obj: HkbRecord = res.result
+                    if obj:
+                        behavior.add_object(obj)
+
+                target_pointer.set_value(new_root)
 
         if interactive:
             merge_hierarchy_dialog(
@@ -358,13 +365,13 @@ def resolve_conflicts(
             new_idx = behavior.create_animation(name)
             resolution.result = (new_idx, name)
         elif resolution.action == "<reuse>":
-            new_idx = behavior.find_animation(resolution.original)
+            new_idx = behavior.find_animation(name)
             resolution.result = (new_idx, name)
         elif resolution.action == "<keep>":
             resolution.result = resolution.original
         else:
             raise ValueError(
-                f"Invalid action {resolution.action} for animation {idx} ({resolution.original})"
+                f"Invalid action {resolution.action} for animation {idx} ({resolution.original[1]})"
             )
 
     # Handle conflicting objects
@@ -388,7 +395,7 @@ def resolve_conflicts(
     # into a new statemachine
     sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
     target_record = behavior.find_object_for(target_pointer)
-    target_sm = behavior.find_hierarchy_parent_for(target_record, sm_type)
+    target_sm = next(behavior.find_hierarchy_parent_for(target_record, sm_type))
 
     # Fix object references
     for object_id, resolution in hierarchy.objects.items():
@@ -472,11 +479,7 @@ def resolve_conflicts(
         # - transitions:*/toNestedStateId
         if obj.type_name == "hkbStateMachine::TransitionInfoArray":
             # TODO should verify this object belongs to a StateInfo with state ID conflicts
-            transition_ptr: HkbPointer
-
-            for transition_ptr in obj["transitions"]:
-                transition = transition_ptr.get_target()
-
+            for transition in obj["transitions"]:
                 for attr in ["toStateId", "fromNestedStateId", "toNestedStateId"]:
                     attr_id = transition[attr].get_value()
 
@@ -511,15 +514,25 @@ def merge_hierarchy_dialog(
     if tag in (0, None, ""):
         tag = f"merge_hierarchy_dialog_{dpg.generate_uuid()}"
 
+    graph_data = xml.find("objects").get("graph")
+    graph_preview = None
+
     def update_action(sender: str, action: str, resolution: Resolution):
-        print("###", action)
         resolution.action = action
 
     def resolve():
-        resolve_conflicts(behavior, target_pointer, hierarchy)
-        callback()
+        try:
+            loading = common_loading_indicator("Merging Hierarchy")
+            resolve_conflicts(behavior, target_pointer, hierarchy)
+            callback()
+        finally:
+            dpg.delete_item(loading)
+            close()
 
     def close():
+        if graph_preview:
+            graph_preview.deinit()
+
         dpg.delete_item(dialog)
 
     event_rows: dict[str, int] = {}
@@ -530,17 +543,15 @@ def merge_hierarchy_dialog(
 
     # Window content
     with dpg.window(
-        width=1100,
-        height=600,
+        width=1100 if graph_data else 600,
+        height=600 if graph_data else 500,
         label="Merge Hierarchy",
         modal=False,
-        on_close=close,
+        on_close=lambda: dpg.delete_item(dialog),
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
         with dpg.group(horizontal=True):
-            graph_data = xml.find("objects").get("graph")
-
             if graph_data:
                 from hkb_editor.gui.graph_widget import GraphWidget
 
@@ -556,11 +567,17 @@ def merge_hierarchy_dialog(
                 def get_node_frontpage(node):
                     obj: HkbRecord = hierarchy.objects[node.id].original
 
-                    # TODO line colors
-                    if "name" in obj.fields:
-                        return [obj["name"].get_value(), obj.type_name, obj.object_id]
-
-                    return [obj.type_name, obj.object_id]
+                    try:
+                        return [
+                            (obj["name"].get_value(), style.yellow),
+                            (node.id, style.blue),
+                            (obj.type_name, style.white),
+                        ]
+                    except AttributeError:
+                        return [
+                            (node.id, style.blue),
+                            (obj.type_name, style.white),
+                        ]
 
                 def highlight_row(table_type: str, key: str, row_map: dict[str, int]):
                     table = f"{tag}_{table_type}_table"
@@ -598,17 +615,27 @@ def merge_hierarchy_dialog(
                         highlight_row("type", obj.type_id, type_rows)
                         highlight_row("object", obj.object_id, object_rows)
 
-                # TODO color nodes if they have conflicts
-                # TODO unfold all, disable folding
-                with dpg.child_window(auto_resize_x=True, auto_resize_y=True):
-                    gw = GraphWidget(
+                with dpg.child_window(
+                    width=500,
+                    height=500,
+                    resizable_x=True,
+                    no_scrollbar=True,
+                    no_scroll_with_mouse=True,
+                    horizontal_scrollbar=False,
+                ):
+                    graph_preview = GraphWidget(
                         graph,
                         on_node_selected=on_node_selected,
                         get_node_frontpage=get_node_frontpage,
                         hover_enabled=True,
                         width=500,
                         height=500,
+                        tag=f"{tag}_graph_preview",
                     )
+
+                    # Reveal everything when first showing
+                    graph_preview.reveal_all_nodes()
+                    #graph_preview.zoom_show_all() # TODO doesn't work
 
             with dpg.group():
                 with dpg.tree_node(label="Events", default_open=True):
@@ -635,6 +662,7 @@ def merge_hierarchy_dialog(
                                 dpg.add_text("->")
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1])
+                                # TODO remove reuse if not reusable
                                 dpg.add_combo(
                                     ["<new>", "<reuse>", "<keep>"],
                                     default_value=resolution.action,
@@ -670,6 +698,7 @@ def merge_hierarchy_dialog(
                                 dpg.add_text("->")
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1].name)
+                                # TODO remove reuse if not reusable
                                 dpg.add_combo(
                                     ["<new>", "<reuse>", "<keep>"],
                                     default_value=resolution.action,
@@ -705,6 +734,7 @@ def merge_hierarchy_dialog(
                                 dpg.add_text("->")
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1])
+                                # TODO remove reuse if not reusable
                                 dpg.add_combo(
                                     ["<new>", "<reuse>", "<keep>"],
                                     default_value=resolution.action,
@@ -738,6 +768,7 @@ def merge_hierarchy_dialog(
                                 dpg.add_text("->")
                                 dpg.add_text(resolution.result[0])
                                 dpg.add_text(f"({resolution.result[1]})")
+                                # TODO remove reuse if not reusable
                                 dpg.add_combo(
                                     ["<remap>"],
                                     default_value=resolution.action,
@@ -772,6 +803,7 @@ def merge_hierarchy_dialog(
 
                                     dpg.add_text(oid)
                                     dpg.add_text(name)
+                                    # TODO remove reuse if not reusable
                                     dpg.add_combo(
                                         ["<new>", "<reuse>", "<skip>"],
                                         default_value=resolution.action,
@@ -786,5 +818,6 @@ def merge_hierarchy_dialog(
         # TODO help text
 
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Okay", callback=resolve)
-            dpg.add_button(label="Cancel", callback=close)
+            dpg.add_button(label="Apply", callback=resolve, tag=f"{tag}_button_okay")
+            # Don't call close here, or it will be called again by the window's on_close!
+            dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(dialog), tag=f"{tag}_button_close")

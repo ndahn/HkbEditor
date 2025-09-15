@@ -185,7 +185,7 @@ class HkbPointer(XmlValueHandler):
         self, type_id: "HkbRecord | str", check_subtypes: bool = True
     ) -> bool:
         if isinstance(type_id, HkbRecord):
-            type_id = HkbRecord.type_id
+            type_id = type_id.type_id
 
         if self.subtype == type_id:
             return True
@@ -642,7 +642,8 @@ class HkbRecord(XmlValueHandler):
                 if isinstance(field, HkbRecord):
                     todo.append(field)
 
-                yield field
+                if isinstance(field, field_type):
+                    yield field
 
     def __getitem__(self, name: str) -> XmlValueHandler:
         ftype = self.get_field_type(name)

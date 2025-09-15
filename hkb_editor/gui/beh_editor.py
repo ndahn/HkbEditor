@@ -762,12 +762,12 @@ class BehaviorEditor(GraphEditor):
             return [
                 (obj["name"].get_value(), style.yellow),
                 (node.id, style.blue),
-                (self.beh.type_registry.get_name(obj.type_id), style.white),
+                (obj.type_name, style.white),
             ]
         except AttributeError:
             return [
                 (node.id, style.blue),
-                (self.beh.type_registry.get_name(obj.type_id), style.white),
+                (obj.type_name, style.white),
             ]
 
     def get_node_frontpage_short(self, node_id: str) -> str:

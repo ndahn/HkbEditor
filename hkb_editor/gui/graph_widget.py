@@ -38,7 +38,7 @@ class GraphWidget:
             get_node_frontpage = lambda n: n.id
 
         if tag in (None, 0, ""):
-            tag = dpg.generate_uuid()
+            tag = f"graph_widget_{dpg.generate_uuid()}"
 
         self.layout = layout
         self.on_node_selected = on_node_selected
@@ -58,8 +58,6 @@ class GraphWidget:
         self.nodes: dict[str, Node] = {}
         self.hovered_node: Node = None
         self.selected_node: Node = None
-        self.canvas: str = None
-        self.handler_registry: str = None
         self.transform: tuple[float, float] = (0.0, 0.0)
         self.dragging = False
         self.last_drag: tuple[float, float] = (0.0, 0.0)
@@ -71,9 +69,38 @@ class GraphWidget:
         self.set_graph(graph)
 
     def deinit(self):
-        dpg.delete_item(self.handler_registry)
-        dpg.delete_item(self.canvas)
+        # Prevent double deinitialization
+        if getattr(self, '_deinitialized', False):
+            return
+        
+        self._deinitialized = True
 
+        # Disable mouse callbacks in the brief window until the handlers are removed
+        self.hover_enabled = False
+
+        # Disable all handlers in case deletion fails (see below)
+        registry_tag = f"{self.tag}_handler_registry"
+        if dpg.does_item_exist(registry_tag):
+            dpg.configure_item(registry_tag, show=False)
+        
+        # Delete the drawable content
+        if dpg.does_item_exist(self.tag):
+            dpg.delete_item(self.tag)
+        
+        # Schedule handler registry deletion for later, otherwise this can sometimes lead
+        # to silent program crashes. This is the only solution I have found to this.
+        def delayed_cleanup():
+            if dpg.does_item_exist(registry_tag):
+                for listener in dpg.get_item_children(registry_tag, 1):
+                    dpg.delete_item(listener)
+                dpg.delete_item(registry_tag)
+        
+        with dpg.mutex():
+            # Calling delayed_cleanup directly sometimes leads to a silent crash. 
+            # Unfortunately, this is not guaranteed to run due to a bug in dearpygui, see
+            # https://github.com/hoffstadt/DearPyGui/issues/2269
+            dpg.set_frame_callback(dpg.get_frame_count() + 5, delayed_cleanup)
+        
     @property
     def zoom_factor(self) -> float:
         return self.layout.zoom_factor**self.zoom_level
@@ -166,7 +193,7 @@ class GraphWidget:
         bbox = self.get_canvas_content_bbox()
         center_x = bbox[0] + bbox[2] / 2
         center_y = bbox[1] + bbox[3] / 2
-        canvas_w, canvas_h = dpg.get_item_rect_size(self.canvas)
+        canvas_w, canvas_h = dpg.get_item_rect_size(self.tag)
         zw = math.log(canvas_w / bbox[2], self.layout.zoom_factor)
         zh = math.log(canvas_h / bbox[3], self.layout.zoom_factor)
         zoom_level = min(zw, zh)
@@ -175,12 +202,12 @@ class GraphWidget:
 
     # Content setup
     def _setup_content(self, width: int, height: int):
-        with dpg.drawlist(width, height, tag=self.tag) as self.canvas:
+        with dpg.drawlist(width, height, tag=self.tag) as self.tag:
             with dpg.draw_node(tag=f"{self.tag}_root"):
                 dpg.add_draw_node(tag=f"{self.tag}_edge_layer")
                 dpg.add_draw_node(tag=f"{self.tag}_node_layer")
 
-        with dpg.handler_registry() as self.handler_registry:
+        with dpg.handler_registry(tag=f"{self.tag}_handler_registry"):
             dpg.add_mouse_release_handler(
                 dpg.mvMouseButton_Left, callback=self._on_left_click
             )
@@ -204,7 +231,7 @@ class GraphWidget:
         with dpg.item_handler_registry():
             dpg.add_item_resize_handler(callback=self._on_resize)
 
-        parent = dpg.get_item_parent(self.canvas)
+        parent = dpg.get_item_parent(self.tag)
         dpg.bind_item_handler_registry(parent, dpg.last_container())
 
     def _on_resize(self, *args):
@@ -213,7 +240,7 @@ class GraphWidget:
     # Canvas interactions
     def _get_graph_mouse_pos(self) -> tuple[float, float]:
         # x+: right, y+: down
-        if not dpg.is_item_hovered(self.canvas):
+        if not dpg.is_item_hovered(self.tag):
             return (0.0, 0.0)
 
         mx, my = dpg.get_drawing_mouse_pos()
@@ -221,7 +248,7 @@ class GraphWidget:
         return ((mx - ox), (my - oy))
 
     def _on_left_click(self) -> None:
-        if not dpg.is_item_hovered(self.canvas):
+        if not dpg.is_item_hovered(self.tag):
             return
 
         mx, my = self._get_graph_mouse_pos()
@@ -233,7 +260,7 @@ class GraphWidget:
             self.select(node)
 
     def _on_right_click(self) -> None:
-        if not dpg.is_item_hovered(self.canvas):
+        if not dpg.is_item_hovered(self.tag):
             return
 
         mx, my = self._get_graph_mouse_pos()
@@ -281,7 +308,7 @@ class GraphWidget:
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
 
     def _on_drag_start(self) -> None:
-        if dpg.is_item_hovered(self.canvas):
+        if dpg.is_item_hovered(self.tag):
             self.dragging = True
 
     def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
@@ -305,7 +332,7 @@ class GraphWidget:
         self.dragging = False
 
     def _on_mouse_wheel(self, sender, wheel_delta: int):
-        if not dpg.is_item_hovered(self.canvas):
+        if not dpg.is_item_hovered(self.tag):
             return
 
         if get_config().invert_zoom:
@@ -323,7 +350,7 @@ class GraphWidget:
         if not self.hover_enabled:
             return
 
-        if dpg.is_item_hovered(self.canvas):
+        if dpg.is_item_hovered(self.tag):
             mx, my = self._get_graph_mouse_pos()
             node = self.get_node_at_pos(mx, my)
         else:

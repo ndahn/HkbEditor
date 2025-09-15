@@ -113,10 +113,10 @@ class Tagfile:
 
         parent: ET._Element = item
 
-        while parent and not parent.tag == "object":
+        while parent is not None and not parent.tag == "object":
             parent = parent.getparent()
 
-        if parent:
+        if parent is not None:
             oid = parent.get("id")
             return self.objects.get(oid)
 

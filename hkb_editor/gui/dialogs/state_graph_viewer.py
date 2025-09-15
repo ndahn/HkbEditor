@@ -179,6 +179,7 @@ def open_state_graph_viewer(
                     edge_style="straight",
                     width=1000,  # larger canvas to compensate it not resizing
                     height=1000,
+                    tag=f"{tag}_graph_widget",
                 )
 
             with dpg.group(width=150):
