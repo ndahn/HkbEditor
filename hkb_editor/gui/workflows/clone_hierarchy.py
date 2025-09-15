@@ -170,7 +170,8 @@ def paste_hierarchy(
                 # just need to add the objects
                 for res in hierarchy.objects.values():
                     obj: HkbRecord = res.result
-                    if obj:
+                    # Objects with action <reuse> and <skip> should not be added
+                    if obj and res.action == "<new>":
                         behavior.add_object(obj)
 
                 target_pointer.set_value(new_root)
@@ -327,9 +328,34 @@ def resolve_conflicts(
     hierarchy: MergeHierarchy,
 ) -> None:
     common = CommonActionsMixin(behavior)
-
     state_id_map: dict[int, int] = {}
+    
+    def is_object_included(object_id: str) -> bool:
+        # The root object will not have any parents to check
+        if object_id == list(hierarchy.objects.keys())[0]:
+            return True
 
+        has_valid_path = False
+
+        # Check parents: if all of them are skipped or reused, 
+        # this one should be skipped, too
+        for other in hierarchy.objects.values():
+            if not other.result or other.result.object_id == object_id:
+                continue
+
+            if other.action == "<new>":
+                # <new> is the only action type that will include descendents
+                ptr: HkbPointer
+                for ptr in other.result.find_fields_by_type(HkbPointer):
+                    if ptr.get_value() == object_id:
+                        has_valid_path = True
+                        break
+
+            if has_valid_path:
+                break
+
+        return has_valid_path
+            
     # TODO add undo actions
     # Create missing events, variables and animations. If the value is not "<new>" we can
     # expect that a mapping to another value has been applied
@@ -381,6 +407,13 @@ def resolve_conflicts(
     # Handle conflicting objects
     for object_id, resolution in hierarchy.objects.items():
         if resolution.action == "<new>":
+            # If the object is set to <new>, but none of its parents are cloned, 
+            # the object will not be included after all
+            if not is_object_included(object_id):
+                resolution.action = "<skip>"
+                logging.getLogger().info(f"Skipping object {object_id} as none of its parents are cloned")
+                continue
+            
             if object_id in behavior.objects:
                 new_id = behavior.new_id()
                 resolution.original.object_id = new_id
@@ -405,7 +438,7 @@ def resolve_conflicts(
     for object_id, resolution in hierarchy.objects.items():
         # Fix any pointers pointing to conflicting objects
         obj: HkbRecord = resolution.result
-        if not obj or resolution.action == "<skip>":
+        if not obj or resolution.action in ("<reuse>", "<skip>"):
             continue
 
         ptr: HkbPointer
@@ -448,9 +481,9 @@ def resolve_conflicts(
         state_id_offset += 1
 
     for object_id, resolution in hierarchy.objects.items():
-        obj = resolution.result
+        obj: HkbRecord = resolution.result
 
-        if not obj or resolution.action == "<reuse>":
+        if not obj or resolution.action in ("<reuse>", "<skip>"):
             # Skip if object is not cloned or an existing object is reused
             continue
 
