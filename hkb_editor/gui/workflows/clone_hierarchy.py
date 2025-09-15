@@ -1,7 +1,6 @@
 from typing import Any, Callable
 import logging
 from dataclasses import dataclass, field
-from copy import deepcopy
 from ast import literal_eval
 from lxml import etree as ET
 import networkx as nx
@@ -12,7 +11,6 @@ from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableTyp
 from hkb_editor.hkb import HkbPointer, HkbRecord
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui import style
-from hkb_editor.gui.graph_widget import GraphWidget
 from hkb_editor.gui.workflows.undo import UndoManager
 
 
@@ -20,7 +18,7 @@ _event_attributes = {
     "hkbManualSelectorGenerator": [
         "endOfClipEventId",
     ],
-    "hkbStateMachine" : ["eventToSendWhenStateOrTransitionChanges/id"],
+    "hkbStateMachine": ["eventToSendWhenStateOrTransitionChanges/id"],
     "hkbStateMachine::TransitionInfoArray": ["transitions:*/eventId"],
 }
 
@@ -52,6 +50,7 @@ class MergeHierarchy:
     events: dict[int, Resolution] = field(default_factory=dict)
     variables: dict[int, Resolution] = field(default_factory=dict)
     animations: dict[int, Resolution] = field(default_factory=dict)
+    type_map: dict[str, Resolution] = field(default_factory=dict)
     objects: dict[str, Resolution] = field(default_factory=dict)
     state_ids: dict[str, Resolution] = field(default_factory=dict)
 
@@ -63,6 +62,7 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     variables: dict[int, HkbVariable] = {}
     animations: dict[int, str] = {}
     objects: list[HkbRecord] = []
+    type_map: dict[str, str] = {}
 
     todo = [root_id]
 
@@ -96,6 +96,7 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
                     animations[anim] = animation_name
 
         objects.append(obj)
+        type_map[obj.type_id] = obj.type_name
 
         todo.extend(g.successors(oid))
 
@@ -103,6 +104,7 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     xml_events = ET.SubElement(root, "events")
     xml_variables = ET.SubElement(root, "variables")
     xml_animations = ET.SubElement(root, "animations")
+    xml_types = ET.SubElement(root, "types")
     xml_objects = ET.SubElement(root, "objects", graph=str(nx.to_edgelist(g)))
 
     for idx, evt in events.items():
@@ -123,6 +125,9 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
 
     for idx, anim in animations.items():
         ET.SubElement(xml_animations, "animation", idx=str(idx), name=anim)
+
+    for type_id, type_name in type_map.items():
+        ET.SubElement(xml_types, "type", id=type_id, name=type_name)
 
     for obj in objects:
         xml_objects.append(obj.as_object())
@@ -154,8 +159,9 @@ def paste_hierarchy(
     hierarchy = find_conflicts(behavior, xml)
 
     with undo_manager.combine():
+
         def add_objects():
-            # Events, variables, etc. have already been created as needed, 
+            # Events, variables, etc. have already been created as needed,
             # just need to add the objects
             for res in hierarchy.objects.values():
                 obj: HkbRecord = res.result
@@ -163,7 +169,9 @@ def paste_hierarchy(
                     behavior.add_object(obj)
 
         if interactive:
-            merge_hierarchy_dialog(behavior, xml, target_pointer, hierarchy, add_objects)
+            merge_hierarchy_dialog(
+                behavior, xml, target_pointer, hierarchy, add_objects
+            )
         else:
             resolve_conflicts(behavior, target_pointer, hierarchy)
             add_objects()
@@ -181,7 +189,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
     for evt in xml.findall(".//event"):
         idx = evt.get("idx")
         name = evt.get("name")
-        
+
         match_idx = behavior.find_event(name, -1)
         action = "<new>" if match_idx < 0 else "<reuse>"
         hierarchy.events[idx] = Resolution((idx, name), action, (match_idx, name))
@@ -193,7 +201,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         vmin = evt.get("min")
         vmax = evt.get("max")
         default = evt.get("default")
-        
+
         try:
             default = literal_eval(default)
         except ValueError:
@@ -202,28 +210,55 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
 
         var = HkbVariable(name, vtype, vmin, vmax, default)
         match_idx = behavior.find_variable(name, -1)
-        
+
         if match_idx < 0:
             hierarchy.variables[idx] = Resolution((idx, var), "<new>", (-1, var))
         else:
-            hierarchy.variables[idx] = Resolution((idx, var), "<reuse>", (match_idx, var))
+            hierarchy.variables[idx] = Resolution(
+                (idx, var), "<reuse>", (match_idx, var)
+            )
 
     for evt in xml.findall(".//animation"):
         idx = evt.get("idx")
         name = evt.get("name")
-        
+
         match_idx = behavior.find_animation(name, -1)
         action = "<new>" if match_idx < 0 else "<reuse>"
         hierarchy.animations[idx] = Resolution((idx, name), action, (match_idx, name))
 
+    # Even when the type IDs disagree, every type should have a corresponding match by name
+    for type_info in xml.findall(".//type"):
+        tid = type_info.get("id")
+        name = type_info.get("name")
+
+        try:
+            new_id = behavior.type_registry.find_first_type_by_name(name)
+        except StopIteration:
+            raise ValueError(f"Could not resolve type {tid} ({name})")
+
+        if new_id != tid:
+            logging.getLogger().warning(
+                f"Remapping object type {tid} ({name}) to {new_id}"
+            )
+
+        hierarchy.type_map[tid] = Resolution((tid, name), "<remap>", (new_id, name))
+
     # Find objects with IDs that already exist
     for xmlobj in reversed(xml.find("objects").getchildren()):
+        # Remap the typeid. Should only be relevant when cloning between different games or
+        # versions of hklib, but in those cases it might just make it work
+        old_type_id = xmlobj.get("typeid")
+        new_type_id = hierarchy.type_map[old_type_id].result[0]
+        xmlobj.set("typeid", new_type_id)
+
         try:
             obj = HkbRecord.from_object(behavior, xmlobj)
             # Verify object has the expected fields
             behavior.type_registry.verify_object(obj)
         except ValueError as e:
-            raise ValueError(f"Object {xmlobj.get('id')} with type_id {xmlobj.get('typeid')} does not match this behavior's type registry: {e}")
+            raise ValueError(
+                f"Object {xmlobj.get('id')} with type_id {xmlobj.get('typeid')} does not match this behavior's type registry: {e}"
+            )
 
         # Find pointers in the behavior referencing this object's ID. If more than one
         # other object is already referencing it, it is most likely a reused object like
@@ -250,12 +285,14 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
                 continue
 
             obj_state_id = obj["stateId"].get_value()
-            statemachine = next(behavior.find_hierarchy_parent_for(obj.object_id, sm_type))
+            statemachine = next(
+                behavior.find_hierarchy_parent_for(obj.object_id, sm_type)
+            )
             state_ptr: HkbPointer
 
             for state_ptr in statemachine["states"]:
                 state = state_ptr.get_target()
-                
+
                 if not state:
                     continue
 
@@ -288,7 +325,7 @@ def resolve_conflicts(
     for idx, resolution in hierarchy.events.items():
         name = resolution.original[1]
         if resolution.action == "<new>":
-            new_idx = (behavior.create_event(name))
+            new_idx = behavior.create_event(name)
             resolution.result = (new_idx, name)
         elif resolution.action == "<reuse>":
             new_idx = behavior.find_event(name)
@@ -460,7 +497,7 @@ def resolve_conflicts(
                 new_id = state_id_map.get(start_state_id)
                 if new_id is not None:
                     obj["startStateId"].set_value(new_id)
-                    
+
 
 def merge_hierarchy_dialog(
     behavior: HavokBehavior,
@@ -474,6 +511,10 @@ def merge_hierarchy_dialog(
     if tag in (0, None, ""):
         tag = f"mere_hierarchy_dialog_{dpg.generate_uuid()}"
 
+    def update_action(sender: str, action: str, resolution: Resolution):
+        print("###", action)
+        resolution.action = action
+
     def resolve():
         resolve_conflicts(behavior, target_pointer, hierarchy)
         callback()
@@ -483,8 +524,8 @@ def merge_hierarchy_dialog(
 
     # Window content
     with dpg.window(
-        width=600,
-        height=400,
+        width=900,
+        height=500,
         label="Merge Hierarchy",
         modal=False,
         on_close=close,
@@ -494,77 +535,159 @@ def merge_hierarchy_dialog(
         with dpg.group(horizontal=True):
             graph_data = xml.find("objects").get("graph")
             if graph_data:
+                from hkb_editor.gui.graph_widget import GraphWidget
+
                 graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
-                # TODO frontpage, highlight conflict on node select, color nodes if they have conflicts
-                gw = GraphWidget(graph, on_node_selected=None, width=400, height=400)
+
+                def get_node_frontpage(node):
+                    obj: HkbRecord = hierarchy.objects[node.id].original
+
+                    # TODO line colors
+                    if "name" in obj.fields:
+                        return [obj["name"].get_value(), obj.type_name, obj.object_id]
+
+                    return [obj.type_name, obj.object_id]
+
+                def on_node_selected(node):
+                    # TODO highlight corresponding conflicts
+                    pass
+
+                # TODO color nodes if they have conflicts
+                # TODO unfold all, disable folding
+                with dpg.child_window(auto_resize_x=True, auto_resize_y=True):
+                    gw = GraphWidget(
+                        graph,
+                        get_node_frontpage=get_node_frontpage,
+                        on_node_selected=on_node_selected,
+                        width=400,
+                        height=400,
+                    )
 
             with dpg.group():
                 with dpg.tree_node(label="Events", default_open=True):
-                    with dpg.table(header_row=False, borders_innerH=True):
-                        dpg.add_table_column(label="idx0")
+                    with dpg.table(
+                        header_row=False,
+                        policy=dpg.mvTable_SizingFixedFit,
+                        borders_innerH=True,
+                    ):
+                        dpg.add_table_column(label="idx0", width=25, width_fixed=True)
                         dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="button")
-                        dpg.add_table_column(label="idx1")
+                        dpg.add_table_column(label="to", width=10, width_fixed=True)
+                        dpg.add_table_column(label="idx1", width=25, width_fixed=True)
                         dpg.add_table_column(label="name1", width_stretch=True)
-                        dpg.add_table_column(label="action")
+                        dpg.add_table_column(label="action", init_width_or_weight=100)
 
                         for resolution in hierarchy.events.values():
                             with dpg.table_row():
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text(resolution.original[1])
-                                dpg.add_button(arrow=True, direction=dpg.mvDir_Right)  # TODO cb
+                                dpg.add_text("->")
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1])
-                                dpg.add_text(resolution.action)
-                
-                dpg.add_spacer(height=5)
+                                dpg.add_combo(
+                                    ["<new>", "<reuse>", "<keep>"],
+                                    default_value=resolution.action,
+                                    callback=update_action,
+                                    user_data=resolution,
+                                )
+
+                dpg.add_spacer(height=10)
 
                 with dpg.tree_node(label="Variables", default_open=True):
-                    with dpg.table(header_row=False):
-                        dpg.add_table_column(label="idx0")
+                    with dpg.table(
+                        header_row=False,
+                        policy=dpg.mvTable_SizingFixedFit,
+                        borders_innerH=True,
+                    ):
+                        dpg.add_table_column(label="idx0", width=25, width_fixed=True)
                         dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="button")
-                        dpg.add_table_column(label="idx1")
+                        dpg.add_table_column(label="to", width=10, width_fixed=True)
+                        dpg.add_table_column(label="idx1", width=25, width_fixed=True)
                         dpg.add_table_column(label="name1", width_stretch=True)
-                        dpg.add_table_column(label="action")
+                        dpg.add_table_column(label="action", init_width_or_weight=100)
 
                         for resolution in hierarchy.variables.values():
                             with dpg.table_row():
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text(resolution.original[1].name)
-                                dpg.add_button(arrow=True, direction=dpg.mvDir_Right)  # TODO cb
+                                dpg.add_text("->")
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1].name)
-                                dpg.add_text(resolution.action)
-                
-                dpg.add_spacer(height=5)
+                                dpg.add_combo(
+                                    ["<new>", "<reuse>", "<keep>"],
+                                    default_value=resolution.action,
+                                    callback=update_action,
+                                    user_data=resolution,
+                                )
+
+                dpg.add_spacer(height=10)
 
                 with dpg.tree_node(label="Animations", default_open=True):
-                    with dpg.table(header_row=False):
-                        dpg.add_table_column(label="idx0")
+                    with dpg.table(
+                        header_row=False,
+                        policy=dpg.mvTable_SizingFixedFit,
+                        borders_innerH=True,
+                    ):
+                        dpg.add_table_column(label="idx0", width=25, width_fixed=True)
                         dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="button")
-                        dpg.add_table_column(label="idx1")
+                        dpg.add_table_column(label="to", width=10, width_fixed=True)
+                        dpg.add_table_column(label="idx1", width=25, width_fixed=True)
                         dpg.add_table_column(label="name1", width_stretch=True)
-                        dpg.add_table_column(label="action")
+                        dpg.add_table_column(label="action", init_width_or_weight=100)
 
                         for resolution in hierarchy.animations.values():
                             with dpg.table_row():
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text(resolution.original[1])
-                                dpg.add_button(arrow=True, direction=dpg.mvDir_Right)  # TODO cb
+                                dpg.add_text("->")
                                 dpg.add_text(str(resolution.result[0]))
                                 dpg.add_text(resolution.result[1])
-                                dpg.add_text(resolution.action)
-            
-                dpg.add_spacer(height=5)
+                                dpg.add_combo(
+                                    ["<new>", "<reuse>", "<keep>"],
+                                    default_value=resolution.action,
+                                    callback=update_action,
+                                    user_data=resolution,
+                                )
+
+                dpg.add_spacer(height=10)
+
+                with dpg.tree_node(label="Types", default_open=True):
+                    with dpg.table(
+                        header_row=False,
+                        policy=dpg.mvTable_SizingFixedFit,
+                        borders_innerH=True,
+                    ):
+                        dpg.add_table_column(label="id0", width=25, width_fixed=True)
+                        dpg.add_table_column(label="to", width=10, width_fixed=True)
+                        dpg.add_table_column(label="id1", width=25, width_fixed=True)
+                        dpg.add_table_column(label="name", width_stretch=True)
+                        dpg.add_table_column(label="action", init_width_or_weight=100)
+
+                        for resolution in hierarchy.type_map.values():
+                            with dpg.table_row():
+                                dpg.add_text(str(resolution.original[0]))
+                                dpg.add_text("->")
+                                dpg.add_text(resolution.result[0])
+                                dpg.add_text(resolution.result[1])
+                                dpg.add_combo(
+                                    ["<remap>"],
+                                    default_value=resolution.action,
+                                    callback=update_action,
+                                    user_data=resolution,
+                                )
+
+                dpg.add_spacer(height=10)
 
                 if hierarchy.objects:
                     with dpg.tree_node(label="Objects", default_open=True):
-                        with dpg.table(header_row=False):
-                            dpg.add_table_column(label="Object")
-                            dpg.add_table_column(label="Type")
-                            dpg.add_table_column(label="Action")
+                        with dpg.table(
+                            header_row=False,
+                            policy=dpg.mvTable_SizingFixedFit,
+                            borders_innerH=True,
+                        ):
+                            dpg.add_table_column(label="oid", width=25, width_fixed=True)
+                            dpg.add_table_column(label="tid", width_stretch=True)
+                            dpg.add_table_column(label="action", init_width_or_weight=100)
 
                             for oid, resolution in hierarchy.objects.items():
                                 with dpg.table_row():
@@ -572,7 +695,12 @@ def merge_hierarchy_dialog(
 
                                     dpg.add_text(oid)
                                     dpg.add_text(type_name)
-                                    dpg.add_text(resolution.action)
+                                    dpg.add_combo(
+                                        ["<new>", "<reuse>", "<skip>"],
+                                        default_value=resolution.action,
+                                        callback=update_action,
+                                        user_data=resolution,
+                                    )
 
         dpg.add_separator()
 
