@@ -139,7 +139,7 @@ class Tagfile:
             record = self.objects[xmlrecord.get("id")]
             ptr: HkbPointer
 
-            for ptr in record.find_fields_by_type(HkbPointer):
+            for _, ptr in record.find_fields_by_type(HkbPointer):
                 if ptr.get_value == object_id:
                     yield ptr
 

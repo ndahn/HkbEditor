@@ -68,7 +68,7 @@ class HkbString(XmlValueHandler):
         if not isinstance(value, (HkbString, str)):
             raise ValueError(f"Value {value} ({type(value)}) is not a string")
 
-        self.element.attrib["value"] = str(value)
+        self.element.set("value", str(value))
 
 
 class HkbInteger(XmlValueHandler):
@@ -88,7 +88,7 @@ class HkbInteger(XmlValueHandler):
         return int(self.element.attrib.get("value", 0))
 
     def set_value(self, value: "HkbInteger | int") -> None:
-        self.element.attrib["value"] = str(int(value))
+        self.element.set("value", str(int(value)))
 
     def __int__(self) -> int:
         return self.get_value()
@@ -129,8 +129,8 @@ class HkbFloat(XmlValueHandler):
         if self.tagfile.floats_use_commas:
             str_value = str_value.replace(".", ",")
 
-        self.element.attrib["dec"] = str_value
-        self.element.attrib["hex"] = self.float_to_ieee754(value)
+        self.element.set("dec", str_value)
+        self.element.set("hex", self.float_to_ieee754(value))
 
     def __float__(self) -> float:
         return self.get_value()
@@ -157,7 +157,7 @@ class HkbBool(XmlValueHandler):
         if not isinstance(value, (HkbBool, bool)):
             raise ValueError(f"Value {value} ({type(value)}) is not a bool")
 
-        self.element.attrib["value"] = "true" if value else "false"
+        self.element.set("value", "true" if value else "false")
 
     def __bool__(self) -> bool:
         return self.get_value()
@@ -172,14 +172,17 @@ class HkbPointer(XmlValueHandler):
 
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "pointer":
-            raise ValueError(f"Invalid element {element}")
+            xml = ET.tostring(element, pretty_print=True, encoding="unicode")
+            raise ValueError(f"Xml element is not a pointer:\n{xml}")
 
         super().__init__(tagfile, element, type_id)
-        self.subtype = tagfile.type_registry.get_subtype(type_id)
+
+        # This property is not saved on the pointer, so we don't need to guard it
+        self.subtype_id = tagfile.type_registry.get_subtype(type_id)
 
     @property
     def subtype_name(self) -> str:
-        return self.tagfile.type_registry.get_name(self.subtype)
+        return self.tagfile.type_registry.get_name(self.subtype_id)
 
     def will_accept(
         self, type_id: "HkbRecord | str", check_subtypes: bool = True
@@ -187,12 +190,13 @@ class HkbPointer(XmlValueHandler):
         if isinstance(type_id, HkbRecord):
             type_id = type_id.type_id
 
-        if self.subtype == type_id:
+        if self.subtype_id == type_id:
             return True
 
         if (
             check_subtypes
-            and type_id in self.tagfile.type_registry.get_compatible_types(self.subtype)
+            and type_id
+            in self.tagfile.type_registry.get_compatible_types(self.subtype_id)
         ):
             return True
 
@@ -222,7 +226,7 @@ class HkbPointer(XmlValueHandler):
         if not isinstance(value, str):
             raise ValueError(f"Value {value} ({type(value)}) is not a pointer")
 
-        self.element.attrib["id"] = str(value)
+        self.element.set("id", str(value))
 
     def get_target(self) -> "HkbRecord":
         oid = self.get_value()
@@ -272,9 +276,16 @@ class HkbArray(XmlValueHandler, Generic[T]):
             raise ValueError(f"Invalid element {element}")
 
         super().__init__(tagfile, element, type_id)
-        self.element_type_id = element.attrib["elementtypeid"]
         # TODO format of element_type_id will be easier to check
-        self.is_pointer_array = (self.get_item_wrapper() == HkbPointer)
+        self.is_pointer_array = self.get_item_wrapper() == HkbPointer
+
+    @property
+    def element_type_id(self) -> str:
+        return self.element.get("elementtypeid")
+
+    @element_type_id.setter
+    def element_type_id(self, new_element_typeid: str) -> None:
+        self.element.set("elementtypeid", new_element_typeid)
 
     @property
     def element_type_name(self) -> str:
@@ -283,11 +294,11 @@ class HkbArray(XmlValueHandler, Generic[T]):
     # NOTE not for public use, just use len(array)
     @property
     def _count(self) -> int:
-        return int(self.element.attrib["count"])
+        return int(self.element.get("count"))
 
     @_count.setter
     def _count(self, new_count: int) -> None:
-        self.element.attrib["count"] = str(new_count)
+        self.element.set("count", str(new_count))
 
     def __len__(self) -> int:
         return self._count
@@ -338,6 +349,10 @@ class HkbArray(XmlValueHandler, Generic[T]):
 
         # Pointers allow being set from objects, so we should't be in the way
         if self.is_pointer_array and isinstance(value, HkbRecord):
+            return True
+
+        # Is this too soft?
+        if isinstance(value, self.get_item_wrapper()):
             return True
 
         # NOTE could check for compatible types, but I have yet to see that in use
@@ -437,11 +452,6 @@ class HkbRecord(XmlValueHandler):
         path_values: dict[str, Any] = None,
         object_id: str = None,
     ) -> "HkbRecord":
-        if path_values and not isinstance(path_values, Mapping):
-            raise ValueError(
-                f"path_values must be a dict-like object, but got {path_values} ({type(path_values).__name__}) instead"
-            )
-
         elem = ET.Element("record")
         record = HkbRecord(tagfile, elem, type_id, object_id)
 
@@ -466,8 +476,8 @@ class HkbRecord(XmlValueHandler):
     @classmethod
     def from_object(self, tagfile: Tagfile, element: ET._Element) -> "HkbRecord":
         record = element.find("record")
-        type_id = element.attrib["typeid"]
-        object_id = element.attrib["id"]
+        type_id = element.get("typeid")
+        object_id = element.get("id")
         return HkbRecord(tagfile, record, type_id, object_id)
 
     def __init__(
@@ -485,14 +495,21 @@ class HkbRecord(XmlValueHandler):
         self._fields = tagfile.type_registry.get_field_types(type_id)
 
     def get_value(self) -> dict[str, XmlValueHandler]:
-        return {f: self[f] for f in self._fields.keys()}
+        return {
+            f: self[f]
+            for f in self._fields.keys()
+            # Only return values that are actually in the underlying xml
+            if self.element.xpath(f".//field[@name='{f}']")
+        }
 
     def set_value(self, values: "HkbRecord | dict[str, XmlValueHandler]") -> None:
         if isinstance(values, HkbRecord):
             values = values.get_value()
 
-        for key, val in values.items():
-            self[key] = val
+        # values may have extra or missing values, so we go from our known fields
+        for field in self._fields.keys():
+            if field in values:
+                self[field] = values[field]
 
     @property
     def fields(self) -> Iterator[str]:
@@ -501,7 +518,7 @@ class HkbRecord(XmlValueHandler):
     def _get_field_element(self, name: str) -> ET._Element:
         # Avoid infinite recursions from __getattr__
         for elem in self.element.findall("field"):
-            if elem.attrib["name"] == name:
+            if elem.get("name") == name:
                 return elem
 
         return None
@@ -633,26 +650,39 @@ class HkbRecord(XmlValueHandler):
 
         return ret
 
-    def find_fields_by_type(self, field_type: T) -> Generator[T, None, None]:
-        todo: list[HkbRecord] = [self]
+    def find_fields_by_type(
+        self, field_type: T
+    ) -> Generator[tuple[str, T], None, None]:
+        todo: list[tuple[HkbRecord, str]] = [(self, "")]
 
         while todo:
-            rec = todo.pop()
+            rec, current_path = todo.pop()
+            if not rec:
+                # Record arrays might contain null-pointers
+                continue
+
             for field_name in rec.fields:
                 field = rec[field_name]
+                field_path = (
+                    f"{current_path}/{field_name}" if current_path else field_name
+                )
+
                 if isinstance(field, HkbRecord):
-                    todo.append(field)
+                    todo.append((field, field_path))
 
                 if isinstance(field, HkbArray):
-                    item_type = field.get_item_wrapper()
-                    if item_type == field_type:
-                        for item in field:
-                            yield item
-                    elif item_type == HkbRecord:
-                        todo.extend(field)
+                    element_type = field.get_item_wrapper()
+                    if element_type == field_type:
+                        for i, item in enumerate(field):
+                            item_path = f"{field_path}/:{i}"
+                            yield (item_path, item)
+                    elif element_type == HkbRecord:
+                        for i, item in enumerate(field):
+                            item_path = f"{field_path}/:{i}"
+                            todo.append((item, item_path))
 
                 if isinstance(field, field_type):
-                    yield field
+                    yield (field_path, field)
 
     def __getitem__(self, name: str) -> XmlValueHandler:
         ftype = self.get_field_type(name)

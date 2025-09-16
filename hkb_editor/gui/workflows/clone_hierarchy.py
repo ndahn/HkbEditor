@@ -13,7 +13,8 @@ from hkb_editor.hkb.index_attributes import (
     variable_attributes,
     animation_attributes,
 )
-from hkb_editor.hkb import HkbPointer, HkbRecord
+from hkb_editor.hkb import HkbPointer, HkbRecord, HkbArray
+from hkb_editor.hkb.type_registry import TypeMismatch
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui import style
 from hkb_editor.gui.workflows.undo import UndoManager
@@ -80,6 +81,12 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
 
         objects.append(obj)
         type_map[obj.type_id] = obj.type_name
+
+        # Element types need to be remapped, too. Pointers on the other hand are okay since they
+        # don't save their subtype in the xml.
+        array: HkbArray
+        for _, array in obj.find_fields_by_type(HkbArray):
+            type_map[array.element_type_id] = array.element_type_name
 
         todo.extend(g.successors(oid))
 
@@ -182,6 +189,8 @@ def paste_hierarchy(
 def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
     hierarchy = MergeHierarchy()
     sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
+    logger = logging.getLogger()
+    mismatching_types = set()
 
     # For events, variables and animations we check if there is already one with a matching name.
     # If there is no match it probably has to be created. If it exists but the index is different
@@ -237,7 +246,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
             raise ValueError(f"Could not resolve type {tid} ({name})")
 
         if new_id != tid:
-            logging.getLogger().warning(
+            logger.debug(
                 f"Remapping object type {tid} ({name}) to {new_id}"
             )
 
@@ -252,13 +261,36 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         xmlobj.set("typeid", new_type_id)
 
         try:
-            obj = HkbRecord.from_object(behavior, xmlobj)
+            
+            # If the record comes from a different game (or version), the xml element might
+            # have extra fields or miss some we are expecting. By constructing a new object
+            # we ensure that all required fields are present.
+            obj = HkbRecord.new(behavior, new_type_id, None, xmlobj.get("id"))
+            tmp = HkbRecord.from_object(behavior, xmlobj)
+
+            # Fix up element type IDs. Search for arrays in obj, but modify them in tmp so 
+            # they can be resolved properly. Pointers don't need fixing since they don't 
+            # save their subtype in the xml.
+            array: HkbArray
+            for path, _ in obj.find_fields_by_type(HkbArray):
+                array = tmp.get_field(path, None)
+                if array:
+                    array.element_type_id = hierarchy.type_map[array.element_type_id].result[0]
+
+            obj.set_value(tmp)
+
             # Verify object has the expected fields
             behavior.type_registry.verify_object(obj)
-        except ValueError as e:
-            raise ValueError(
-                f"Object {xmlobj.get('id')} with type_id {xmlobj.get('typeid')} does not match this behavior's type registry: {e}"
-            )
+        except TypeMismatch as e:
+            type_name = behavior.type_registry.get_name(new_type_id)
+            if type_name not in mismatching_types:
+                if e.missing:
+                    logger.warning(f"Hierarchy type {old_type_id} ({type_name}) is missing expected fields, will use default initializers: {e.missing}")
+
+                if e.extra:
+                    logger.warning(f"Hierarchy type {old_type_id} ({type_name}) contains unexpected fields which will be ignored: {e.extra}")
+
+                mismatching_types.add(type_name)
 
         # Find pointers in the behavior referencing this object's ID. If more than one
         # other object is already referencing it, it is most likely a reused object like
@@ -338,7 +370,7 @@ def resolve_conflicts(
             if other.action == "<new>":
                 # <new> is the only action type that will include descendents
                 ptr: HkbPointer
-                for ptr in other.result.find_fields_by_type(HkbPointer):
+                for _, ptr in other.result.find_fields_by_type(HkbPointer):
                     if ptr.get_value() == object_id:
                         has_valid_path = True
                         break
@@ -436,7 +468,7 @@ def resolve_conflicts(
             continue
 
         ptr: HkbPointer
-        for ptr in obj.find_fields_by_type(HkbPointer):
+        for _, ptr in obj.find_fields_by_type(HkbPointer):
             target_id = ptr.get_value()
             if not target_id:
                 continue
@@ -644,7 +676,13 @@ def open_merge_hierarchy_dialog(
                                 for anim in obj.get_fields(path, resolve=True).values():
                                     highlight_row("animation", anim, animation_rows)
 
-                        highlight_row("type", obj.type_id, type_rows)
+                        for resolution in hierarchy.type_map.values():
+                            if obj.type_id == resolution.result[0]:
+                                # Old type ID is unique, new one may not be
+                                old_type_id = resolution.original[0]
+                                highlight_row("type", old_type_id, type_rows)
+                                break
+
                         highlight_row("object", obj.object_id, object_rows)
 
                 with dpg.child_window(
@@ -811,10 +849,15 @@ def open_merge_hierarchy_dialog(
                         dpg.add_table_column(label="name", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for idx, (key, resolution) in enumerate(
-                            hierarchy.type_map.items()
-                        ):
+                        for idx, (key, resolution) in enumerate(hierarchy.type_map.items()):
                             row_tag = f"{tag}_type_row_{key}"
+
+                            # In some cases it's possible that multiple types get mapped to the 
+                            # same type. This is probably an error and happens for e.g. "T*"
+                            if dpg.does_item_exist(row_tag):
+                                print("### type already present", resolution.result)
+                                continue
+
                             with dpg.table_row(tag=row_tag):
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text("->")

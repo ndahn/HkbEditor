@@ -10,6 +10,13 @@ if TYPE_CHECKING:
 _logger = getLogger(__name__)
 
 
+class TypeMismatch(Exception):
+    def __init__(self, message: str, missing: list[str], extra: list[str]):
+        super().__init__(message)
+        self.missing = missing
+        self.extra = extra
+
+
 class TypeRegistry:
     def __init__(self):
         self.types: dict[str, dict] = {}
@@ -48,6 +55,7 @@ class TypeRegistry:
             subtype = self._get_attribute(type_el, "subtype", "id")
             parent = self._get_attribute(type_el, "parent", "id")
 
+
             self.types[type_id] = {
                 "name": name,
                 "format": fmt,
@@ -56,6 +64,16 @@ class TypeRegistry:
                 "typeparams": typeparams,
                 "parent": parent,
             }
+
+        for type_id, info in self.types.items():
+            subtype = info["subtype"]
+            if subtype in self.types:
+                subname = self.types[subtype]["name"]
+                fullname = f"{info['name']}< {subname} >"
+            else:
+                fullname = info["name"]
+
+            info["fullname"] = fullname
 
     def _get_attribute(self, elem: ET._Element, tag: str, key: str) -> str:
         attr_el = elem.find(tag)
@@ -95,7 +113,7 @@ class TypeRegistry:
 
     def find_types_by_name(self, type_name: str) -> Generator[str, None, None]:
         for tid, t in self.types.items():
-            if t["name"] == type_name:
+            if t["fullname"] == type_name:
                 yield tid
 
     @cache
@@ -103,7 +121,9 @@ class TypeRegistry:
         return next(self.find_types_by_name(type_name))
 
     @cache
-    def get_name(self, type_id: str) -> str:
+    def get_name(self, type_id: str, with_template: bool = True) -> str:
+        if with_template:
+            return self.types[type_id]["fullname"]
         return self.types[type_id]["name"]
 
     def get_format(self, type_id: str) -> int:
@@ -145,7 +165,10 @@ class TypeRegistry:
         # TODO check for fields with wrong type
 
         if missing or extra:
-            raise ValueError(f"""\
+            raise TypeMismatch(f"""\
 Failed to verify object {obj.object_id} ({obj.type_id} / {obj.type_name})
  - missing fields: {missing}
- - extra fields: {extra}""")
+ - extra fields: {extra}""",
+                missing,
+                extra,
+            )

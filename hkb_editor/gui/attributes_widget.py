@@ -395,7 +395,7 @@ class AttributesWidget:
 
         def open_pointer_dialog():
             select_object(
-                self.tagfile, pointer.subtype, on_pointer_selected, include_derived=True
+                self.tagfile, pointer.subtype_id, on_pointer_selected, include_derived=True
             )
 
         widget = self._add_reference_attribute_text(
@@ -814,7 +814,7 @@ class AttributesWidget:
                             self.tagfile,
                             self.alias_manager,
                             on_object_created,
-                            allowed_types=[attribute.subtype],
+                            allowed_types=[attribute.subtype_id],
                             include_derived_types=True,
                             id_required=True,
                             selected_type_id=selected_type,
