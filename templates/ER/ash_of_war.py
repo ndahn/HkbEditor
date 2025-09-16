@@ -18,7 +18,7 @@ weapon_variations = [
 
 def run(
     ctx: TemplateContext,
-    category: int,
+    category: int = 600,
     regular: bool = True,
     follow_ups: bool = True,
     stance: bool = False,
@@ -32,7 +32,6 @@ def run(
     weapon_twinblade: bool = False,
     weapon_curvedsword: bool = False,
     weapon_hand: bool = False,
-    weapon_perfume_beastclaw: bool = False,
     weapon_largeshield: bool = False,
     weapon_smallshield: bool = False,
     weapon_backhandsword: bool = False,
@@ -46,7 +45,7 @@ def run(
 
     Author: Managarm
 
-    Status: somewhat confident
+    Status: confirmed
 
     Parameters
     ----------
@@ -92,15 +91,15 @@ def run(
     if not 0 <= category <= 999:
         raise ValueError("Category must be in [0..999]")
 
-    attack_sm = ctx.find("name:Attack_SM")
+    attack_sm = ctx.find("name:SwordArts_SM")
 
-    def register_anim(anim_id: int):
+    def register_anim(anim_id: int, statemachine=attack_sm):
         anim = ctx.animation(f"{cat}_{anim_id:06d}")
 
         # Find the CMSG the animation should be registered in
         cmsg = ctx.find(
             f"type_name:CustomManualSelectorGenerator animId:{anim_id}",
-            start_from=attack_sm,
+            start_from=statemachine,
         )
         if not cmsg:
             raise ValueError(f"Could not find CMSG for animId={anim_id}")
@@ -116,29 +115,31 @@ def run(
 
     def add_cancel_anims(anim_ids: list[int]):
         for anim_id in anim_ids:
-            if anim_id % 5 == 0 and anim_id + 1 not in anim_ids:
+            if anim_id % 1000 in (0, 5, 30, 35, 40, 45) and anim_id + 1 not in anim_ids:
                 anim_ids.append(anim_id + 1)  # early cancel
             if anim_id % 100 in (0, 5):
                 anim_ids.append(anim_id + 2)  # late cancel
 
     def add_weapon_variations(anim_ids: list[int]):
-        for idx, enabled in enumerate(
+        base_anims = list(anim_ids)
+
+        for idx, enabled in enumerate([
             weapon_large,
             weapon_polearm,
             weapon_shortsword_dagger,
             weapon_twinblade,
             weapon_curvedsword,
             weapon_hand,
-            weapon_perfume_beastclaw,
             weapon_largeshield,
             weapon_smallshield,
             weapon_backhandsword,
             weapon_duelingshield,
-        ):
+        ]):
             if enabled:
                 offset = weapon_variations[idx]
-                for anim_id in anim_ids:
-                    anim_ids.append(anim_id + offset)
+                for anim_id in base_anims:
+                    if anim_id % 1000 in (0, 5):
+                        anim_ids.append(anim_id + offset)
 
     cat = f"a{category:03d}"
 
@@ -165,7 +166,8 @@ def run(
         add_weapon_variations(anims)
 
         for anim_id in anims:
-            register_anim(anim_id)
+            # These will be in the DrawStance* SMs
+            register_anim(anim_id, None)
 
     if charge:
         anims = [40000, 40003, 40004, 40005, 40008, 40009]

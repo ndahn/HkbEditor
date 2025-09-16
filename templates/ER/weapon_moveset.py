@@ -3,7 +3,7 @@ from hkb_editor.templates import *
 
 def run(
     ctx: TemplateContext,
-    category: int,
+    category: int = 600,
     right: bool = True,
     both: bool = True,
     dual: bool = False,
@@ -24,7 +24,7 @@ def run(
 
     Author: Managarm
 
-    Status: confident
+    Status: confirmed
 
     Parameters
     ----------
@@ -54,15 +54,15 @@ def run(
     if not 0 <= category <= 999:
         raise ValueError("Category must be in [0..999]")
 
-    attack_sm = ctx.find("name:Attack_SM")
+    attack_sm: HkbRecord = ctx.find("name:Attack_SM")
 
-    def register_anim(anim_id: int):
+    def register_anim(anim_id: int, statemachine=attack_sm):
         anim = ctx.animation(f"{cat}_{anim_id:06d}")
 
         # Find the CMSG the animation should be registered in
         cmsg = ctx.find(
             f"type_name:CustomManualSelectorGenerator animId:{anim_id}",
-            start_from=attack_sm,
+            start_from=statemachine,
         )
         if not cmsg:
             raise ValueError(f"Could not find CMSG for animId={anim_id}")
@@ -104,12 +104,12 @@ def run(
             32000,
             32010,
             32020,
-            32032,
+            32030,
             32040,
             32050,
             32200,
             32210,
-            32320,
+            32300,
             32400,
             32500,
             32501,
@@ -125,12 +125,13 @@ def run(
             register_anim(anim_id)
 
     if left:
-        for anim_id in [35000, 35010, 35020, 35030, 35040, 35050, 35200]:
+        for anim_id in [35000, 35010, 35020, 35030, 35040, 35050]:
             register_anim(anim_id)
 
     if backstab:
         for anim_id in [31700, 31710, 31719, 31720, 31730, 31750, 31760]:
-            register_anim(anim_id)
+            # Most are in Throw_SM, but 31719 is under "ThrowBackStab NetSync Script"
+            register_anim(anim_id, None)
 
     if special:
         if right:
@@ -149,6 +150,8 @@ def run(
                 register_anim(anim_id)
 
     if jump:
+        jump_sm = ctx.find("name:'NewJump StateMachine'")
+
         if right:
             for anim_id in [
                 31030,
@@ -162,7 +165,7 @@ def run(
                 31260,
                 31270,
             ]:
-                register_anim(anim_id)
+                register_anim(anim_id, jump_sm)
         if both:
             for anim_id in [
                 33030,
@@ -176,12 +179,14 @@ def run(
                 33260,
                 33270,
             ]:
-                register_anim(anim_id)
+                register_anim(anim_id, jump_sm)
         if dual:
             for anim_id in [34530, 34540, 34550, 34560, 34570]:
-                register_anim(anim_id)
+                register_anim(anim_id, jump_sm)
 
     if ride:
+        ride_sm = ctx.find("name:Ride_NoThrow_SM")
+
         for anim_id in [
             38000,
             38010,
@@ -198,4 +203,4 @@ def run(
             39200,
             39300,
         ]:
-            register_anim(anim_id)
+            register_anim(anim_id, ride_sm)
