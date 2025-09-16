@@ -2,10 +2,10 @@ from typing import Any, Callable
 from collections import deque
 import itertools
 import logging
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 
 from hkb_editor.hkb.hkb_types import XmlValueHandler, HkbArray, HkbRecord
-from hkb_editor.hkb.behavior import HavokBehavior
+from hkb_editor.hkb.behavior import HavokBehavior, VariableType
 from hkb_editor.hkb.tagfile import Tagfile
 
 
@@ -314,6 +314,250 @@ class UndoManager:
             action = self._combo_stack.pop()
             if action.actions:
                 self._on_action(action)
+
+    @contextmanager
+    def guard(self, object: Tagfile | XmlValueHandler):
+        try:
+            contexts = []
+
+            if isinstance(object, Tagfile):
+                contexts.append(self._patch_tagfile)
+
+                if isinstance(object, HavokBehavior):
+                    contexts.append(self._patch_behavior)
+
+            elif isinstance(object, XmlValueHandler):
+                contexts.append(self._patch_xmlvaluehandler)
+
+                if isinstance(object, HkbArray):
+                    contexts.append(self._patch_hkbarray)
+
+                elif isinstance(object, HkbRecord):
+                    contexts.append(self._patch_hkbrecord)
+
+            # Combine all of our monkey patch context managers in one stack
+            with ExitStack() as stack:
+                for cm in contexts:
+                    stack.enter_context(cm(object))
+
+                yield
+        finally:
+            pass
+
+    @contextmanager
+    def _patch_tagfile(self, tagfile: Tagfile):
+        add_object_original = tagfile.add_object
+        remove_object_original = tagfile.remove_object
+        
+        def monkey_add_object(record: HkbRecord, id: str = None) -> str:
+            result = add_object_original(record, id)
+            self.on_create_object(tagfile, record)
+            return result
+
+        def monkey_remove_object(id: str) -> HkbRecord:
+            result = remove_object_original(id)
+            self.on_delete_object(tagfile, tagfile.objects[id])
+            return result
+
+        try:
+            # Apply patches
+            tagfile.add_object = monkey_add_object
+            tagfile.remove_object = monkey_remove_object
+            
+            yield
+        finally:
+            # Restore original methods
+            tagfile.add_object = add_object_original
+            tagfile.remove_object = remove_object_original
+
+    @contextmanager
+    def _patch_behavior(self, behavior: HavokBehavior):
+        create_event_original = behavior.create_event
+        delete_event_original = behavior.delete_event
+        create_variable_original = behavior.create_variable
+        delete_variable_original = behavior.delete_variable
+        create_animation_original = behavior.create_animation
+        delete_animation_original = behavior.delete_animation
+        
+        def monkey_create_event(event_name: str, idx: int = -1) -> int:
+            result = create_event_original(event_name, idx)
+            self.on_create_event(behavior, event_name, idx)
+            return result
+        
+        def monkey_delete_event(idx: int) -> None:
+            delete_event_original(idx)
+            self.on_delete_event(behavior, idx)
+        
+        def monkey_create_variable(
+            variable_name: str,
+            var_type: VariableType = VariableType.INT32,
+            range_min: int = 0,
+            range_max: int = 0,
+            default: Any = 0,
+            idx: int = None,
+        ) -> int:
+            result = create_variable_original(variable_name, var_type, range_min, range_max, default, idx)
+            var = behavior.get_variable(result)
+            self.on_create_variable(behavior, var.astuple(), result)
+            return result
+        
+        def monkey_delete_variable(idx: int) -> None:
+            delete_variable_original(idx)
+            self.on_delete_variable(behavior, idx)
+        
+        def monkey_create_animation(animation_name: str, idx: int = -1) -> int:
+            result = create_animation_original(animation_name, idx)
+            self.on_create_animation(behavior, animation_name, idx)
+            return result
+        
+        def monkey_delete_animation(idx: int) -> None:
+            delete_animation_original(idx)
+            self.on_delete_animation(behavior, idx)
+        
+        try:
+            # Apply patches
+            behavior.create_event = monkey_create_event
+            behavior.delete_event = monkey_delete_event
+            behavior.create_variable = monkey_create_variable
+            behavior.delete_variable = monkey_delete_variable
+            behavior.create_animation = monkey_create_animation
+            behavior.delete_animation = monkey_delete_animation
+            
+            yield
+        finally:
+            # Restore original methods
+            behavior.create_event = create_event_original
+            behavior.delete_event = delete_event_original
+            behavior.create_variable = create_variable_original
+            behavior.delete_variable = delete_variable_original
+            behavior.create_animation = create_animation_original
+            behavior.delete_animation = delete_animation_original
+
+    @contextmanager
+    def _patch_xmlvaluehandler(self, handler: XmlValueHandler):
+        set_value_original = handler.set_value
+
+        def monkey_set_value(value: Any) -> None:
+            old_value = handler.get_value()
+            set_value_original(value)
+            self.on_update_value(handler, old_value, value)
+
+        try:
+            # Apply patches
+            handler.set_value = monkey_set_value
+        finally:
+            # Restore original methods
+            handler.set_value = set_value_original
+
+    @contextmanager
+    def _patch_hkbarray(self, array: HkbArray):
+        setattr_original = array.__setattr__
+        setitem_original = array.__setitem__
+        delitem_original = array.__delitem__
+        append_original = array.append
+        insert_original = array.insert
+        pop_original = array.pop
+        clear_original = array.clear
+
+        # properties affect the class definition, but we only want to guard this 
+        # single array instance
+        def monkey_setattr(name: str, value: Any) -> None:
+            if name == 'element_type_id':
+                old_value = getattr(array, 'element_type_id')
+                setattr_original(name, value)
+                undo_manager.on_complex_action(
+                    lambda: setattr(array, 'element_type_id', old_value),
+                    lambda: setattr(array, 'element_type_id', value)
+                )
+            else:
+                setattr_original(name, value)
+
+        def monkey_setitem(index: int, value: Any) -> None:
+            old_value = array[index]
+            setitem_original(index, value)
+            self.on_update_array_item(array, index, old_value, value)
+
+        def monkey_delitem(index: int) -> None:
+            old_value = array[index]
+            delitem_original(index)
+            self.on_update_array_item(array, index, old_value, None)
+
+        def monkey_append(value: Any) -> None:
+            append_original(value)
+            self.on_update_array_item(array, -1, None, value)
+
+        def monkey_insert(index: int, value: Any) -> None:
+            insert_original(index, value)
+            self.on_complex_action(
+                lambda: array.pop(index),
+                lambda: array.insert(index, value),
+            )
+
+        def monkey_pop(index: int) -> Any:
+            result = pop_original(index)
+            self.on_update_array_item(array, index, result, None)
+            return result
+
+        def monkey_clear():
+            old_values = array.get_value()
+            clear_original()
+            self.on_complex_action(
+                lambda: array.set_value(old_values),
+                lambda: array.clear(),
+            )
+
+        try:
+            # Apply patches
+            array.__setattr__ = monkey_setattr
+            array.__setitem__ = monkey_setitem
+            array.__delitem__ = monkey_delitem
+            array.append = monkey_append
+            array.insert = monkey_insert
+            array.pop = monkey_pop
+            array.clear = monkey_clear
+
+            yield
+        finally:
+            # Restore original methods
+            array.__setattr__ = setattr_original
+            array.__setitem__ = setitem_original
+            array.__delitem__ = delitem_original
+            array.append = append_original
+            array.insert = insert_original
+            array.pop = pop_original
+            array.clear = clear_original
+
+    @contextmanager
+    def _patch_hkbrecord(self, record: HkbRecord):
+        set_field_original = record.set_field
+        setitem_original = record.__setitem__
+
+        def monkey_set_field(path: str, value: XmlValueHandler | Any) -> None:
+            old_value = record.get_field(path, resolve=True)
+            set_field_original(path, value)
+            self.on_complex_action(
+                lambda: record.set_field(path, old_value),
+                lambda: record.set_value(path, value)
+            )
+
+        def monkey_setitem(key: str, value: XmlValueHandler | Any) -> None:
+            old_value = record[key]
+            setitem_original(key, value)
+            self.on_complex_action(
+                lambda: record.__setitem__(key, old_value),
+                lambda: record.__setitem__(key, value)
+            )
+
+        try:
+            # Apply patches
+            record.set_field = monkey_set_field
+            record.__setitem__ = monkey_setitem
+
+            yield
+        finally:
+            # Restore original methods
+            record.set_field = set_field_original
+            record.__setitem__ = setitem_original
 
 
 undo_manager = UndoManager(100)

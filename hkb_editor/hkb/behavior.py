@@ -57,7 +57,7 @@ class HavokBehavior(Tagfile):
         )
 
     def create_event(self, event_name: str, idx: int = None) -> int:
-        if idx is None:
+        if idx is None or idx < 0:
             idx = len(self._events)
 
         self._events.insert(idx, event_name)
@@ -89,7 +89,7 @@ class HavokBehavior(Tagfile):
     def rename_event(self, idx: int, new_name: str) -> None:
         self._events[idx] = new_name
 
-    def delete_event(self, idx: int = -1) -> None:
+    def delete_event(self, idx: int) -> None:
         del self._event_infos[idx]
         del self._events[idx]
 
@@ -103,7 +103,7 @@ class HavokBehavior(Tagfile):
         default: Any = 0,
         idx: int = None,
     ) -> int:
-        if idx is None:
+        if idx is None or idx < 0:
             idx = len(self._variables)
 
         if isinstance(var_type, str):
@@ -357,7 +357,7 @@ class HavokBehavior(Tagfile):
 
         return default
 
-    def delete_variable(self, idx: int = -1) -> None:
+    def delete_variable(self, idx: int) -> None:
         del self._variables[idx]
         del self._variable_bounds[idx]
         del self._variable_infos[idx]
@@ -444,7 +444,7 @@ class HavokBehavior(Tagfile):
         return full_anim_name.rsplit("\\", maxsplit=1)[-1].rsplit(".", maxsplit=1)[0]
 
     def create_animation(self, animation_name: str, idx: int = None) -> int:
-        if idx is None:
+        if idx is None or idx < 0:
             idx = len(self._animations)
 
         full_anim_name = self.get_full_animation_name(animation_name)
@@ -482,5 +482,5 @@ class HavokBehavior(Tagfile):
         full_anim_name = self.get_full_animation_name(new_name)
         self._animations[idx] = full_anim_name
 
-    def delete_animation(self, idx: int = -1) -> None:
+    def delete_animation(self, idx: int) -> None:
         del self._animations[idx]

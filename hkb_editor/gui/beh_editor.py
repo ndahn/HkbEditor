@@ -1049,7 +1049,8 @@ class BehaviorEditor(GraphEditor):
             old_value = old_value[0]
             new_value = new_value[0]
 
-            self.beh.rename_event(idx, new_value)
+            self.beh.delete_event(idx)
+            self.beh.create_event(new_value, idx=idx)
             undo_manager.on_update_event(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
@@ -1093,7 +1094,8 @@ class BehaviorEditor(GraphEditor):
             old_value = old_value[0]
             new_value = new_value[0]
 
-            self.beh.rename_animation(idx, new_value)
+            self.beh.delete_animation(idx)
+            self.beh.create_animation(new_value, idx=idx)
             undo_manager.on_update_animation(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
