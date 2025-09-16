@@ -174,11 +174,17 @@ class UndoManager:
     def on_update_value(
         self, handler: XmlValueHandler, old_value: Any, new_value: Any
     ) -> None:
+        if getattr(handler, "_is_guarded", False):
+            return
+
         self._on_action(UpdateValueAction(handler, old_value, new_value))
 
     def on_update_array_item(
         self, array: HkbArray, index: int, old_value: Any, new_value: Any
     ) -> None:
+        if getattr(array, "_is_guarded", False):
+            return
+
         self._on_action(UpdateArrayItem(array, index, old_value, new_value))
 
     def on_complex_action(self, undo_func: Callable, redo_func: Callable) -> None:
@@ -189,6 +195,9 @@ class UndoManager:
         tagfile: Tagfile,
         new_object: HkbRecord,
     ) -> None:
+        if getattr(tagfile, "_is_guarded", False):
+            return
+
         self.on_complex_action(
             lambda obj=new_object: tagfile.remove_object(obj.object_id),
             lambda obj=new_object: tagfile.add_object(obj),
@@ -199,6 +208,9 @@ class UndoManager:
         tagfile: Tagfile,
         obj: HkbRecord,
     ) -> None:
+        if getattr(tagfile, "_is_guarded", False):
+            return
+
         self.on_complex_action(
             lambda obj=obj: tagfile.add_object(obj),
             lambda obj=obj: tagfile.remove_object(obj.object_id),
@@ -210,6 +222,9 @@ class UndoManager:
         variable_info: tuple[str, int, int, int],
         idx: int = -1,
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         self.on_complex_action(
             lambda i=idx: behavior.delete_variable(i),
             lambda i=idx, v=variable_info: behavior.create_variable(*v, i),
@@ -222,6 +237,9 @@ class UndoManager:
         old_value: tuple[str, int, int, int],
         new_value: tuple[str, int, int, int],
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         # Easier than updating each field individually
         def local_update(idx: int, val: tuple):
             behavior.delete_variable(idx)
@@ -237,6 +255,9 @@ class UndoManager:
         behavior: HavokBehavior,
         idx: int,
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         old_value = behavior.get_variable(idx).astuple()
         undo_manager.on_complex_action(
             lambda i=idx: behavior.delete_variable(i),
@@ -246,6 +267,9 @@ class UndoManager:
     def on_create_event(
         self, behavior: HavokBehavior, event: str, idx: int = -1
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         self.on_complex_action(
             lambda i=idx: behavior.delete_event(i),
             lambda i=idx, v=event: behavior.create_event(v, i),
@@ -258,6 +282,9 @@ class UndoManager:
         old_value: str,
         new_value: str,
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         self.on_complex_action(
             lambda i=idx, v=old_value: behavior.rename_event(i, v),
             lambda i=idx, v=new_value: behavior.rename_event(i, v),
@@ -268,6 +295,9 @@ class UndoManager:
         behavior: HavokBehavior,
         idx: int,
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         old_value = behavior.get_event(idx)
         undo_manager.on_complex_action(
             lambda i=idx: behavior.delete_event(i),
@@ -277,6 +307,9 @@ class UndoManager:
     def on_create_animation(
         self, behavior: HavokBehavior, animation: str, idx: int = -1
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         self.on_complex_action(
             lambda i=idx: behavior.delete_animation(i),
             lambda i=idx, v=animation: behavior.create_animation(v, i),
@@ -289,6 +322,9 @@ class UndoManager:
         old_value: str,
         new_value: str,
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         self.on_complex_action(
             lambda i=idx, v=old_value: behavior.rename_animation(i, v),
             lambda i=idx, v=new_value: behavior.rename_animation(i, v),
@@ -299,6 +335,9 @@ class UndoManager:
         behavior: HavokBehavior,
         idx: int,
     ) -> None:
+        if getattr(behavior, "_is_guarded", False):
+            return
+
         old_value = behavior.get_animation(idx)
         undo_manager.on_complex_action(
             lambda i=idx: behavior.delete_animation(i),
@@ -316,33 +355,64 @@ class UndoManager:
                 self._on_action(action)
 
     @contextmanager
-    def guard(self, object: Tagfile | XmlValueHandler):
+    def guard(self, *objects: Tagfile | XmlValueHandler, combine: bool = True):
+        """Track modifications of the passed object while this context exists.
+
+        Parameters
+        ----------
+        objects : Tagfile | XmlValueHandler
+            Objects to track. It is possible to circumvent tracking with e.g. 
+            setattr, but this is of course frowned on.
+        combine : bool, optional
+            If true, any tracked actions within this context will be combined 
+            into one single undo action.
+        """
+        def get_contexts_for(obj: Any) -> list:
+            stack = []
+
+            if isinstance(obj, Tagfile):
+                stack.append(self._patch_tagfile)
+
+                if isinstance(obj, HavokBehavior):
+                    stack.append(self._patch_behavior)
+
+            elif isinstance(obj, XmlValueHandler):
+                stack.append(self._patch_xmlvaluehandler)
+
+                if isinstance(obj, HkbArray):
+                    stack.append(self._patch_hkbarray)
+
+                elif isinstance(obj, HkbRecord):
+                    stack.append(self._patch_hkbrecord)
+
+            return stack
+
         try:
             contexts = []
 
-            if isinstance(object, Tagfile):
-                contexts.append(self._patch_tagfile)
+            for obj in objects:
+                contexts.extend(get_contexts_for(obj))
 
-                if isinstance(object, HavokBehavior):
-                    contexts.append(self._patch_behavior)
-
-            elif isinstance(object, XmlValueHandler):
-                contexts.append(self._patch_xmlvaluehandler)
-
-                if isinstance(object, HkbArray):
-                    contexts.append(self._patch_hkbarray)
-
-                elif isinstance(object, HkbRecord):
-                    contexts.append(self._patch_hkbrecord)
+            if combine:
+                contexts.append(self.combine)
 
             # Combine all of our monkey patch context managers in one stack
             with ExitStack() as stack:
+                # If the object is guarded our manual functions would result in
+                # duplicate undo actions
+                for obj in objects:
+                    obj._is_guarded = True
+
                 for cm in contexts:
                     stack.enter_context(cm(object))
 
                 yield
         finally:
-            pass
+            for obj in objects:
+                try:
+                    delattr(obj, "_is_guarded")
+                except AttributeError:
+                    pass
 
     @contextmanager
     def _patch_tagfile(self, tagfile: Tagfile):
@@ -356,7 +426,7 @@ class UndoManager:
 
         def monkey_remove_object(id: str) -> HkbRecord:
             result = remove_object_original(id)
-            self.on_delete_object(tagfile, tagfile.objects[id])
+            self.on_delete_object(tagfile, result)
             return result
 
         try:

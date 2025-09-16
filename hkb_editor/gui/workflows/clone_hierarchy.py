@@ -17,7 +17,7 @@ from hkb_editor.hkb import HkbPointer, HkbRecord, HkbArray
 from hkb_editor.hkb.type_registry import TypeMismatch
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui import style
-from hkb_editor.gui.workflows.undo import UndoManager
+from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.helpers import common_loading_indicator, add_paragraphs
 
 
@@ -129,7 +129,6 @@ def paste_hierarchy(
     behavior: HavokBehavior,
     target_pointer: HkbPointer,
     xml: str,
-    undo_manager: UndoManager,
     callback: Callable[[MergeHierarchy], None] = None,
     *,
     interactive: bool = True,
@@ -148,12 +147,18 @@ def paste_hierarchy(
     root_type_name = xmldoc.xpath(f".//type[@id='{root_type}']")[0].get("name")
 
     try:
-        mapped_root_type = behavior.type_registry.find_first_type_by_name(root_type_name)
+        mapped_root_type = behavior.type_registry.find_first_type_by_name(
+            root_type_name
+        )
     except StopIteration:
-        raise ValueError(f"Could not map object type {root_type} ({root_type_name}) to a known type ID")
+        raise ValueError(
+            f"Could not map object type {root_type} ({root_type_name}) to a known type ID"
+        )
 
     if not target_pointer.will_accept(mapped_root_type):
-        raise ValueError(f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type}")
+        raise ValueError(
+            f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type}"
+        )
 
     hierarchy = find_conflicts(behavior, xmldoc)
 
@@ -181,9 +186,10 @@ def paste_hierarchy(
                 behavior, xmldoc, target_pointer, hierarchy, add_objects
             )
         else:
-            resolve_conflicts(behavior, target_pointer, hierarchy)
-            hierarchy.pin_objects = True
-            add_objects()
+            with undo_manager.guard(behavior), undo_manager.combine():
+                resolve_conflicts(behavior, target_pointer, hierarchy)
+                hierarchy.pin_objects = True
+                add_objects()
 
 
 def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
@@ -246,9 +252,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
             raise ValueError(f"Could not resolve type {tid} ({name})")
 
         if new_id != tid:
-            logger.debug(
-                f"Remapping object type {tid} ({name}) to {new_id}"
-            )
+            logger.debug(f"Remapping object type {tid} ({name}) to {new_id}")
 
         hierarchy.type_map[tid] = Resolution((tid, name), "<remap>", (new_id, name))
 
@@ -261,21 +265,23 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         xmlobj.set("typeid", new_type_id)
 
         try:
-            
+
             # If the record comes from a different game (or version), the xml element might
             # have extra fields or miss some we are expecting. By constructing a new object
             # we ensure that all required fields are present.
             obj = HkbRecord.new(behavior, new_type_id, None, xmlobj.get("id"))
             tmp = HkbRecord.from_object(behavior, xmlobj)
 
-            # Fix up element type IDs. Search for arrays in obj, but modify them in tmp so 
-            # they can be resolved properly. Pointers don't need fixing since they don't 
+            # Fix up element type IDs. Search for arrays in obj, but modify them in tmp so
+            # they can be resolved properly. Pointers don't need fixing since they don't
             # save their subtype in the xml.
             array: HkbArray
             for path, _ in obj.find_fields_by_type(HkbArray):
                 array = tmp.get_field(path, None)
                 if array:
-                    array.element_type_id = hierarchy.type_map[array.element_type_id].result[0]
+                    array.element_type_id = hierarchy.type_map[
+                        array.element_type_id
+                    ].result[0]
 
             obj.set_value(tmp)
 
@@ -285,10 +291,14 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
             type_name = behavior.type_registry.get_name(new_type_id)
             if type_name not in mismatching_types:
                 if e.missing:
-                    logger.warning(f"Hierarchy type {old_type_id} ({type_name}) is missing expected fields, will use default initializers: {e.missing}")
+                    logger.warning(
+                        f"Hierarchy type {old_type_id} ({type_name}) is missing expected fields, will use default initializers: {e.missing}"
+                    )
 
                 if e.extra:
-                    logger.warning(f"Hierarchy type {old_type_id} ({type_name}) contains unexpected fields which will be ignored: {e.extra}")
+                    logger.warning(
+                        f"Hierarchy type {old_type_id} ({type_name}) contains unexpected fields which will be ignored: {e.extra}"
+                    )
 
                 mismatching_types.add(type_name)
 
@@ -380,7 +390,6 @@ def resolve_conflicts(
 
         return has_valid_path
 
-    # TODO add undo actions
     # Create missing events, variables and animations. If the value is not "<new>" we can
     # expect that a mapping to another value has been applied
     for idx, resolution in hierarchy.events.items():
@@ -585,10 +594,11 @@ def open_merge_hierarchy_dialog(
 
     def resolve():
         try:
-            loading = common_loading_indicator("Merging Hierarchy")
-            resolve_conflicts(behavior, target_pointer, hierarchy)
-            hierarchy.pin_objects = dpg.get_value(f"{tag}_pin_objects")
-            callback()
+            with undo_manager.guard(behavior), undo_manager.combine():
+                loading = common_loading_indicator("Merging Hierarchy")
+                resolve_conflicts(behavior, target_pointer, hierarchy)
+                hierarchy.pin_objects = dpg.get_value(f"{tag}_pin_objects")
+                callback()
         finally:
             dpg.delete_item(loading)
             close()
@@ -849,7 +859,9 @@ def open_merge_hierarchy_dialog(
                         dpg.add_table_column(label="name", width_stretch=True)
                         dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                        for idx, (key, resolution) in enumerate(hierarchy.type_map.items()):
+                        for idx, (key, resolution) in enumerate(
+                            hierarchy.type_map.items()
+                        ):
                             row_tag = f"{tag}_type_row_{key}"
 
                             with dpg.table_row(tag=row_tag):

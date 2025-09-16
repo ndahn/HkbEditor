@@ -83,7 +83,7 @@ def apply_template_dialog(
     def on_okay() -> None:
         dpg.hide_item(f"{tag}_notification")
 
-        undo_top = undo_manager.top()
+        prev_undo = undo_manager.top()
         last_obj_id = next(reversed(behavior.objects.keys()))
 
         try:
@@ -107,7 +107,7 @@ def apply_template_dialog(
             logger.debug("======================================")
             logger.info(f"Executing template '{template._title}'")
 
-            with undo_manager.combine():
+            with undo_manager.guard(behavior):
                 for arg in args.values():
                     if arg.value in (None, ""):
                         continue
@@ -125,14 +125,17 @@ def apply_template_dialog(
                 arg_values = {key: arg.value for key, arg in args.items()}
                 execute_template(template, **arg_values)
         except Exception as e:
-            logger.error(f"Template failed: {str(e)}", exc_info=e)
-            show_status(f"Template failed: {str(e)}")
+            logger.error(f"Template '{template._title}' failed: {str(e)}", exc_info=e)
+            show_status(f"Error: {str(e)}")
 
             # Undo any changes that might have already happened
-            if undo_top != undo_manager.top():
-                undo_manager.undo()
+            if prev_undo != undo_manager.top():
+                try:
+                    undo_manager.undo()
+                    logger.warning("All recorded changes undone")
+                except Exception as e:
+                    logger.error(f"Some of the changes the failed template made could not be undone: {e}")
 
-            logger.info("All recorded changes undone")
         else:
             logger.info(f"Template '{template._title}' finished successfully")
 

@@ -97,6 +97,7 @@ class CommonActionsMixin:
         var_type: VariableType = VariableType.INT32,
         range_min: int = 0,
         range_max: int = 0,
+        default: Any = 0,
         create: bool = True,
     ) -> Variable:
         """Get a variable by name, or create it if it doesn't exist yet.
@@ -139,10 +140,9 @@ class CommonActionsMixin:
                 raise ValueError(f"Cannot create new variable from {variable}")
 
             var_type = VariableType(var_type)
-            idx = self._behavior.create_variable(
-                variable, var_type, range_min, range_max
-            )
-            undo_manager.on_create_variable(self._behavior, variable)
+            var = (variable, var_type, range_min, range_max, default)
+            idx = self._behavior.create_variable(*var)
+            undo_manager.on_create_variable(self._behavior, *var, idx)
             self.logger.debug(
                 f"Created new variable {variable} ({idx}) with type {var_type.name}"
             )

@@ -90,18 +90,18 @@ def register_clip_dialog(
             return
 
         # Get or create the animation
-        animation = util.animation(animation_name)
+        with undo_manager.guard(behavior):
+            animation = util.animation(animation_name)
 
-        # dpg combo only gives us the item, not the index
-        playback_mode = PlaybackMode[playback_mode_name].value
+            # dpg combo only gives us the item, not the index
+            playback_mode = PlaybackMode[playback_mode_name].value
 
-        clip_flags = 0
-        for flag in ClipFlags:
-            if dpg.get_value(f"{tag}_clipflags_{flag.name}"):
-                clip_flags |= flag
+            clip_flags = 0
+            for flag in ClipFlags:
+                if dpg.get_value(f"{tag}_clipflags_{flag.name}"):
+                    clip_flags |= flag
 
-        # Do the deed
-        with undo_manager.combine():
+            # Do the deed
             clip = util.new_clip(
                 animation,
                 name=clip_name,
@@ -113,7 +113,8 @@ def register_clip_dialog(
             generators.append(clip.object_id)
             undo_manager.on_update_array_item(generators, -1, None, clip.object_id)
 
-        callback(dialog, (selected_cmsg, clip), user_data)
+            callback(dialog, (selected_cmsg, clip), user_data)
+            
         dpg.delete_item(dialog)
 
     # Dialog content

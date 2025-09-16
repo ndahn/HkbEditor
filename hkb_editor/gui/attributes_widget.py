@@ -811,18 +811,17 @@ class AttributesWidget:
                     if current:
                         selected_type = current.type_id
 
-                    with undo_manager.combine():
-                        create_object_dialog(
-                            self.tagfile,
-                            self.alias_manager,
-                            on_object_created,
-                            allowed_types=[attribute.subtype_id],
-                            include_derived_types=True,
-                            id_required=True,
-                            selected_type_id=selected_type,
-                            title=f"Create object for '{path}'",
-                            tag=f"{self.tag}_{path}_create_object_dialog",
-                        )
+                    create_object_dialog(
+                        self.tagfile,
+                        self.alias_manager,
+                        on_object_created,
+                        allowed_types=[attribute.subtype_id],
+                        include_derived_types=True,
+                        id_required=True,
+                        selected_type_id=selected_type,
+                        title=f"Create object for '{path}'",
+                        tag=f"{self.tag}_{path}_create_object_dialog",
+                    )
 
                 def jump():
                     oid = attribute.get_value()
@@ -1037,7 +1036,7 @@ class AttributesWidget:
             if self.on_graph_changed:
                 self.on_graph_changed()
 
-        paste_hierarchy(self.tagfile, pointer, data, undo_manager, on_hierarchy_merged)
+        paste_hierarchy(self.tagfile, pointer, data, on_hierarchy_merged)
 
     def _copy_to_clipboard(self, data: str):
         try:

@@ -88,13 +88,8 @@ def create_cmsg_dialog(
             show_warning("Statemachine does not have a wildcard transitions object")
             return
 
-        # stateId in StateInfo directly correlates to toStateId in the transitionInfoArray.
-        # It doesn't have to be unique, but it has to match and be unique within those
-        # arrays (i.e. sm.wildcardTransitions and sm.states)
-        new_state_id = 0
-        for existing_state_ptr in statemachine["states"]:
-            existing_state = behavior.objects[existing_state_ptr.get_value()]
-            new_state_id = max(new_state_id, existing_state["stateId"].get_value() + 1)
+        # Must be unique within the statemachine
+        new_state_id = util.get_next_state_id(statemachine)
 
         cmsg_name = base_name
         if base_name.endswith("_CMSG"):
@@ -102,32 +97,32 @@ def create_cmsg_dialog(
         if not cmsg_name.endswith("_CMSG"):
             cmsg_name += "_CMSG"
 
-        # Get or create the animation slot
-        animation = util.animation(animation_val)
+        with undo_manager.guard(behavior):
+            # Get or create the animation slot
+            animation = util.animation(animation_val)
 
-        # Get or create the event
-        event = util.event(event_val)
+            # Get or create the event
+            event = util.event(event_val)
 
-        playback_mode = PlaybackMode[playback_mode_val].value
-        animation_end_event_type = AnimeEndEventType[animation_end_event_type_val].value
+            playback_mode = PlaybackMode[playback_mode_val].value
+            animation_end_event_type = AnimeEndEventType[animation_end_event_type_val].value
 
-        transitioninfo_effect_id = (
-            selected_transitioninfo_effect.object_id
-            if selected_transitioninfo_effect
-            else None
-        )
+            transitioninfo_effect_id = (
+                selected_transitioninfo_effect.object_id
+                if selected_transitioninfo_effect
+                else None
+            )
 
-        stateinfo_transition_effect_id = (
-            selected_stateinfo_effect.object_id if selected_stateinfo_effect else None
-        )
+            stateinfo_transition_effect_id = (
+                selected_stateinfo_effect.object_id if selected_stateinfo_effect else None
+            )
 
-        transition_flags = 0
-        for flag in TransitionInfoFlags:
-            if dpg.get_value(f"{tag}_transition_flags_{flag.name}"):
-                transition_flags |= flag
+            transition_flags = 0
+            for flag in TransitionInfoFlags:
+                if dpg.get_value(f"{tag}_transition_flags_{flag.name}"):
+                    transition_flags |= flag
 
-        # Do the deed
-        with undo_manager.combine():
+            # Do the deed
             clip = util.new_clip(
                 animation,
                 mode=playback_mode,
