@@ -35,6 +35,7 @@ from .table_tree import (
     add_lazy_table_tree_node,
     get_row_node_item,
     set_foldable_row_status,
+    is_row_visible,
 )
 from .workflows.bind_attribute import (
     bindable_attribute,
@@ -138,9 +139,7 @@ class AttributesWidget:
         if self.on_graph_changed:
             self.on_graph_changed()
 
-        self.clear()
-        self._update_attributes()
-        # TODO reveal currently revealed attributes
+        self.regenerate()
 
     def redo(self) -> None:
         if not undo_manager.can_redo():
@@ -152,9 +151,7 @@ class AttributesWidget:
         if self.on_graph_changed:
             self.on_graph_changed()
 
-        self.clear()
-        self._update_attributes()
-        # TODO reveal currently revealed attributes
+        self.regenerate()
 
     def get_explanation(self, path: str) -> str:
         type_expl = self.explanations.get(self.record.type_name)
@@ -192,6 +189,16 @@ class AttributesWidget:
                 parent=self.attributes_table,
             ):
                 self._create_attribute_widget(val, key)
+
+    def regenerate(self):
+        # TODO we need to collect the paths that are currently revealed somehow
+        revealed = []
+
+        self.clear()
+        self._update_attributes()
+
+        for path in revealed:
+            self.reveal_attribute(path)
 
     def _create_attribute_widget(
         self,
@@ -330,7 +337,7 @@ class AttributesWidget:
                 dpg.add_input_text(
                     default_value=value,
                     readonly=True,
-                    width=-30,  # TODO is there no better solution?
+                    width=-30,
                     tag=f"{tag}_input",
                 )
                 dpg.bind_item_theme(dpg.last_item(), theme)
@@ -389,8 +396,7 @@ class AttributesWidget:
                 "hkbVariableBindingSet"
             )
             if pointer.type_id == vbs_type_id:
-                self.clear()
-                self._update_attributes()
+                self.regenerate()
                 self.reveal_attribute(path)
 
         def open_pointer_dialog():
@@ -488,8 +494,7 @@ class AttributesWidget:
             #     before=tag,  # insert before the buttons
             # )
 
-            self.clear()
-            self._update_attributes()
+            self.regenerate()
             self.reveal_attribute(f"{path}:{idx}")
 
         with dpg.group(horizontal=True, tag=tag) as button_group:
@@ -586,8 +591,7 @@ class AttributesWidget:
                                 else:
                                     self._on_value_changed(sender, new_idx, attribute)
 
-                                self.clear()
-                                self._update_attributes()
+                                self.regenerate()
 
                             self._add_reference_attribute_int(
                                 label,
@@ -610,8 +614,7 @@ class AttributesWidget:
                                 else:
                                     self._on_value_changed(sender, new_idx, attribute)
 
-                                self.clear()
-                                self._update_attributes()
+                                self.regenerate()
 
                             self._add_reference_attribute_int(
                                 label,
@@ -634,8 +637,7 @@ class AttributesWidget:
                                 else:
                                     self._on_value_changed(sender, new_idx, attribute)
 
-                                self.clear()
-                                self._update_attributes()
+                                self.regenerate()
 
                             self._add_reference_attribute_int(
                                 label,

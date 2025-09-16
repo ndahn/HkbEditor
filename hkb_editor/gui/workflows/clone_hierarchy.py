@@ -852,12 +852,6 @@ def open_merge_hierarchy_dialog(
                         for idx, (key, resolution) in enumerate(hierarchy.type_map.items()):
                             row_tag = f"{tag}_type_row_{key}"
 
-                            # In some cases it's possible that multiple types get mapped to the 
-                            # same type. This is probably an error and happens for e.g. "T*"
-                            if dpg.does_item_exist(row_tag):
-                                print("### type already present", resolution.result)
-                                continue
-
                             with dpg.table_row(tag=row_tag):
                                 dpg.add_text(str(resolution.original[0]))
                                 dpg.add_text("->")
