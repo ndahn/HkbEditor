@@ -202,6 +202,8 @@ class Tagfile:
         search_root: "HkbRecord | str" = None,
     ) -> Generator["HkbRecord", None, None]:
         if search_root:
+            from .hkb_types import HkbRecord
+
             if isinstance(search_root, HkbRecord):
                 search_root = search_root.object_id
 

@@ -371,19 +371,19 @@ class UndoManager:
             stack = []
 
             if isinstance(obj, Tagfile):
-                stack.append(self._patch_tagfile)
+                stack.append(lambda: self._patch_tagfile(obj))
 
                 if isinstance(obj, HavokBehavior):
-                    stack.append(self._patch_behavior)
+                    stack.append(lambda: self._patch_behavior(obj))
 
             elif isinstance(obj, XmlValueHandler):
-                stack.append(self._patch_xmlvaluehandler)
+                stack.append(lambda: self._patch_xmlvaluehandler(obj))
 
                 if isinstance(obj, HkbArray):
-                    stack.append(self._patch_hkbarray)
+                    stack.append(lambda: self._patch_hkbarray(obj))
 
                 elif isinstance(obj, HkbRecord):
-                    stack.append(self._patch_hkbrecord)
+                    stack.append(lambda: self._patch_hkbrecord(obj))
 
             return stack
 
@@ -403,9 +403,10 @@ class UndoManager:
                 for obj in objects:
                     obj._is_guarded = True
 
-                for cm in contexts:
-                    stack.enter_context(cm(object))
+                for ctx in contexts:
+                    stack.enter_context(ctx())
 
+                del contexts
                 yield
         finally:
             for obj in objects:

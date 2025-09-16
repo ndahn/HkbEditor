@@ -162,34 +162,32 @@ def paste_hierarchy(
 
     hierarchy = find_conflicts(behavior, xmldoc)
 
-    with undo_manager.combine():
+    def add_objects():
+        new_root: HkbRecord = hierarchy.objects[root_id].result
 
-        def add_objects():
-            new_root: HkbRecord = hierarchy.objects[root_id].result
+        if new_root:
+            # Events, variables, etc. have already been created as needed,
+            # just need to add the objects
+            for res in hierarchy.objects.values():
+                obj: HkbRecord = res.result
+                # Objects with action <reuse> and <skip> should not be added
+                if obj and res.action == "<new>":
+                    behavior.add_object(obj)
 
-            if new_root:
-                # Events, variables, etc. have already been created as needed,
-                # just need to add the objects
-                for res in hierarchy.objects.values():
-                    obj: HkbRecord = res.result
-                    # Objects with action <reuse> and <skip> should not be added
-                    if obj and res.action == "<new>":
-                        behavior.add_object(obj)
+            target_pointer.set_value(new_root)
 
-                target_pointer.set_value(new_root)
+        if callback:
+            callback(hierarchy)
 
-            if callback:
-                callback(hierarchy)
-
-        if interactive:
-            open_merge_hierarchy_dialog(
-                behavior, xmldoc, target_pointer, hierarchy, add_objects
-            )
-        else:
-            with undo_manager.guard(behavior), undo_manager.combine():
-                resolve_conflicts(behavior, target_pointer, hierarchy)
-                hierarchy.pin_objects = True
-                add_objects()
+    if interactive:
+        open_merge_hierarchy_dialog(
+            behavior, xmldoc, target_pointer, hierarchy, add_objects
+        )
+    else:
+        with undo_manager.guard(behavior):
+            resolve_conflicts(behavior, target_pointer, hierarchy)
+            hierarchy.pin_objects = True
+            add_objects()
 
 
 def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
@@ -593,9 +591,9 @@ def open_merge_hierarchy_dialog(
         resolution.action = action
 
     def resolve():
+        loading = common_loading_indicator("Merging Hierarchy")
         try:
-            with undo_manager.guard(behavior), undo_manager.combine():
-                loading = common_loading_indicator("Merging Hierarchy")
+            with undo_manager.guard(behavior):
                 resolve_conflicts(behavior, target_pointer, hierarchy)
                 hierarchy.pin_objects = dpg.get_value(f"{tag}_pin_objects")
                 callback()
@@ -618,7 +616,7 @@ def open_merge_hierarchy_dialog(
     # Window content
     with dpg.window(
         width=1100 if graph_data else 600,
-        height=650 if graph_data else 550,
+        height=670 if graph_data else 570,
         label="Merge Hierarchy",
         modal=False,
         on_close=lambda: dpg.delete_item(dialog),
@@ -927,7 +925,9 @@ Note that new events, variables and animations must still have unique names - yo
 these afterwards.
 """
         add_paragraphs(instructions, 150, color=style.light_blue)
+        
         dpg.add_separator()
+        dpg.add_spacer(height=5)
 
         with dpg.group(horizontal=True):
             dpg.add_button(label="Apply", callback=resolve, tag=f"{tag}_button_okay")
