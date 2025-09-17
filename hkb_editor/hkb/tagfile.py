@@ -34,7 +34,7 @@ class Tagfile:
         self.type_registry.load_types(root)
 
         # TODO hide behind a property, changing this dict should also affect the xml
-        self.objects = {
+        self.objects: dict[str, HkbRecord] = {
             obj.get("id"): HkbRecord.from_object(self, obj)
             for obj in root.findall(".//object")
         }
@@ -99,7 +99,7 @@ class Tagfile:
             return self.objects[object_id]
         except KeyError:
             # Not cached, directly construct it from the xml
-            elem = next(self._tree.xpath(f".//object[@id='{object_id}']"), None)
+            elem = self._tree.xpath(f".//object[@id='{object_id}']")[0]
             if elem:
                 return HkbRecord.from_object(self, elem)
 

@@ -160,7 +160,11 @@ def paste_hierarchy(
             f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type}"
         )
 
-    hierarchy = find_conflicts(behavior, xmldoc)
+    loading = common_loading_indicator("Analyzing hierarchy")
+    try:
+        hierarchy = find_conflicts(behavior, xmldoc)
+    finally:
+        dpg.delete_item(loading)
 
     def add_objects():
         new_root: HkbRecord = hierarchy.objects[root_id].result

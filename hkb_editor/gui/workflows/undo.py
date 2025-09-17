@@ -1,7 +1,9 @@
 from typing import Any, Callable
+from types import MethodType
 from collections import deque
 import itertools
 import logging
+from functools import wraps
 from contextlib import contextmanager, ExitStack
 
 from hkb_editor.hkb.hkb_types import XmlValueHandler, HkbArray, HkbRecord
@@ -31,14 +33,14 @@ class ComboAction(UndoAction):
                 a.undo()
             except Exception as e:
                 # The show must go on!
-                logger.warning("Undo partially failed: {e}")
+                logger.warning(f"Undo partially failed: {e}", exc_info=True)
 
     def redo(self):
         for a in self.actions:
             a.redo()
 
     def __str__(self):
-        return str([str(a) for a in self.actions])
+        return f"{len(self.actions)} actions"
 
 
 class UpdateValueAction(UndoAction):
@@ -112,6 +114,38 @@ class CustomUndoAction(UndoAction):
         return f"call {self.undo_func} <-> {self.redo_func}"
 
 
+class skip_if_guarded:
+    """Decorator that skips call when the first argument has `_is_guarded` set.
+    For methods, `self._is_guarded` is checked. The original callable is
+    available as `._internal` (bound for methods)."""
+
+    def __init__(self, func: Callable):
+        self.func = func
+        self._internal = func  # unbound for free functions
+        wraps(func)(self)
+
+    # Class methods will call __get__ to bind the function instance
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+
+        @wraps(self.func)
+        def bound(*args, **kwargs):
+            if args and getattr(args[0], "_is_guarded", False):
+                return
+            return self.func(instance, *args, **kwargs)
+
+        # Bound original so that it can still be called directly
+        bound._internal = MethodType(self.func, instance)
+        return bound
+
+    # Used for free functions
+    def __call__(self, *args, **kwargs):
+        if args and getattr(args[0], "_is_guarded", False):
+            return
+        return self.func(*args, **kwargs)
+
+
 class UndoManager:
     def __init__(self, maxlen: int = 100):
         self.history: deque[UndoAction] = deque(maxlen=maxlen)
@@ -171,65 +205,56 @@ class UndoManager:
             self.history.append(action)
             self.index += 1
 
-    def on_update_value(
-        self, handler: XmlValueHandler, old_value: Any, new_value: Any
-    ) -> None:
-        if getattr(handler, "_is_guarded", False):
-            return
-
-        self._on_action(UpdateValueAction(handler, old_value, new_value))
-
-    def on_update_array_item(
-        self, array: HkbArray, index: int, old_value: Any, new_value: Any
-    ) -> None:
-        if getattr(array, "_is_guarded", False):
-            return
-
-        self._on_action(UpdateArrayItem(array, index, old_value, new_value))
-
     def on_complex_action(self, undo_func: Callable, redo_func: Callable) -> None:
         self._on_action(CustomUndoAction(undo_func, redo_func))
 
+    @skip_if_guarded
+    def on_update_value(
+        self, handler: XmlValueHandler, old_value: Any, new_value: Any
+    ) -> None:
+        self._on_action(UpdateValueAction(handler, old_value, new_value))
+
+    @skip_if_guarded
+    def on_update_array_item(
+        self, array: HkbArray, index: int, old_value: Any, new_value: Any
+    ) -> None:
+        self._on_action(UpdateArrayItem(array, index, old_value, new_value))
+
+    @skip_if_guarded
     def on_create_object(
         self,
         tagfile: Tagfile,
         new_object: HkbRecord,
     ) -> None:
-        if getattr(tagfile, "_is_guarded", False):
-            return
-
         self.on_complex_action(
             lambda obj=new_object: tagfile.remove_object(obj.object_id),
             lambda obj=new_object: tagfile.add_object(obj),
         )
 
+    @skip_if_guarded
     def on_delete_object(
         self,
         tagfile: Tagfile,
         obj: HkbRecord,
     ) -> None:
-        if getattr(tagfile, "_is_guarded", False):
-            return
-
         self.on_complex_action(
             lambda obj=obj: tagfile.add_object(obj),
-            lambda obj=obj: tagfile.remove_object(obj.object_id),
+            lambda object_id=obj.object_id: tagfile.remove_object(object_id),
         )
 
+    @skip_if_guarded
     def on_create_variable(
         self,
         behavior: HavokBehavior,
         variable_info: tuple[str, int, int, int],
         idx: int = -1,
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         self.on_complex_action(
             lambda i=idx: behavior.delete_variable(i),
             lambda i=idx, v=variable_info: behavior.create_variable(*v, i),
         )
 
+    @skip_if_guarded
     def on_update_variable(
         self,
         behavior: HavokBehavior,
@@ -237,9 +262,6 @@ class UndoManager:
         old_value: tuple[str, int, int, int],
         new_value: tuple[str, int, int, int],
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         # Easier than updating each field individually
         def local_update(idx: int, val: tuple):
             behavior.delete_variable(idx)
@@ -250,31 +272,28 @@ class UndoManager:
             lambda i=idx, v=new_value: local_update(i, v),
         )
 
+    @skip_if_guarded
     def on_delete_variable(
         self,
         behavior: HavokBehavior,
         idx: int,
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         old_value = behavior.get_variable(idx).astuple()
         undo_manager.on_complex_action(
             lambda i=idx: behavior.delete_variable(i),
             lambda i=idx, v=old_value: behavior.create_variable(*v, i),
         )
 
+    @skip_if_guarded
     def on_create_event(
         self, behavior: HavokBehavior, event: str, idx: int = -1
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         self.on_complex_action(
             lambda i=idx: behavior.delete_event(i),
             lambda i=idx, v=event: behavior.create_event(v, i),
         )
 
+    @skip_if_guarded
     def on_update_event(
         self,
         behavior: HavokBehavior,
@@ -282,39 +301,33 @@ class UndoManager:
         old_value: str,
         new_value: str,
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         self.on_complex_action(
             lambda i=idx, v=old_value: behavior.rename_event(i, v),
             lambda i=idx, v=new_value: behavior.rename_event(i, v),
         )
 
+    @skip_if_guarded
     def on_delete_event(
         self,
         behavior: HavokBehavior,
         idx: int,
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         old_value = behavior.get_event(idx)
         undo_manager.on_complex_action(
             lambda i=idx: behavior.delete_event(i),
             lambda i=idx, v=old_value: behavior.create_event(v, i),
         )
 
+    @skip_if_guarded
     def on_create_animation(
         self, behavior: HavokBehavior, animation: str, idx: int = -1
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         self.on_complex_action(
             lambda i=idx: behavior.delete_animation(i),
             lambda i=idx, v=animation: behavior.create_animation(v, i),
         )
 
+    @skip_if_guarded
     def on_update_animation(
         self,
         behavior: HavokBehavior,
@@ -322,22 +335,17 @@ class UndoManager:
         old_value: str,
         new_value: str,
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         self.on_complex_action(
             lambda i=idx, v=old_value: behavior.rename_animation(i, v),
             lambda i=idx, v=new_value: behavior.rename_animation(i, v),
         )
 
+    @skip_if_guarded
     def on_delete_animation(
         self,
         behavior: HavokBehavior,
         idx: int,
     ) -> None:
-        if getattr(behavior, "_is_guarded", False):
-            return
-
         old_value = behavior.get_animation(idx)
         undo_manager.on_complex_action(
             lambda i=idx: behavior.delete_animation(i),
@@ -422,12 +430,12 @@ class UndoManager:
         
         def monkey_add_object(record: HkbRecord, id: str = None) -> str:
             result = add_object_original(record, id)
-            self.on_create_object(tagfile, record)
+            self.on_create_object._internal(tagfile, record)
             return result
 
         def monkey_remove_object(id: str) -> HkbRecord:
             result = remove_object_original(id)
-            self.on_delete_object(tagfile, result)
+            self.on_delete_object._internal(tagfile, result)
             return result
 
         try:
@@ -452,12 +460,12 @@ class UndoManager:
         
         def monkey_create_event(event_name: str, idx: int = -1) -> int:
             result = create_event_original(event_name, idx)
-            self.on_create_event(behavior, event_name, idx)
+            self.on_create_event._internal(behavior, event_name, idx)
             return result
         
         def monkey_delete_event(idx: int) -> None:
             delete_event_original(idx)
-            self.on_delete_event(behavior, idx)
+            self.on_delete_event._internal(behavior, idx)
         
         def monkey_create_variable(
             variable_name: str,
@@ -469,21 +477,21 @@ class UndoManager:
         ) -> int:
             result = create_variable_original(variable_name, var_type, range_min, range_max, default, idx)
             var = behavior.get_variable(result)
-            self.on_create_variable(behavior, var.astuple(), result)
+            self.on_create_variable._internal(behavior, var.astuple(), result)
             return result
         
         def monkey_delete_variable(idx: int) -> None:
             delete_variable_original(idx)
-            self.on_delete_variable(behavior, idx)
+            self.on_delete_variable._internal(behavior, idx)
         
         def monkey_create_animation(animation_name: str, idx: int = -1) -> int:
             result = create_animation_original(animation_name, idx)
-            self.on_create_animation(behavior, animation_name, idx)
+            self.on_create_animation._internal(behavior, animation_name, idx)
             return result
         
         def monkey_delete_animation(idx: int) -> None:
             delete_animation_original(idx)
-            self.on_delete_animation(behavior, idx)
+            self.on_delete_animation._internal(behavior, idx)
         
         try:
             # Apply patches
@@ -511,7 +519,7 @@ class UndoManager:
         def monkey_set_value(value: Any) -> None:
             old_value = handler.get_value()
             set_value_original(value)
-            self.on_update_value(handler, old_value, value)
+            self.on_update_value._internal(handler, old_value, value)
 
         try:
             # Apply patches
@@ -546,16 +554,16 @@ class UndoManager:
         def monkey_setitem(index: int, value: Any) -> None:
             old_value = array[index]
             setitem_original(index, value)
-            self.on_update_array_item(array, index, old_value, value)
+            self.on_update_array_item._internal(array, index, old_value, value)
 
         def monkey_delitem(index: int) -> None:
             old_value = array[index]
             delitem_original(index)
-            self.on_update_array_item(array, index, old_value, None)
+            self.on_update_array_item._internal(array, index, old_value, None)
 
         def monkey_append(value: Any) -> None:
             append_original(value)
-            self.on_update_array_item(array, -1, None, value)
+            self.on_update_array_item._internal(array, -1, None, value)
 
         def monkey_insert(index: int, value: Any) -> None:
             insert_original(index, value)
@@ -566,7 +574,7 @@ class UndoManager:
 
         def monkey_pop(index: int) -> Any:
             result = pop_original(index)
-            self.on_update_array_item(array, index, result, None)
+            self.on_update_array_item._internal(array, index, result, None)
             return result
 
         def monkey_clear():
