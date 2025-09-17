@@ -297,6 +297,30 @@ class BehaviorEditor(GraphEditor):
         dpg.split_frame()
         center_window(wnd)
 
+    def undo(self) -> None:
+        if not undo_manager.can_undo():
+            return
+
+        self.logger.info(f"Undo: {undo_manager.top()}")
+        undo_manager.undo()
+
+        for oid in self.pinned_objects:
+            if oid not in self.beh.objects:
+                self.remove_pinned_object(oid)
+
+        self.regenerate_canvas()
+        self.attributes_widget.regenerate()
+
+    def redo(self) -> None:
+        if not undo_manager.can_redo():
+            return
+
+        self.logger.info(f"Redo: {undo_manager.top()}")
+        undo_manager.redo()
+
+        self.regenerate_canvas()
+        self.attributes_widget.regenerate()
+
     def create_app_menu(self):
         # File
         with dpg.menu(label="File"):
@@ -361,12 +385,12 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(
                 label="Undo",
                 shortcut="ctrl-z",
-                callback=lambda: self.attributes_widget.undo(),
+                callback=self.undo,
             )
             dpg.add_menu_item(
                 label="Redo",
                 shortcut="ctrl-y",
-                callback=lambda: self.attributes_widget.redo(),
+                callback=self.redo,
             )
 
             dpg.add_separator()
@@ -622,7 +646,7 @@ class BehaviorEditor(GraphEditor):
             self.attributes_widget = AttributesWidget(
                 self.alias_manager,
                 jump_callback=self.jump_to_object,
-                on_graph_changed=self.regenerate_all,
+                on_graph_changed=self.regenerate_canvas,
                 on_value_changed=self._on_value_changed,
                 pin_object_callback=self.add_pinned_object,
                 tag=f"{self.tag}_attributes_widget",
@@ -662,6 +686,15 @@ class BehaviorEditor(GraphEditor):
             dpg.add_item_clicked_handler(
                 button=dpg.mvMouseButton_Right, callback=self.open_pin_menu
             )
+
+    @property
+    def pinned_objects(self) -> list[str]:
+        ret = []
+        
+        for row in dpg.get_item_children(f"{self.tag}_pinned_objects_table", slot=1):
+            ret.append(dpg.get_item_user_data(row))
+        
+        return ret
 
     def add_pinned_object(self, object_id: HkbRecord | str) -> None:
         if isinstance(object_id, HkbRecord):
@@ -828,7 +861,7 @@ class BehaviorEditor(GraphEditor):
             if parent:
                 self.selected_node = self.canvas.nodes[parent]
 
-            self.regenerate_all()
+            self.regenerate_canvas()
             self.logger.warning(f"{record} removed, but references may still exist")
 
     def _copy_to_clipboard(self, data: str) -> None:
@@ -859,7 +892,7 @@ class BehaviorEditor(GraphEditor):
             if new_value not in self.canvas.nodes:
                 # Edges have changed, previous node may not be connected anymore, new
                 # node may not be part of the current statemachine graph yet, ...
-                self.regenerate_all()
+                self.regenerate_canvas()
             else:
                 # Changing a pointer will change the rendered graph
                 self.canvas.regenerate()
@@ -868,8 +901,14 @@ class BehaviorEditor(GraphEditor):
         record = self.beh.objects[node.id]
         self.attributes_widget.set_record(record)
 
-    def regenerate_all(self) -> None:
-        root_id = self.get_active_statemachine().object_id
+    def regenerate_canvas(self) -> None:
+        sm = self.get_active_statemachine()
+
+        if not sm:
+            # No active statemachine yet
+            return
+
+        root_id = sm.object_id
         selected = self.selected_node
         self._on_root_selected("", True, root_id)
         if selected and selected.id in self.canvas.graph:

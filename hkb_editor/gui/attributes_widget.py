@@ -129,30 +129,6 @@ class AttributesWidget:
                 for idx in subparts[1:]:
                     reveal(f":{idx}")
 
-    def undo(self) -> None:
-        if not undo_manager.can_undo():
-            return
-
-        self.logger.info(f"Undo: {undo_manager.top()}")
-        undo_manager.undo()
-
-        if self.on_graph_changed:
-            self.on_graph_changed()
-
-        self.regenerate()
-
-    def redo(self) -> None:
-        if not undo_manager.can_redo():
-            return
-
-        self.logger.info(f"Redo: {undo_manager.top()}")
-        undo_manager.redo()
-
-        if self.on_graph_changed:
-            self.on_graph_changed()
-
-        self.regenerate()
-
     def get_explanation(self, path: str) -> str:
         type_expl = self.explanations.get(self.record.type_name)
         if not type_expl:
