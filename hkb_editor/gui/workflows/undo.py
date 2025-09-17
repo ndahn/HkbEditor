@@ -227,7 +227,7 @@ class UndoManager:
         new_object: HkbRecord,
     ) -> None:
         self.on_complex_action(
-            lambda obj=new_object: tagfile.remove_object(obj.object_id),
+            lambda obj=new_object: tagfile.delete_object(obj.object_id),
             lambda obj=new_object: tagfile.add_object(obj),
         )
 
@@ -239,7 +239,7 @@ class UndoManager:
     ) -> None:
         self.on_complex_action(
             lambda obj=obj: tagfile.add_object(obj),
-            lambda object_id=obj.object_id: tagfile.remove_object(object_id),
+            lambda object_id=obj.object_id: tagfile.delete_object(object_id),
         )
 
     @skip_if_guarded
@@ -426,7 +426,7 @@ class UndoManager:
     @contextmanager
     def _patch_tagfile(self, tagfile: Tagfile):
         add_object_original = tagfile.add_object
-        remove_object_original = tagfile.remove_object
+        remove_object_original = tagfile.delete_object
         
         def monkey_add_object(record: HkbRecord, id: str = None) -> str:
             result = add_object_original(record, id)
@@ -441,13 +441,13 @@ class UndoManager:
         try:
             # Apply patches
             tagfile.add_object = monkey_add_object
-            tagfile.remove_object = monkey_remove_object
+            tagfile.delete_object = monkey_remove_object
             
             yield
         finally:
             # Restore original methods
             tagfile.add_object = add_object_original
-            tagfile.remove_object = remove_object_original
+            tagfile.delete_object = remove_object_original
 
     @contextmanager
     def _patch_behavior(self, behavior: HavokBehavior):

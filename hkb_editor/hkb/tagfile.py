@@ -239,8 +239,27 @@ class Tagfile:
 
         return id
 
-    def remove_object(self, id: str) -> "HkbRecord":
-        obj = self.objects.pop(id)
+    def delete_object(self, object_id: "HkbRecord | str") -> "HkbRecord":
+        """Delete the specified object from the behavior. 
+        
+        Note that this will not update any pointers referring to the object.
+
+        Parameters
+        ----------
+        object_id : str
+            The HkbRecord object or object ID to remove.
+
+        Returns
+        -------
+        HkbRecord
+            The removed object.
+        """
+        from .hkb_types import HkbRecord
+
+        if isinstance(object_id, HkbRecord):
+            object_id = object_id.object_id
+
+        obj = self.objects.pop(object_id)
 
         # Proper objects will have their <record> inside an <object> tag
         parent: ET._Element = obj.element.getparent()

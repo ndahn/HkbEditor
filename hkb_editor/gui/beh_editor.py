@@ -853,16 +853,23 @@ class BehaviorEditor(GraphEditor):
     def _delete_node(self, node: Node) -> None:
         record = self.beh.objects.get(node.id)
         if record:
-            # TODO remove all references to record
-            self.beh.remove_object(record.object_id)
-            undo_manager.on_delete_object(self.beh, record)
+            with undo_manager.combine():
+                self.beh.delete_object(record.object_id)
+                undo_manager.on_delete_object(self.beh, record)
 
-            parent = next(self.canvas.graph.predecessors(record.object_id), None)
-            if parent:
-                self.selected_node = self.canvas.nodes[parent]
+                # Update any pointers that are referencing the deleted object. We could use 
+                # HavokBehavior.find_referees, but using the graph is much more efficient 
+                for parent_id in self.canvas.graph.predecessors(record.object_id):
+                    parent = self.beh.objects[parent_id]
+                    for _, ptr in parent.find_fields_by_type(HkbPointer):
+                        ptr.set_value(None)
+                        undo_manager.on_update_value(ptr, record.object_id, None)
 
-            self.regenerate_canvas()
-            self.logger.warning(f"{record} removed, but references may still exist")
+                parent = next(self.canvas.graph.predecessors(record.object_id), None)
+                if parent:
+                    self.selected_node = self.canvas.nodes[parent]
+
+                self.regenerate_canvas()
 
     def _copy_to_clipboard(self, data: str) -> None:
         try:
