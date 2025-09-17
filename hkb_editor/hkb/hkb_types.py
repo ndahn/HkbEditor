@@ -411,13 +411,31 @@ class HkbArray(XmlValueHandler, Generic[T]):
 
         raise IndexError("Item not found")
 
-    def append(self, value: T | Any) -> None:
+    def append(self, value: T | Any) -> T:
+        """Add a new item to this array.
+
+        NOTE: this will ALWAYS create a new object inside the array, even if the passed 
+        value could be used as it is. This is to avoid unintentionally moving parts of the
+        xml structure around.
+
+        Parameters
+        ----------
+        value : T | Any
+            The item to add.
+
+        Returns
+        -------
+        T
+            The new item that has been added to the array.
+        """
         if isinstance(value, XmlValueHandler):
             self._verify_compatible(value)
 
         value = self._wrap_value(value)
         self.element.append(value.element)
         self._count += 1
+
+        return value
 
     def insert(self, index: int, value: T | Any) -> None:
         if index < 0:
@@ -670,7 +688,7 @@ class HkbRecord(XmlValueHandler):
                 if isinstance(field, HkbRecord):
                     todo.append((field, field_path))
 
-                if isinstance(field, HkbArray):
+                elif isinstance(field, HkbArray):
                     element_type = field.get_item_wrapper()
                     if element_type == field_type:
                         for i, item in enumerate(field):
@@ -681,7 +699,7 @@ class HkbRecord(XmlValueHandler):
                             item_path = f"{field_path}/:{i}"
                             todo.append((item, item_path))
 
-                if isinstance(field, field_type):
+                elif isinstance(field, field_type):
                     yield (field_path, field)
 
     def __getitem__(self, name: str) -> XmlValueHandler:

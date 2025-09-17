@@ -8,7 +8,6 @@ from threading import Thread
 import textwrap
 import time
 import pyperclip
-import lxml.etree
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
@@ -50,7 +49,7 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
-from .workflows.clone_hierarchy import copy_hierarchy
+from .workflows.clone_hierarchy import copy_hierarchy, import_hierarchy
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
@@ -443,8 +442,11 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             dpg.add_menu_item(
-                label="Generate Bone Mirror Map...",
-                callback=self.open_bone_mirror_map_dialog,
+                label="Import Hierarchy...", callback=self.open_hierarchy_import_dialog
+            )
+
+            dpg.add_menu_item(
+                label="Generate Bone Mirror Map...", callback=self.open_bone_mirror_map_dialog
             )
 
         # Templates
@@ -862,8 +864,9 @@ class BehaviorEditor(GraphEditor):
                 for parent_id in self.canvas.graph.predecessors(record.object_id):
                     parent = self.beh.objects[parent_id]
                     for _, ptr in parent.find_fields_by_type(HkbPointer):
-                        ptr.set_value(None)
-                        undo_manager.on_update_value(ptr, record.object_id, None)
+                        if ptr.get_value() == node.id:
+                            ptr.set_value(None)
+                            undo_manager.on_update_value(ptr, record.object_id, None)
 
                 parent = next(self.canvas.graph.predecessors(record.object_id), None)
                 if parent:
@@ -1297,6 +1300,31 @@ class BehaviorEditor(GraphEditor):
             self.alias_manager.aliases.insert(0, aliases)
         except ValueError as e:
             self.logger.error("Loading bone names failed: %s", e, exc_info=True)
+
+    def open_hierarchy_import_dialog(self):
+        file_path = (
+            open_file_dialog(title="Select Hierarchy", filetypes={"Hierarchy": "*.xml"})
+        )
+
+        if not file_path:
+            return
+
+        with open(file_path) as f:
+            xml = f.read()
+
+        def on_import(hierarchy):
+            new_objects = [
+                r.result for r in hierarchy.objects.values() if r.action == "<new>"
+            ]
+            self.logger.info(f"Imported hierarchy of {len(new_objects)} elements")
+
+            if hierarchy.pin_objects:
+                for obj in new_objects:
+                    self.add_pinned_object(obj)
+
+        import_hierarchy(self.beh, xml, on_import)
+        
+        self.regenerate_canvas()
 
     def open_bone_mirror_map_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"

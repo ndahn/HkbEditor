@@ -1,6 +1,7 @@
 from typing import Any, Callable
 import logging
 from dataclasses import dataclass, field
+import re
 from ast import literal_eval
 from lxml import etree as ET
 import networkx as nx
@@ -90,7 +91,14 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
 
         todo.extend(g.successors(oid))
 
-    root = ET.Element("behavior_hierarchy")
+    references = []
+
+    for obj, path, _ in behavior.find_references_to(root_id):
+        # If the path is into a pointer array we should ignore the item index
+        path = re.sub(r"/:[0-9]+$", "/:-1", path)
+        references.append((obj.object_id, path))
+
+    root = ET.Element("behavior_hierarchy", references=str(references))
     xml_events = ET.SubElement(root, "events")
     xml_variables = ET.SubElement(root, "variables")
     xml_animations = ET.SubElement(root, "animations")
@@ -125,21 +133,116 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     for obj in objects:
         xml_objects.append(obj.as_object())
 
-    return ET.tostring(root, pretty_print=True, encoding="unicode")
+    ret = ET.tostring(root, pretty_print=True, encoding="unicode")
+    logging.getLogger().info(f"Serialized {len(objects)} objects")
+    return ret
+
+
+def import_hierarchy(
+    behavior: HavokBehavior,
+    xml: str,
+    callback: Callable[[MergeHierarchy], None] = None,
+    *,
+    interactive: bool = True,
+):
+    try:
+        xmldoc = ET.fromstring(xml)
+    except Exception as e:
+        raise ValueError(f"Failed to parse hierarchy: {e}")
+
+    root = xmldoc.find("objects").getchildren()[0]
+    root_id = root.get("id")
+
+    try:
+        references = literal_eval(xmldoc.get("references"))
+    except Exception as e:
+        raise ValueError(f"Could not parse references attribute: {e}")
+
+    if not references:
+        raise ValueError(
+            "Could not determine import target - try manually cloning the hierarchy"
+        )
+
+    logger = logging.getLogger()
+
+    def resolve_target(target_id: str, target_path: str) -> HkbPointer:
+        target_obj = behavior.objects.get(target_id)
+        if not target_obj:
+            raise ValueError(f"Hierarchy target {target_id} not found")
+
+        if target_path.endswith("/:-1"):
+            target_array: HkbArray[HkbPointer] = target_obj.get_field(target_path[:-4])
+            if not target_array.is_pointer_array:
+                raise ValueError(f"Invalid target path {target_obj}/{target_path}")
+
+            for ptr in target_array:
+                if ptr.get_value() == root_id:
+                    logger.info(
+                        f"Hierarchy already present at {target_obj}/{target_path}"
+                    )
+                    return
+
+            target_ptr = target_array.append(None)
+            undo_manager.on_update_array_item(target_array, -1, None, target_ptr)
+
+            return target_ptr
+        else:
+            target_ptr = target_obj.get_field(target_path, None)
+            if not target_ptr or not isinstance(target_ptr, HkbPointer):
+                raise ValueError(
+                    f"Failed to resolve target path {target_obj}/{target_path}"
+                )
+
+            return target_ptr
+
+    def update_target_pointers(hierarchy: MergeHierarchy):
+        hierarchy_root = hierarchy.objects[root_id]
+        if not hierarchy_root.result or hierarchy_root.action != "<new>":
+            return
+
+        new_root_id = hierarchy_root.result.object_id
+
+        for ptr in target_pointers:
+            try:
+                ptr.set_value(new_root_id)
+            except ValueError as e:
+                logger.warning(f"Pointer update failed: {e}")
+
+        if callback:
+            callback(hierarchy)
+
+    with undo_manager.combine():
+        target_pointers = [resolve_target(oid, path) for oid, path in references]
+        target_pointers = [p for p in target_pointers if p is not None]
+
+        if not target_pointers:
+            logger.warning("Reference analysis did not result in any targets")
+            return
+
+        paste_hierarchy(
+            behavior,
+            target_pointers[0],
+            xmldoc,
+            update_target_pointers,
+            interactive=interactive,
+        )
 
 
 def paste_hierarchy(
     behavior: HavokBehavior,
     target_pointer: HkbPointer,
-    xml: str,
+    xml: str | ET._Element,
     callback: Callable[[MergeHierarchy], None] = None,
     *,
     interactive: bool = True,
 ) -> MergeHierarchy:
-    try:
-        xmldoc = ET.fromstring(xml)
-    except Exception as e:
-        raise ValueError(f"Failed to parse hierarchy: {e}")
+    if isinstance(xml, str):
+        try:
+            xmldoc = ET.fromstring(xml)
+        except Exception as e:
+            raise ValueError(f"Failed to parse hierarchy: {e}")
+    else:
+        xmldoc = xml
 
     if xmldoc.tag != "behavior_hierarchy":
         raise ValueError("Not a valid behavior hierarchy")
@@ -165,7 +268,7 @@ def paste_hierarchy(
 
     loading = common_loading_indicator("Analyzing hierarchy")
     try:
-        hierarchy = find_conflicts(behavior, xmldoc)
+        hierarchy = find_conflicts(behavior, xmldoc, target_pointer)
     finally:
         dpg.delete_item(loading)
 
@@ -197,9 +300,16 @@ def paste_hierarchy(
             add_objects()
 
 
-def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
+def find_conflicts(behavior: HavokBehavior, xml: ET.Element, target_ptr: HkbPointer) -> MergeHierarchy:
     hierarchy = MergeHierarchy()
     sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
+    
+    target_record = behavior.find_object_for(target_ptr)
+    if target_record.type_id == sm_type:
+        target_sm = target_record
+    else:
+        target_sm = next(behavior.find_hierarchy_parent_for(target_record, sm_type))
+
     logger = logging.getLogger()
     mismatching_types = set()
 
@@ -223,7 +333,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
     for var in xml.findall(".//variable"):
         idx = var.get("idx")
         name = var.get("name")
-        
+
         if name:
             vtype = VariableType[var.get("vtype")]
             vmin = var.get("min")
@@ -256,7 +366,9 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         if name:
             match_idx = behavior.find_animation(name, -1)
             action = "<new>" if match_idx < 0 else "<reuse>"
-            hierarchy.animations[idx] = Resolution((idx, name), action, (match_idx, name))
+            hierarchy.animations[idx] = Resolution(
+                (idx, name), action, (match_idx, name)
+            )
         else:
             hierarchy.animations[idx] = Resolution((idx, name), "<skip>", (-1, None))
 
@@ -331,7 +443,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         if (
             existing_obj
             and existing_obj.type_name == obj.type_name
-            and len(list(behavior.find_referees(obj.object_id)))
+            and len(list(behavior.find_references_to(obj.object_id)))
         ):
             hierarchy.objects[obj.object_id] = Resolution(
                 obj, "<reuse>", behavior.objects[obj.object_id]
@@ -350,12 +462,9 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
                 continue
 
             obj_state_id = obj["stateId"].get_value()
-            statemachine = next(
-                behavior.find_hierarchy_parent_for(obj.object_id, sm_type)
-            )
             state_ptr: HkbPointer
 
-            for state_ptr in statemachine["states"]:
+            for state_ptr in target_sm["states"]:
                 state = state_ptr.get_target()
 
                 if not state:
@@ -640,303 +749,307 @@ def open_merge_hierarchy_dialog(
     # Window content
     with dpg.window(
         width=1100 if graph_data else 600,
-        height=670 if graph_data else 570,
+        height=670,
         label="Merge Hierarchy",
         modal=False,
-        on_close=lambda: dpg.delete_item(dialog),
+        on_close=close,
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
-        with dpg.group(horizontal=True):
-            if graph_data:
-                from hkb_editor.gui.graph_widget import GraphWidget
+        with dpg.child_window(border=False, height=520):
+            with dpg.group(horizontal=True):
+                if graph_data:
+                    from hkb_editor.gui.graph_widget import GraphWidget
 
-                graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
-                highlighted_rows: dict[str, list[int]] = {}
-                highlight_color = list(style.yellow)
+                    graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
+                    highlighted_rows: dict[str, list[int]] = {}
+                    highlight_color = list(style.yellow)
 
-                if len(highlight_color) < 3:
-                    highlight_color.append(100)
-                else:
-                    highlight_color[3] = 100
+                    if len(highlight_color) < 3:
+                        highlight_color.append(100)
+                    else:
+                        highlight_color[3] = 100
 
-                def get_node_frontpage(node):
-                    obj: HkbRecord = hierarchy.objects[node.id].original
-
-                    try:
-                        return [
-                            (obj["name"].get_value(), style.yellow),
-                            (node.id, style.blue),
-                            (obj.type_name, style.white),
-                        ]
-                    except AttributeError:
-                        return [
-                            (node.id, style.blue),
-                            (obj.type_name, style.white),
-                        ]
-
-                def highlight_row(table_type: str, key: str, row_map: dict[str, int]):
-                    table = f"{tag}_{table_type}_table"
-                    row = f"{tag}_{table_type}_row_{key}"
-                    row_idx = row_map[row]
-
-                    dpg.highlight_table_row(table, row_idx, highlight_color)
-                    highlighted_rows.setdefault(table, []).append(row_idx)
-
-                def on_node_selected(node):
-                    for table, rows in highlighted_rows.items():
-                        for row in rows:
-                            dpg.unhighlight_table_row(table, row)
-                        rows.clear()
-
-                    if node:
+                    def get_node_frontpage(node):
                         obj: HkbRecord = hierarchy.objects[node.id].original
 
-                        # Highlight events, variables and animations this object references
-                        if obj.type_name in event_attributes:
-                            for path in event_attributes[obj.type_name]:
-                                for evt in obj.get_fields(path, resolve=True).values():
-                                    highlight_row("event", evt, event_rows)
+                        try:
+                            return [
+                                (obj["name"].get_value(), style.yellow),
+                                (node.id, style.blue),
+                                (obj.type_name, style.white),
+                            ]
+                        except AttributeError:
+                            return [
+                                (node.id, style.blue),
+                                (obj.type_name, style.white),
+                            ]
 
-                        if obj.type_name in variable_attributes:
-                            for path in variable_attributes[obj.type_name]:
-                                for var in obj.get_fields(path, resolve=True).values():
-                                    highlight_row("variable", var, variable_rows)
+                    def highlight_row(table_type: str, key: str, row_map: dict[str, int]):
+                        table = f"{tag}_{table_type}_table"
+                        row = f"{tag}_{table_type}_row_{key}"
+                        row_idx = row_map[row]
 
-                        if obj.type_name in animation_attributes:
-                            for path in animation_attributes[obj.type_name]:
-                                for anim in obj.get_fields(path, resolve=True).values():
-                                    highlight_row("animation", anim, animation_rows)
+                        dpg.highlight_table_row(table, row_idx, highlight_color)
+                        highlighted_rows.setdefault(table, []).append(row_idx)
 
-                        for resolution in hierarchy.type_map.values():
-                            if obj.type_id == resolution.result[0]:
-                                # Old type ID is unique, new one may not be
-                                old_type_id = resolution.original[0]
-                                highlight_row("type", old_type_id, type_rows)
-                                break
+                    def on_node_selected(node):
+                        for table, rows in highlighted_rows.items():
+                            for row in rows:
+                                dpg.unhighlight_table_row(table, row)
+                            rows.clear()
 
-                        highlight_row("object", obj.object_id, object_rows)
+                        if node:
+                            obj: HkbRecord = hierarchy.objects[node.id].original
 
-                with dpg.child_window(
-                    width=500,
-                    height=500,
-                    resizable_x=True,
-                    no_scrollbar=True,
-                    no_scroll_with_mouse=True,
-                    horizontal_scrollbar=False,
-                ):
-                    graph_preview = GraphWidget(
-                        graph,
-                        on_node_selected=on_node_selected,
-                        get_node_frontpage=get_node_frontpage,
-                        hover_enabled=True,
+                            # Highlight events, variables and animations this object references
+                            if obj.type_name in event_attributes:
+                                for path in event_attributes[obj.type_name]:
+                                    for evt in obj.get_fields(path, resolve=True).values():
+                                        if evt >= 0:
+                                            highlight_row("event", evt, event_rows)
+
+                            if obj.type_name in variable_attributes:
+                                for path in variable_attributes[obj.type_name]:
+                                    for var in obj.get_fields(path, resolve=True).values():
+                                        if var >= 0:
+                                            highlight_row("variable", var, variable_rows)
+
+                            if obj.type_name in animation_attributes:
+                                for path in animation_attributes[obj.type_name]:
+                                    for anim in obj.get_fields(path, resolve=True).values():
+                                        if anim >= 0:
+                                            highlight_row("animation", anim, animation_rows)
+
+                            for resolution in hierarchy.type_map.values():
+                                if obj.type_id == resolution.result[0]:
+                                    # Old type ID is unique, new one may not be
+                                    old_type_id = resolution.original[0]
+                                    highlight_row("type", old_type_id, type_rows)
+                                    break
+
+                            highlight_row("object", obj.object_id, object_rows)
+
+                    with dpg.child_window(
                         width=500,
                         height=500,
-                        tag=f"{tag}_graph_preview",
-                    )
-
-                    # Reveal everything when first showing
-                    graph_preview.reveal_all_nodes()
-                    dpg.split_frame()  # wait for dimensions to be known
-                    graph_preview.zoom_show_all()
-
-            # Events
-            with dpg.group():
-                with dpg.tree_node(label="Events", default_open=True):
-                    with dpg.table(
-                        header_row=False,
-                        policy=dpg.mvTable_SizingFixedFit,
-                        borders_innerH=True,
-                        tag=f"{tag}_event_table",
+                        resizable_x=True,
+                        no_scrollbar=True,
+                        no_scroll_with_mouse=True,
+                        horizontal_scrollbar=False,
                     ):
-                        dpg.add_table_column(label="idx0", width_fixed=True)
-                        dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="to", width_fixed=True)
-                        dpg.add_table_column(label="idx1", width_fixed=True)
-                        dpg.add_table_column(label="name1", width_stretch=True)
-                        dpg.add_table_column(label="action", init_width_or_weight=100)
+                        graph_preview = GraphWidget(
+                            graph,
+                            on_node_selected=on_node_selected,
+                            get_node_frontpage=get_node_frontpage,
+                            hover_enabled=True,
+                            width=500,
+                            height=500,
+                            tag=f"{tag}_graph_preview",
+                        )
 
-                        for idx, (key, resolution) in enumerate(
-                            hierarchy.events.items()
+                        # Reveal everything when first showing
+                        graph_preview.reveal_all_nodes()
+                        dpg.split_frame()  # wait for dimensions to be known
+                        graph_preview.zoom_show_all()
+
+                # Events
+                with dpg.group():
+                    with dpg.tree_node(label="Events", default_open=True):
+                        with dpg.table(
+                            header_row=False,
+                            policy=dpg.mvTable_SizingFixedFit,
+                            borders_innerH=True,
+                            tag=f"{tag}_event_table",
                         ):
-                            row_tag = f"{tag}_event_row_{key}"
-                            with dpg.table_row(tag=row_tag):
-                                dpg.add_text(str(resolution.original[0]))
-                                dpg.add_text(resolution.original[1])
-                                dpg.add_text("->")
-                                dpg.add_text(str(resolution.result[0]))
-                                dpg.add_text(resolution.result[1])
+                            dpg.add_table_column(label="idx0", width_fixed=True)
+                            dpg.add_table_column(label="name0", width_stretch=True)
+                            dpg.add_table_column(label="to", width_fixed=True)
+                            dpg.add_table_column(label="idx1", width_fixed=True)
+                            dpg.add_table_column(label="name1", width_stretch=True)
+                            dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                                actions = ["<new>", "<reuse>", "<keep>"]
-                                if resolution.result[0] < 0:
-                                    # Can't reuse if there's no match
-                                    actions.remove("<reuse>")
+                            for idx, (key, resolution) in enumerate(
+                                hierarchy.events.items()
+                            ):
+                                row_tag = f"{tag}_event_row_{key}"
+                                with dpg.table_row(tag=row_tag):
+                                    dpg.add_text(str(resolution.original[0]))
+                                    dpg.add_text(resolution.original[1])
+                                    dpg.add_text("->")
+                                    dpg.add_text(str(resolution.result[0]))
+                                    dpg.add_text(resolution.result[1])
 
-                                dpg.add_combo(
-                                    actions,
-                                    default_value=resolution.action,
-                                    callback=update_action,
-                                    user_data=resolution,
-                                )
+                                    actions = ["<new>", "<reuse>", "<keep>"]
+                                    if resolution.result[0] < 0:
+                                        # Can't reuse if there's no match
+                                        actions.remove("<reuse>")
 
-                            event_rows[row_tag] = idx
+                                    dpg.add_combo(
+                                        actions,
+                                        default_value=resolution.action,
+                                        callback=update_action,
+                                        user_data=resolution,
+                                    )
 
-                dpg.add_spacer(height=10)
+                                event_rows[row_tag] = idx
 
-                # Variables
-                with dpg.tree_node(label="Variables", default_open=True):
-                    with dpg.table(
-                        header_row=False,
-                        policy=dpg.mvTable_SizingFixedFit,
-                        borders_innerH=True,
-                        tag=f"{tag}_variable_table",
-                    ):
-                        dpg.add_table_column(label="idx0", width_fixed=True)
-                        dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="to", width_fixed=True)
-                        dpg.add_table_column(label="idx1", width_fixed=True)
-                        dpg.add_table_column(label="name1", width_stretch=True)
-                        dpg.add_table_column(label="action", init_width_or_weight=100)
+                    dpg.add_spacer(height=10)
 
-                        for idx, (key, resolution) in enumerate(
-                            hierarchy.variables.items()
+                    # Variables
+                    with dpg.tree_node(label="Variables", default_open=True):
+                        with dpg.table(
+                            header_row=False,
+                            policy=dpg.mvTable_SizingFixedFit,
+                            borders_innerH=True,
+                            tag=f"{tag}_variable_table",
                         ):
-                            row_tag = f"{tag}_variable_row_{key}"
-                            with dpg.table_row(tag=row_tag):
-                                dpg.add_text(str(resolution.original[0]))
-                                dpg.add_text(resolution.original[1].name)
-                                dpg.add_text("->")
-                                dpg.add_text(str(resolution.result[0]))
-                                dpg.add_text(resolution.result[1].name)
+                            dpg.add_table_column(label="idx0", width_fixed=True)
+                            dpg.add_table_column(label="name0", width_stretch=True)
+                            dpg.add_table_column(label="to", width_fixed=True)
+                            dpg.add_table_column(label="idx1", width_fixed=True)
+                            dpg.add_table_column(label="name1", width_stretch=True)
+                            dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                                actions = ["<new>", "<reuse>", "<keep>"]
-                                if resolution.result[0] < 0:
-                                    # Can't reuse if there's no match
-                                    actions.remove("<reuse>")
+                            for idx, (key, resolution) in enumerate(
+                                hierarchy.variables.items()
+                            ):
+                                row_tag = f"{tag}_variable_row_{key}"
+                                with dpg.table_row(tag=row_tag):
+                                    dpg.add_text(str(resolution.original[0]))
+                                    dpg.add_text(resolution.original[1].name)
+                                    dpg.add_text("->")
+                                    dpg.add_text(str(resolution.result[0]))
+                                    dpg.add_text(resolution.result[1].name)
 
-                                dpg.add_combo(
-                                    actions,
-                                    default_value=resolution.action,
-                                    callback=update_action,
-                                    user_data=resolution,
-                                )
+                                    actions = ["<new>", "<reuse>", "<keep>"]
+                                    if resolution.result[0] < 0:
+                                        # Can't reuse if there's no match
+                                        actions.remove("<reuse>")
 
-                            variable_rows[row_tag] = idx
+                                    dpg.add_combo(
+                                        actions,
+                                        default_value=resolution.action,
+                                        callback=update_action,
+                                        user_data=resolution,
+                                    )
 
-                dpg.add_spacer(height=10)
+                                variable_rows[row_tag] = idx
 
-                # Animations
-                with dpg.tree_node(label="Animations", default_open=True):
-                    with dpg.table(
-                        header_row=False,
-                        policy=dpg.mvTable_SizingFixedFit,
-                        borders_innerH=True,
-                        tag=f"{tag}_animation_table",
-                    ):
-                        dpg.add_table_column(label="idx0", width_fixed=True)
-                        dpg.add_table_column(label="name0", width_stretch=True)
-                        dpg.add_table_column(label="to", width_fixed=True)
-                        dpg.add_table_column(label="idx1", width_fixed=True)
-                        dpg.add_table_column(label="name1", width_stretch=True)
-                        dpg.add_table_column(label="action", init_width_or_weight=100)
+                    dpg.add_spacer(height=10)
 
-                        for idx, (key, resolution) in enumerate(
-                            hierarchy.animations.items()
+                    # Animations
+                    with dpg.tree_node(label="Animations", default_open=True):
+                        with dpg.table(
+                            header_row=False,
+                            policy=dpg.mvTable_SizingFixedFit,
+                            borders_innerH=True,
+                            tag=f"{tag}_animation_table",
                         ):
-                            row_tag = f"{tag}_animation_row_{key}"
-                            with dpg.table_row(tag=row_tag):
-                                dpg.add_text(str(resolution.original[0]))
-                                dpg.add_text(resolution.original[1])
-                                dpg.add_text("->")
-                                dpg.add_text(str(resolution.result[0]))
-                                dpg.add_text(resolution.result[1])
+                            dpg.add_table_column(label="idx0", width_fixed=True)
+                            dpg.add_table_column(label="name0", width_stretch=True)
+                            dpg.add_table_column(label="to", width_fixed=True)
+                            dpg.add_table_column(label="idx1", width_fixed=True)
+                            dpg.add_table_column(label="name1", width_stretch=True)
+                            dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                                actions = ["<new>", "<reuse>", "<keep>"]
-                                if resolution.result[0] < 0:
-                                    # Can't reuse if there's no match
-                                    actions.remove("<reuse>")
+                            for idx, (key, resolution) in enumerate(
+                                hierarchy.animations.items()
+                            ):
+                                row_tag = f"{tag}_animation_row_{key}"
+                                with dpg.table_row(tag=row_tag):
+                                    dpg.add_text(str(resolution.original[0]))
+                                    dpg.add_text(resolution.original[1])
+                                    dpg.add_text("->")
+                                    dpg.add_text(str(resolution.result[0]))
+                                    dpg.add_text(resolution.result[1])
 
-                                dpg.add_combo(
-                                    actions,
-                                    default_value=resolution.action,
-                                    callback=update_action,
-                                    user_data=resolution,
-                                )
+                                    actions = ["<new>", "<reuse>", "<keep>"]
+                                    if resolution.result[0] < 0:
+                                        # Can't reuse if there's no match
+                                        actions.remove("<reuse>")
 
-                            animation_rows[row_tag] = idx
+                                    dpg.add_combo(
+                                        actions,
+                                        default_value=resolution.action,
+                                        callback=update_action,
+                                        user_data=resolution,
+                                    )
 
-                dpg.add_spacer(height=10)
+                                animation_rows[row_tag] = idx
 
-                # Types
-                with dpg.tree_node(label="Types", default_open=True):
-                    with dpg.table(
-                        header_row=False,
-                        policy=dpg.mvTable_SizingFixedFit,
-                        borders_innerH=True,
-                        tag=f"{tag}_type_table",
-                    ):
-                        dpg.add_table_column(label="id0", width_fixed=True)
-                        dpg.add_table_column(label="to", width_fixed=True)
-                        dpg.add_table_column(label="id1", width_fixed=True)
-                        dpg.add_table_column(label="name", width_stretch=True)
-                        dpg.add_table_column(label="action", init_width_or_weight=100)
+                    dpg.add_spacer(height=10)
 
-                        for idx, (key, resolution) in enumerate(
-                            hierarchy.type_map.items()
+                    # Types
+                    with dpg.tree_node(label="Types", default_open=True):
+                        with dpg.table(
+                            header_row=False,
+                            policy=dpg.mvTable_SizingFixedFit,
+                            borders_innerH=True,
+                            tag=f"{tag}_type_table",
                         ):
-                            row_tag = f"{tag}_type_row_{key}"
+                            dpg.add_table_column(label="id0", width_fixed=True)
+                            dpg.add_table_column(label="to", width_fixed=True)
+                            dpg.add_table_column(label="id1", width_fixed=True)
+                            dpg.add_table_column(label="name", width_stretch=True)
+                            dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                            with dpg.table_row(tag=row_tag):
-                                dpg.add_text(str(resolution.original[0]))
-                                dpg.add_text("->")
-                                dpg.add_text(resolution.result[0])
-                                dpg.add_text(f"({resolution.result[1]})")
-                                dpg.add_combo(
-                                    ["<remap>"],
-                                    default_value=resolution.action,
-                                    callback=update_action,
-                                    user_data=resolution,
-                                )
+                            for idx, (key, resolution) in enumerate(
+                                hierarchy.type_map.items()
+                            ):
+                                row_tag = f"{tag}_type_row_{key}"
 
-                            type_rows[row_tag] = idx
+                                with dpg.table_row(tag=row_tag):
+                                    dpg.add_text(str(resolution.original[0]))
+                                    dpg.add_text("->")
+                                    dpg.add_text(resolution.result[0])
+                                    dpg.add_text(f"({resolution.result[1]})")
+                                    dpg.add_combo(
+                                        ["<remap>"],
+                                        default_value=resolution.action,
+                                        callback=update_action,
+                                        user_data=resolution,
+                                    )
 
-                dpg.add_spacer(height=10)
+                                type_rows[row_tag] = idx
 
-                # Objects
-                with dpg.tree_node(label="Objects", default_open=True):
-                    with dpg.table(
-                        header_row=False,
-                        policy=dpg.mvTable_SizingFixedFit,
-                        borders_innerH=True,
-                        tag=f"{tag}_object_table",
-                    ):
-                        dpg.add_table_column(label="oid", width_fixed=True)
-                        dpg.add_table_column(label="name", width_stretch=True)
-                        dpg.add_table_column(label="action", init_width_or_weight=100)
+                    dpg.add_spacer(height=10)
 
-                        for idx, (oid, resolution) in enumerate(
-                            hierarchy.objects.items()
+                    # Objects
+                    with dpg.tree_node(label="Objects", default_open=True):
+                        with dpg.table(
+                            header_row=False,
+                            policy=dpg.mvTable_SizingFixedFit,
+                            borders_innerH=True,
+                            tag=f"{tag}_object_table",
                         ):
-                            row_tag = f"{tag}_object_row_{oid}"
-                            with dpg.table_row(tag=row_tag):
-                                name = resolution.original.get_field("name", "")
+                            dpg.add_table_column(label="oid", width_fixed=True)
+                            dpg.add_table_column(label="name", width_stretch=True)
+                            dpg.add_table_column(label="action", init_width_or_weight=100)
 
-                                dpg.add_text(oid)
-                                dpg.add_text(name)
+                            for idx, (oid, resolution) in enumerate(
+                                hierarchy.objects.items()
+                            ):
+                                row_tag = f"{tag}_object_row_{oid}"
+                                with dpg.table_row(tag=row_tag):
+                                    name = resolution.original.get_field("name", "")
 
-                                actions = ["<new>", "<reuse>", "<skip>"]
-                                if oid not in behavior.objects:
-                                    # Can't reuse if there is no match
-                                    actions.remove("<reuse>")
+                                    dpg.add_text(oid)
+                                    dpg.add_text(name)
 
-                                dpg.add_combo(
-                                    actions,
-                                    default_value=resolution.action,
-                                    callback=update_action,
-                                    user_data=resolution,
-                                )
+                                    actions = ["<new>", "<reuse>", "<skip>"]
+                                    if oid not in behavior.objects:
+                                        # Can't reuse if there is no match
+                                        actions.remove("<reuse>")
 
-                            object_rows[row_tag] = idx
+                                    dpg.add_combo(
+                                        actions,
+                                        default_value=resolution.action,
+                                        callback=update_action,
+                                        user_data=resolution,
+                                    )
+
+                                object_rows[row_tag] = idx
 
         dpg.add_separator()
 
@@ -949,7 +1062,7 @@ Note that new events, variables and animations must still have unique names - yo
 these afterwards.
 """
         add_paragraphs(instructions, 150, color=style.light_blue)
-        
+
         dpg.add_separator()
         dpg.add_spacer(height=5)
 

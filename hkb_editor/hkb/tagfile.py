@@ -122,9 +122,9 @@ class Tagfile:
 
         return None
 
-    def find_referees(
+    def find_references_to(
         self, object_id: "str | HkbRecord"
-    ) -> Generator["HkbPointer", None, None]:
+    ) -> Generator["tuple[HkbRecord, str, HkbPointer]", None, None]:
         from .hkb_types import HkbRecord, HkbPointer
 
         if isinstance(object_id, HkbRecord):
@@ -139,10 +139,10 @@ class Tagfile:
             record = self.objects[xmlrecord.get("id")]
             ptr: HkbPointer
 
-            for _, ptr in record.find_fields_by_type(HkbPointer):
-                if ptr.get_value == object_id:
-                    yield ptr
-
+            for path, ptr in record.find_fields_by_type(HkbPointer):
+                if ptr.get_value() == object_id:
+                    yield (record, path, ptr)
+    
     def find_first_by_type_name(
         self, type_name: str, default: Any = None
     ) -> "HkbRecord":
