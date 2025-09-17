@@ -468,26 +468,36 @@ class GraphEditor:
         rainbow.hue_step = -0.03
 
         with dpg.window(
-            width=300,
-            height=150,
+            width=410,
+            height=165,
             label="About",
             no_saved_settings=True,
             on_close=lambda: dpg.delete_item(dialog),
             tag=tag,
         ) as dialog:
             from hkb_editor import __version__
-            dpg.add_text(f"HkbEditor v{__version__}", color=rainbow())
-            
-            dpg.add_separator()
-            
-            dpg.add_text("Written by Nikolas Dahn", color=rainbow())
-            dpg.add_button(label="https://github.com/ndahn/HkbEditor", small=True)
-            dpg.bind_item_theme(dpg.last_item(), style.link_button_theme)
-            
-            dpg.add_separator()
 
-            dpg.add_text("Bugs, questions, feature request?", color=rainbow())
-            dpg.add_text("Find me on ?ServerName? @Managarm!", color=rainbow())
+            with dpg.group(horizontal=True):
+                if not dpg.does_item_exist("hkbeditor_icon_large"):
+                    w, h, _, data = dpg.load_image("icon_large.png")
+                    with dpg.texture_registry():
+                        dpg.add_static_texture(w, h, data, tag="hkbeditor_icon_large")
+
+                dpg.add_image("hkbeditor_icon_large")
+
+                with dpg.group():
+                    dpg.add_text(f"HkbEditor v{__version__}", color=rainbow())
+                    
+                    dpg.add_separator()
+                    
+                    dpg.add_text("Written by Nikolas Dahn", color=rainbow())
+                    dpg.add_button(label="https://github.com/ndahn/HkbEditor", small=True)
+                    dpg.bind_item_theme(dpg.last_item(), style.link_button_theme)
+                    
+                    dpg.add_separator()
+
+                    dpg.add_text("Bugs, questions, feature request?", color=rainbow())
+                    dpg.add_text("Find me on ?ServerName? @Managarm!", color=rainbow())
 
         dpg.split_frame()
         center_window(dialog)

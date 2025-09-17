@@ -44,7 +44,7 @@ def main():
             _logger.info("Copied default layout to user layout")
 
     dpg.configure_app(docking=True, docking_space=True, init_file=user_layout)
-    dpg.create_viewport(title="HkbEditor")
+    dpg.create_viewport(title="HkbEditor", small_icon="icon_small.ico", large_icon="icon_large.png")
 
     setup_styles()
     with dpg.window() as main_window:
