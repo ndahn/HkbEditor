@@ -196,7 +196,8 @@ class CommonActionsMixin:
         """Get the animation with the specified name, or create a new one if it doesn't exist yet.
 
         Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
-        # TODO mention animations.txt
+        
+        TODO mention animations.txt
 
         Parameters
         ----------

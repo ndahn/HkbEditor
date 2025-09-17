@@ -62,22 +62,22 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
             paths = event_attributes[obj.type_name]
             for evt in obj.get_fields(paths, resolve=True).values():
                 if evt >= 0:
-                    event_name = behavior.get_event(evt)
-                    events[evt] = event_name
+                    event_name = behavior.get_event(evt, None)
+                    events[evt] = event_name or ""
 
         if obj.type_name in variable_attributes:
             paths = variable_attributes[obj.type_name]
             for var in obj.get_fields(paths, resolve=True).values():
                 if var >= 0:
-                    variable = behavior.get_variable(var)
-                    variables[var] = variable
+                    variable = behavior.get_variable(var, None)
+                    variables[var] = variable or ""
 
         if obj.type_name in animation_attributes:
             paths = animation_attributes[obj.type_name]
             for anim in obj.get_fields(paths, resolve=True).values():
                 if anim >= 0:
-                    animation_name = behavior.get_animation(anim)
-                    animations[anim] = animation_name
+                    animation_name = behavior.get_animation(anim, None)
+                    animations[anim] = animation_name or ""
 
         objects.append(obj)
         type_map[obj.type_id] = obj.type_name
@@ -102,16 +102,19 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
 
     for idx, var in variables.items():
         # Need to include ALL variable attributes so we can reconsruct it if needed
-        ET.SubElement(
-            xml_variables,
-            "variable",
-            idx=str(idx),
-            name=var.name,
-            vtype=var.vtype.name,
-            min=str(var.vmin),
-            max=str(var.vmax),
-            default=str(var.default),
-        )
+        if var:
+            ET.SubElement(
+                xml_variables,
+                "variable",
+                idx=str(idx),
+                name=var.name,
+                vtype=var.vtype.name,
+                min=str(var.vmin),
+                max=str(var.vmax),
+                default=str(var.default),
+            )
+        else:
+            ET.SubElement(xml_variables, "variable", idx=str(idx), name="")
 
     for idx, anim in animations.items():
         ET.SubElement(xml_animations, "animation", idx=str(idx), name=anim)
@@ -203,47 +206,62 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
     # For events, variables and animations we check if there is already one with a matching name.
     # If there is no match it probably has to be created. If it exists but the index is different
     # we still treat it as a conflict, albeit one that has a likely solution.
+
+    # Events
     for evt in xml.findall(".//event"):
         idx = evt.get("idx")
         name = evt.get("name")
 
-        match_idx = behavior.find_event(name, -1)
-        action = "<new>" if match_idx < 0 else "<reuse>"
-        hierarchy.events[idx] = Resolution((idx, name), action, (match_idx, name))
-
-    for evt in xml.findall(".//variable"):
-        idx = evt.get("idx")
-        name = evt.get("name")
-        vtype = VariableType[evt.get("vtype")]
-        vmin = evt.get("min")
-        vmax = evt.get("max")
-        default = evt.get("default")
-
-        try:
-            default = literal_eval(default)
-        except ValueError:
-            # Assume it's a string
-            pass
-
-        var = HkbVariable(name, vtype, vmin, vmax, default)
-        match_idx = behavior.find_variable(name, -1)
-
-        if match_idx < 0:
-            hierarchy.variables[idx] = Resolution((idx, var), "<new>", (-1, var))
+        if name:
+            match_idx = behavior.find_event(name, -1)
+            action = "<new>" if match_idx < 0 else "<reuse>"
+            hierarchy.events[idx] = Resolution((idx, name), action, (match_idx, name))
         else:
-            hierarchy.variables[idx] = Resolution(
-                (idx, var), "<reuse>", (match_idx, var)
-            )
+            hierarchy.events[idx] = Resolution((idx, name), "<skip>", (-1, None))
 
-    for evt in xml.findall(".//animation"):
-        idx = evt.get("idx")
-        name = evt.get("name")
+    # Variables
+    for var in xml.findall(".//variable"):
+        idx = var.get("idx")
+        name = var.get("name")
+        
+        if name:
+            vtype = VariableType[var.get("vtype")]
+            vmin = var.get("min")
+            vmax = var.get("max")
+            default = var.get("default")
 
-        match_idx = behavior.find_animation(name, -1)
-        action = "<new>" if match_idx < 0 else "<reuse>"
-        hierarchy.animations[idx] = Resolution((idx, name), action, (match_idx, name))
+            try:
+                default = literal_eval(default)
+            except ValueError:
+                # Assume it's a string
+                pass
 
-    # Even when the type IDs disagree, every type should have a corresponding match by name
+            var = HkbVariable(name, vtype, vmin, vmax, default)
+            match_idx = behavior.find_variable(name, -1)
+
+            if match_idx < 0:
+                hierarchy.variables[idx] = Resolution((idx, var), "<new>", (-1, var))
+            else:
+                hierarchy.variables[idx] = Resolution(
+                    (idx, var), "<reuse>", (match_idx, var)
+                )
+        else:
+            hierarchy.variables[idx] = Resolution((idx, var), "<skip>", (-1, None))
+
+    # Animations
+    for anim in xml.findall(".//animation"):
+        idx = anim.get("idx")
+        name = anim.get("name")
+
+        if name:
+            match_idx = behavior.find_animation(name, -1)
+            action = "<new>" if match_idx < 0 else "<reuse>"
+            hierarchy.animations[idx] = Resolution((idx, name), action, (match_idx, name))
+        else:
+            hierarchy.animations[idx] = Resolution((idx, name), "<skip>", (-1, None))
+
+    # Types
+    # Every type should have a corresponding match by name, even when the type IDs disagree
     for type_info in xml.findall(".//type"):
         tid = type_info.get("id")
         name = type_info.get("name")
@@ -258,6 +276,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
 
         hierarchy.type_map[tid] = Resolution((tid, name), "<remap>", (new_id, name))
 
+    # Objects
     # Find objects with IDs that already exist
     for xmlobj in xml.find("objects").getchildren():
         # Remap the typeid. Should only be relevant when cloning between different games or
@@ -304,6 +323,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
 
                 mismatching_types.add(type_name)
 
+        # Pointers
         # Find pointers in the behavior referencing this object's ID. If more than one
         # other object is already referencing it, it is most likely a reused object like
         # e.g. DefaultTransition.
@@ -319,10 +339,7 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element) -> MergeHierarchy:
         else:
             hierarchy.objects[obj.object_id] = Resolution(obj, "<new>", obj)
 
-        # Type-specific conflicts
-
-        # hkbStateMachine::StateInfo
-        #   - stateId
+        # State IDs
         if obj.type_name == "hkbStateMachine::StateInfo":
             # Check if the hierarchy contains a statemachine which references the StateInfo.
             # StateInfo IDs can only be in conflict if they are pasted into a new statemachine.
@@ -404,6 +421,8 @@ def resolve_conflicts(
             resolution.result = (new_idx, name)
         elif resolution.action == "<keep>":
             resolution.result = resolution.original
+        elif resolution.action == "<skip>":
+            resolution.result = (-1, None)
         else:
             raise ValueError(
                 f"Invalid action {resolution.action} for event {idx} ({resolution.original})"
@@ -419,6 +438,8 @@ def resolve_conflicts(
             resolution.result = (new_idx, var)
         elif resolution.action == "<keep>":
             resolution.result = resolution.original
+        elif resolution.action == "<skip>":
+            resolution.result = (-1, None)
         else:
             raise ValueError(
                 f"Invalid action {resolution.action} for variable {idx} ({resolution.original})"
@@ -434,6 +455,8 @@ def resolve_conflicts(
             resolution.result = (new_idx, name)
         elif resolution.action == "<keep>":
             resolution.result = resolution.original
+        elif resolution.action == "<skip>":
+            resolution.result = (-1, None)
         else:
             raise ValueError(
                 f"Invalid action {resolution.action} for animation {idx} ({resolution.original[1]})"
@@ -492,11 +515,7 @@ def resolve_conflicts(
                     f"Object {object_id} references ID {target_id}, which is not part of the cloned hierarchy"
                 )
 
-    # Type-specific fixes
-
-    # hkbStateMachine::StateInfo
-    # - state IDs
-    #
+    # State IDs
     # In theory it's not possible to paste more than one StateInfo without its statemachine,
     # but this certainly won't hurt. At the very least we can assume that there will only be
     # one statemachine with conflicts.
@@ -517,6 +536,7 @@ def resolve_conflicts(
         state_id_map[old_state_id] = new_state_id
         state_id_offset += 1
 
+    # Attribute updates
     for object_id, resolution in hierarchy.objects.items():
         obj: HkbRecord = resolution.result
 

@@ -377,7 +377,10 @@ class AttributesWidget:
 
         def open_pointer_dialog():
             select_object(
-                self.tagfile, pointer.subtype_id, on_pointer_selected, include_derived=True
+                self.tagfile,
+                pointer.subtype_id,
+                on_pointer_selected,
+                include_derived=True,
             )
 
         widget = self._add_reference_attribute_text(
@@ -704,38 +707,35 @@ class AttributesWidget:
             if is_simple:
                 if bound_var_idx >= 0:
                     bound_var_name = self.tagfile.get_variable_name(bound_var_idx)
-                    dpg.add_text(
-                        f"bound: {bound_var_name}",
-                        color=style.pink,
-                    )
+                    dpg.add_text(f"bound: {bound_var_name}", color=style.pink)
+
                 elif isinstance(self.tagfile, HavokBehavior):
                     if is_event_attribute(self.record, path):
                         idx = attribute.get_value()
-                        name = self.tagfile.get_event(idx) if idx >= 0 else "<none>"
-                        dpg.add_text(
-                            f"event: {name}",
-                            color=style.green,
+                        name = (
+                            self.tagfile.get_event(idx, "<invalid>")
+                            if idx >= 0
+                            else "<none>"
                         )
+                        dpg.add_text(f"event: {name}", color=style.green)
 
                     elif is_variable_attribute(self.record, path):
                         idx = attribute.get_value()
                         name = (
-                            self.tagfile.get_variable_name(idx)
+                            self.tagfile.get_variable_name(idx, "<invalid>")
                             if idx >= 0
                             else "<none>"
                         )
-                        dpg.add_text(
-                            f"variable: {name}",
-                            color=style.green,
-                        )
+                        dpg.add_text(f"variable: {name}", color=style.green)
 
                     elif is_animation_attribute(self.record, path):
                         idx = attribute.get_value()
-                        name = self.tagfile.get_animation(idx) if idx >= 0 else "<none>"
-                        dpg.add_text(
-                            f"animation: {name}",
-                            color=style.green,
+                        name = (
+                            self.tagfile.get_animation(idx, "<invalid>")
+                            if idx >= 0
+                            else "<none>"
                         )
+                        dpg.add_text(f"animation: {name}", color=style.green)
 
             # Copy & paste
             dpg.add_separator()

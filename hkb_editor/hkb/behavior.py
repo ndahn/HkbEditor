@@ -56,6 +56,26 @@ class HavokBehavior(Tagfile):
             "hkbVariableValueSet"
         )
 
+    def get_character_id(self) -> str:
+        """Returns the character ID of this behavior, e.g. c0000."""
+        # 1st try: hkbBehaviorGraph's name
+        beh_graph = self.find_first_by_type_name("hkbBehaviorGraph")
+        if beh_graph:
+            name: str = beh_graph["name"].get_value()
+            m = re.match(r"(c[0-9]{4}).hkb", name)
+            if m:
+                return m.group(1)
+
+        # 2nd try: component of full animation names
+        anim_name = self.get_animation(0, full_name=True)
+        m = re.match(r".*\\chr\\(c[0-9]{4})\\hkx", anim_name)
+        if m:
+            return m.group(1)
+
+        # TODO 3rd attempt: folder name
+
+        return None
+
     def create_event(self, event_name: str, idx: int = None) -> int:
         if idx is None or idx < 0:
             idx = len(self._events)
@@ -75,8 +95,16 @@ class HavokBehavior(Tagfile):
     def get_events(self) -> list[str]:
         return self._events.get_value()
 
-    def get_event(self, idx: int) -> str:
-        return self._events[idx]
+    def get_event(self, idx: int, default: Any = _undefined) -> str:
+        if idx < 0:
+            return None
+
+        try:
+            return self._events[idx]
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
 
     def find_event(self, event: str, default: Any = _undefined) -> int:
         try:
@@ -150,16 +178,29 @@ class HavokBehavior(Tagfile):
 
         return self._variables.get_value()
 
-    def get_variable_name(self, idx: int) -> str:
-        return self._variables[idx]
+    def get_variable_name(self, idx: int, default: Any = _undefined) -> str:
+        try:
+            return self._variables[idx]
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
 
-    def get_variable(self, idx: int) -> HkbVariable:
-        return HkbVariable(
-            self.get_variable_name(idx),
-            self.get_variable_type(idx),
-            *self.get_variable_bounds(idx),
-            self.get_variable_default(idx),
-        )
+    def get_variable(self, idx: int, default: Any = _undefined) -> HkbVariable:
+        if idx < 0:
+            return None
+
+        try:
+            return HkbVariable(
+                self.get_variable_name(idx),
+                self.get_variable_type(idx),
+                *self.get_variable_bounds(idx),
+                self.get_variable_default(idx),
+            )
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
 
     def find_variable(self, variable: str, default: Any = _undefined) -> int:
         try:
@@ -169,19 +210,34 @@ class HavokBehavior(Tagfile):
                 return default
             raise
 
-    def get_variable_type(self, idx: int) -> VariableType:
-        info: HkbRecord = self._variable_infos[idx]
-        type_idx = info.get_field("type", resolve=True)
-        return VariableType(type_idx)
+    def get_variable_type(self, idx: int, default: Any = _undefined) -> VariableType:
+        try:
+            info: HkbRecord = self._variable_infos[idx]
+            type_idx = info.get_field("type", resolve=True)
+            return VariableType(type_idx)
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
 
-    def get_variable_bounds(self, idx: int) -> tuple[int, int]:
-        bounds: HkbRecord = self._variable_bounds[idx]
-        lo = bounds.get_field("min/value", resolve=True)
-        hi = bounds.get_field("max/value", resolve=True)
-        return [lo, hi]
+    def get_variable_bounds(self, idx: int, default: Any = _undefined) -> tuple[int, int]:
+        try:
+            bounds: HkbRecord = self._variable_bounds[idx]
+            lo = bounds.get_field("min/value", resolve=True)
+            hi = bounds.get_field("max/value", resolve=True)
+            return [lo, hi]
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
 
-    def get_variable_default(self, idx: int) -> Any:
-        vtype = self.get_variable_type(idx)
+    def get_variable_default(self, idx: int, default: Any = _undefined) -> Any:
+        try:
+            vtype = self.get_variable_type(idx)
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
 
         # The words array will hold the byte values of all variables that can be represented with
         # at most 32 bit. Where this is not possible (Pointer, Vector3, Vector4, Quaternion), the
@@ -420,26 +476,6 @@ class HavokBehavior(Tagfile):
 
         return "\\".join(parts)
 
-    def get_character_id(self) -> str:
-        """Returns the character ID of this behavior, e.g. c0000."""
-        # 1st try: hkbBehaviorGraph's name
-        beh_graph = self.find_first_by_type_name("hkbBehaviorGraph")
-        if beh_graph:
-            name: str = beh_graph["name"].get_value()
-            m = re.match(r"(c[0-9]{4}).hkb", name)
-            if m:
-                return m.group(1)
-
-        # 2nd try: component of full animation names
-        anim_name = self.get_animation(0, True)
-        m = re.match(r".*\\chr\\(c[0-9]{4})\\hkx", anim_name)
-        if m:
-            return m.group(1)
-
-        # TODO 3rd attempt: folder name
-
-        return None
-
     def get_short_animation_name(self, full_anim_name: str) -> str:
         return full_anim_name.rsplit("\\", maxsplit=1)[-1].rsplit(".", maxsplit=1)[0]
 
@@ -461,8 +497,17 @@ class HavokBehavior(Tagfile):
 
         return [self.get_short_animation_name(a) for a in self._animations]
 
-    def get_animation(self, idx: int, full_name: bool = False) -> str:
-        anim: str = self._animations[idx]
+    def get_animation(self, idx: int, default: Any = _undefined, *, full_name: bool = False) -> str:
+        if idx < 0:
+            return None
+
+        try:
+            anim: str = self._animations[idx]
+        except IndexError:
+            if default != _undefined:
+                return default
+            raise
+
         if full_name:
             return anim
 
