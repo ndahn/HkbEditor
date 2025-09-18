@@ -3,6 +3,7 @@ import logging
 from dataclasses import dataclass, field
 import re
 from ast import literal_eval
+from copy import deepcopy
 from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
@@ -131,7 +132,8 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
         ET.SubElement(xml_types, "type", id=type_id, name=type_name)
 
     for obj in objects:
-        xml_objects.append(obj.as_object())
+        # Be careful not to remove the object elements from their original xml doc! 
+        xml_objects.append(deepcopy(obj.as_object()))
 
     ret = ET.tostring(root, pretty_print=True, encoding="unicode")
     logging.getLogger().info(f"Serialized {len(objects)} objects")
@@ -300,10 +302,12 @@ def paste_hierarchy(
             add_objects()
 
 
-def find_conflicts(behavior: HavokBehavior, xml: ET.Element, target_ptr: HkbPointer) -> MergeHierarchy:
+def find_conflicts(
+    behavior: HavokBehavior, xml: ET.Element, target_ptr: HkbPointer
+) -> MergeHierarchy:
     hierarchy = MergeHierarchy()
     sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
-    
+
     target_record = behavior.find_object_for(target_ptr)
     if target_record.type_id == sm_type:
         target_sm = target_record
@@ -443,11 +447,9 @@ def find_conflicts(behavior: HavokBehavior, xml: ET.Element, target_ptr: HkbPoin
         if (
             existing_obj
             and existing_obj.type_name == obj.type_name
-            and len(list(behavior.find_references_to(obj.object_id)))
+            and obj.type_name in ("hkbCustomTransition")
         ):
-            hierarchy.objects[obj.object_id] = Resolution(
-                obj, "<reuse>", behavior.objects[obj.object_id]
-            )
+            hierarchy.objects[obj.object_id] = Resolution(obj, "<reuse>", existing_obj)
         else:
             hierarchy.objects[obj.object_id] = Resolution(obj, "<new>", obj)
 
@@ -497,8 +499,6 @@ def resolve_conflicts(
         if object_id == list(hierarchy.objects.keys())[0]:
             return True
 
-        has_valid_path = False
-
         # Check parents: if all of them are skipped or reused,
         # this one should be skipped, too
         for other in hierarchy.objects.values():
@@ -510,13 +510,9 @@ def resolve_conflicts(
                 ptr: HkbPointer
                 for _, ptr in other.result.find_fields_by_type(HkbPointer):
                     if ptr.get_value() == object_id:
-                        has_valid_path = True
-                        break
+                        return True
 
-            if has_valid_path:
-                break
-
-        return has_valid_path
+        return False
 
     # Create missing events, variables and animations. If the value is not "<new>" we can
     # expect that a mapping to another value has been applied
@@ -584,8 +580,8 @@ def resolve_conflicts(
                 continue
 
             if object_id in behavior.objects:
-                new_id = behavior.new_id()
-                resolution.original.object_id = new_id
+                resolution.original.object_id = behavior.new_id()
+            
             resolution.result = resolution.original
         elif resolution.action == "<reuse>":
             resolution.result = behavior.objects[object_id]
@@ -633,7 +629,7 @@ def resolve_conflicts(
     for object_id, resolution in hierarchy.state_ids.items():
         obj_res = hierarchy.objects[object_id]
 
-        if obj_res.action == "<reuse>" or not obj_res.result:
+        if not obj_res.result or obj_res.action in ("<reuse>", "<skip>"):
             # Skip if the object is reused or not cloned
             continue
 
@@ -776,16 +772,18 @@ def open_merge_hierarchy_dialog(
                         try:
                             return [
                                 (obj["name"].get_value(), style.yellow),
-                                (node.id, style.blue),
                                 (obj.type_name, style.white),
+                                (node.id, style.blue),
                             ]
                         except AttributeError:
                             return [
-                                (node.id, style.blue),
                                 (obj.type_name, style.white),
+                                (node.id, style.blue),
                             ]
 
-                    def highlight_row(table_type: str, key: str, row_map: dict[str, int]):
+                    def highlight_row(
+                        table_type: str, key: str, row_map: dict[str, int]
+                    ):
                         table = f"{tag}_{table_type}_table"
                         row = f"{tag}_{table_type}_row_{key}"
                         row_idx = row_map[row]
@@ -805,21 +803,31 @@ def open_merge_hierarchy_dialog(
                             # Highlight events, variables and animations this object references
                             if obj.type_name in event_attributes:
                                 for path in event_attributes[obj.type_name]:
-                                    for evt in obj.get_fields(path, resolve=True).values():
+                                    for evt in obj.get_fields(
+                                        path, resolve=True
+                                    ).values():
                                         if evt >= 0:
                                             highlight_row("event", evt, event_rows)
 
                             if obj.type_name in variable_attributes:
                                 for path in variable_attributes[obj.type_name]:
-                                    for var in obj.get_fields(path, resolve=True).values():
+                                    for var in obj.get_fields(
+                                        path, resolve=True
+                                    ).values():
                                         if var >= 0:
-                                            highlight_row("variable", var, variable_rows)
+                                            highlight_row(
+                                                "variable", var, variable_rows
+                                            )
 
                             if obj.type_name in animation_attributes:
                                 for path in animation_attributes[obj.type_name]:
-                                    for anim in obj.get_fields(path, resolve=True).values():
+                                    for anim in obj.get_fields(
+                                        path, resolve=True
+                                    ).values():
                                         if anim >= 0:
-                                            highlight_row("animation", anim, animation_rows)
+                                            highlight_row(
+                                                "animation", anim, animation_rows
+                                            )
 
                             for resolution in hierarchy.type_map.values():
                                 if obj.type_id == resolution.result[0]:
@@ -867,7 +875,9 @@ def open_merge_hierarchy_dialog(
                             dpg.add_table_column(label="to", width_fixed=True)
                             dpg.add_table_column(label="idx1", width_fixed=True)
                             dpg.add_table_column(label="name1", width_stretch=True)
-                            dpg.add_table_column(label="action", init_width_or_weight=100)
+                            dpg.add_table_column(
+                                label="action", init_width_or_weight=100
+                            )
 
                             for idx, (key, resolution) in enumerate(
                                 hierarchy.events.items()
@@ -909,7 +919,9 @@ def open_merge_hierarchy_dialog(
                             dpg.add_table_column(label="to", width_fixed=True)
                             dpg.add_table_column(label="idx1", width_fixed=True)
                             dpg.add_table_column(label="name1", width_stretch=True)
-                            dpg.add_table_column(label="action", init_width_or_weight=100)
+                            dpg.add_table_column(
+                                label="action", init_width_or_weight=100
+                            )
 
                             for idx, (key, resolution) in enumerate(
                                 hierarchy.variables.items()
@@ -951,7 +963,9 @@ def open_merge_hierarchy_dialog(
                             dpg.add_table_column(label="to", width_fixed=True)
                             dpg.add_table_column(label="idx1", width_fixed=True)
                             dpg.add_table_column(label="name1", width_stretch=True)
-                            dpg.add_table_column(label="action", init_width_or_weight=100)
+                            dpg.add_table_column(
+                                label="action", init_width_or_weight=100
+                            )
 
                             for idx, (key, resolution) in enumerate(
                                 hierarchy.animations.items()
@@ -992,7 +1006,9 @@ def open_merge_hierarchy_dialog(
                             dpg.add_table_column(label="to", width_fixed=True)
                             dpg.add_table_column(label="id1", width_fixed=True)
                             dpg.add_table_column(label="name", width_stretch=True)
-                            dpg.add_table_column(label="action", init_width_or_weight=100)
+                            dpg.add_table_column(
+                                label="action", init_width_or_weight=100
+                            )
 
                             for idx, (key, resolution) in enumerate(
                                 hierarchy.type_map.items()
@@ -1025,7 +1041,9 @@ def open_merge_hierarchy_dialog(
                         ):
                             dpg.add_table_column(label="oid", width_fixed=True)
                             dpg.add_table_column(label="name", width_stretch=True)
-                            dpg.add_table_column(label="action", init_width_or_weight=100)
+                            dpg.add_table_column(
+                                label="action", init_width_or_weight=100
+                            )
 
                             for idx, (oid, resolution) in enumerate(
                                 hierarchy.objects.items()

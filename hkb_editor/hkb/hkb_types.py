@@ -717,6 +717,10 @@ class HkbRecord(XmlValueHandler):
         if not id and not self.object_id:
             raise ValueError("Object does not have an ID and no ID was provided")
 
+        parent = self.element.getparent()
+        if parent and parent.tag == "object":
+            return parent
+
         if not id:
             id = self.object_id
 

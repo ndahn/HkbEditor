@@ -803,13 +803,13 @@ class BehaviorEditor(GraphEditor):
         try:
             return [
                 (obj["name"].get_value(), style.yellow),
-                (node.id, style.blue),
                 (obj.type_name, style.white),
+                (node.id, style.blue),
             ]
         except AttributeError:
             return [
-                (node.id, style.blue),
                 (obj.type_name, style.white),
+                (node.id, style.blue),
             ]
 
     def get_node_frontpage_short(self, node_id: str) -> str:
