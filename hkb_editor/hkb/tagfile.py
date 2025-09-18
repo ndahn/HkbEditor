@@ -7,38 +7,13 @@ from copy import deepcopy
 from lxml import etree as ET
 import networkx as nx
 
+from .xml import get_xml_parser
 from .type_registry import TypeRegistry
 from .query import query_objects
 
 if TYPE_CHECKING:
     from .hkb_types import HkbRecord, HkbPointer, XmlValueHandler
 
-
-class GuardedElement(ET.ElementBase):
-    def _warn_or_clone(self, el):
-        if el.getparent() is not None:
-            attrs = " ".join(f"{k}={v}" for k,v in el.attrib.items())
-            logging.getLogger().warning(f"Element is about to be moved, this is probably a bug: <{el.tag} {attrs}>")
-
-    def append(self, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.append(self, el)
-
-    def insert(self, i, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.insert(self, i, el)
-
-    def extend(self, it):
-        fixed = [self._warn_or_clone(e) for e in it]
-        return ET.ElementBase.extend(self, fixed)
-
-    def addnext(self, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.addnext(self, el)
-
-    def addprevious(self, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.addprevious(self, el)
 
 
 class Tagfile:
@@ -47,13 +22,7 @@ class Tagfile:
 
         self.file = xml_file
 
-        # lxml keeps comments, which affect subelement counts and iterations.
-        # TODO we should handle comments properly at some point so they are kept,
-        # but for now this is easier
-        xml_parser = ET.XMLParser(remove_comments=True)
-        xml_parser.set_element_class_lookup(ET.ElementDefaultClassLookup(element=GuardedElement))
-
-        self._tree: ET._ElementTree = ET.parse(xml_file, parser=xml_parser)
+        self._tree: ET._ElementTree = ET.parse(xml_file, parser=get_xml_parser())
         root: ET._Element = self._tree.getroot()
 
         # Some versions of HKLib seem to decompile floats with commas

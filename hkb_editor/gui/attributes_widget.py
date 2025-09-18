@@ -27,6 +27,7 @@ from hkb_editor.hkb.index_attributes import (
     is_variable_attribute,
     is_animation_attribute,
 )
+from hkb_editor.hkb.xml import get_xml_parser
 from hkb_editor.templates.common import CommonActionsMixin
 
 from .dialogs import select_object, select_event, select_variable, select_animation
@@ -978,7 +979,7 @@ class AttributesWidget:
                 return
 
         try:
-            xml = ET.fromstring(data)
+            xml = ET.fromstring(data, get_xml_parser())
             new_value = type(value)(xml, value.type_id)
         except Exception:
             new_value = data

@@ -8,6 +8,7 @@ from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
 
+from hkb_editor.hkb.xml import get_xml_parser
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.index_attributes import (
@@ -99,7 +100,10 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
         path = re.sub(r"/:[0-9]+$", "/:-1", path)
         references.append((obj.object_id, path))
 
-    root = ET.Element("behavior_hierarchy", references=str(references))
+    # Create using the parser so we can use our guarded xml element class
+    root = ET.fromstring(b"<behavior_hierarchy/>", get_xml_parser())
+    root.set("references", str(references))
+
     xml_events = ET.SubElement(root, "events")
     xml_variables = ET.SubElement(root, "variables")
     xml_animations = ET.SubElement(root, "animations")
@@ -148,7 +152,7 @@ def import_hierarchy(
     interactive: bool = True,
 ):
     try:
-        xmldoc = ET.fromstring(xml)
+        xmldoc = ET.fromstring(xml, get_xml_parser())
     except Exception as e:
         raise ValueError(f"Failed to parse hierarchy: {e}")
 
@@ -240,7 +244,7 @@ def paste_hierarchy(
 ) -> MergeHierarchy:
     if isinstance(xml, str):
         try:
-            xmldoc = ET.fromstring(xml)
+            xmldoc = ET.fromstring(xml, get_xml_parser())
         except Exception as e:
             raise ValueError(f"Failed to parse hierarchy: {e}")
     else:
@@ -447,7 +451,7 @@ def find_conflicts(
         if (
             existing_obj
             and existing_obj.type_name == obj.type_name
-            and obj.type_name in ("hkbCustomTransition")
+            and obj.type_name in ("CustomTransitionEffect", "hkbBlendingTransitionEffect")
         ):
             hierarchy.objects[obj.object_id] = Resolution(obj, "<reuse>", existing_obj)
         else:
