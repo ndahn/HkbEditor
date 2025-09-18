@@ -135,6 +135,8 @@ class BehaviorEditor(GraphEditor):
         if not os.path.isfile(file_path):
             self.logger.error(f"File not found: {file_path}")
             self.config.remove_recent_file(file_path)
+            self.config.save()
+            
             self._regenerate_recent_files_menu()
             return
 
