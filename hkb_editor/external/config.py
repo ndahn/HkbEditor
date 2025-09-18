@@ -16,13 +16,17 @@ class Config:
     single_branch_mode: bool = True
     save_backups: bool = True
 
-    def add_recent_file(self, behavior_path: str) -> None:
-        behavior_path = path.normpath(path.abspath(behavior_path))
-        if behavior_path in self.recent_files:
-            self.recent_files.remove(behavior_path)
+    def add_recent_file(self, file_path: str) -> None:
+        file_path = path.normpath(path.abspath(file_path))
+        if file_path in self.recent_files:
+            self.recent_files.remove(file_path)
 
-        self.recent_files.insert(0, behavior_path)
+        self.recent_files.insert(0, file_path)
         self.recent_files = self.recent_files[:10]
+
+    def remove_recent_file(self, file_path: str) -> None:
+        if file_path in self.recent_files:
+            self.recent_files.remove(file_path)
 
     def save(self, config_path: str = None) -> None:
         if not config_path:
