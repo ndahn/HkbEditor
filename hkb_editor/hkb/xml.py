@@ -1,5 +1,9 @@
+from typing import TYPE_CHECKING
 import logging
 from lxml import etree as ET
+
+if TYPE_CHECKING:
+    from .tagfile import Tagfile
 
 
 class GuardedElement(ET.ElementBase):
@@ -33,9 +37,14 @@ def get_xml_parser() -> ET.XMLParser:
     lookup = ET.ElementDefaultClassLookup(element=GuardedElement)
     
     # lxml keeps comments, which affect subelement counts and iterations.
-    # TODO we should handle comments properly at some point so they are kept,
-    # but for now this is easier
     parser = ET.XMLParser(remove_comments=True)
     parser.set_element_class_lookup(lookup)
     
     return parser
+
+
+def add_type_comments(root: ET.Element, tagfile: "Tagfile") -> None:
+    for el in root.findall(".//object"):
+        oid = el.get("id")
+        type_name = tagfile.objects[oid].type_name
+        el.insert(0, ET.Comment(type_name))

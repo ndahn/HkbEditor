@@ -8,7 +8,7 @@ from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb.xml import get_xml_parser
+from hkb_editor.hkb.xml import get_xml_parser, add_type_comments
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.index_attributes import (
@@ -98,7 +98,7 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     for obj, path, _ in behavior.find_references_to(root_id):
         # If the path is into a pointer array we should ignore the item index
         path = re.sub(r"/:[0-9]+$", "/:-1", path)
-        references.append((obj.object_id, path))
+        references.append((obj.object_id, obj.type_name, obj["name"].get_value(), path))
 
     # Create using the parser so we can use our guarded xml element class
     root = ET.fromstring(b"<behavior_hierarchy/>", get_xml_parser())
@@ -136,9 +136,10 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
         ET.SubElement(xml_types, "type", id=type_id, name=type_name)
 
     for obj in objects:
-        # Be careful not to remove the object elements from their original xml doc! 
+        # Be careful not to remove the object elements from their original xml doc!
         xml_objects.append(deepcopy(obj.as_object()))
 
+    add_type_comments(root, behavior)
     ret = ET.tostring(root, pretty_print=True, encoding="unicode")
     logging.getLogger().info(f"Serialized {len(objects)} objects")
     return ret
@@ -171,11 +172,42 @@ def import_hierarchy(
 
     logger = logging.getLogger()
 
-    def resolve_target(target_id: str, target_path: str) -> HkbPointer:
-        target_obj = behavior.objects.get(target_id)
-        if not target_obj:
-            raise ValueError(f"Hierarchy target {target_id} not found")
+    def resolve_target(
+        target_id: str, target_type_name: str, target_name: str
+    ) -> HkbRecord:
+        # Resolving by ID is fastest, try that first
+        obj = behavior.objects.get(target_id)
+        name = obj["name"].get_value()
 
+        if obj:
+            if (
+                target_type_name is not None
+                and obj.type_name == target_type_name
+                and name is not None
+                and name == target_name
+            ):
+                return obj
+
+        target_type_id = behavior.type_registry.find_first_type_by_name(
+            target_type_name
+        )
+        candidates = list(
+            behavior.query(f"typeid:'{target_type_id}' name:'{target_name}'")
+        )
+
+        if len(candidates) == 1:
+            return candidates[0]
+
+        if len(candidates) > 1:
+            raise ValueError(
+                f"Target object is ambiguous, candidates are: {candidates}"
+            )
+
+        raise ValueError(
+            f"Could not resolve target object (id={target_id}, type_name={target_type_name}, name={target_name})"
+        )
+
+    def get_target_pointer(target_obj: HkbRecord, target_path: str) -> HkbPointer:
         if target_path.endswith("/:-1"):
             target_array: HkbArray[HkbPointer] = target_obj.get_field(target_path[:-4])
             if not target_array.is_pointer_array:
@@ -218,8 +250,22 @@ def import_hierarchy(
             callback(hierarchy)
 
     with undo_manager.combine():
-        target_pointers = [resolve_target(oid, path) for oid, path in references]
-        target_pointers = [p for p in target_pointers if p is not None]
+        target_pointers = []
+
+        for info in references:
+            if len(info) == 2:
+                # v0.9.2
+                oid, path = info
+                type_name = name = None
+            else:
+                # v0.9.3+
+                oid, type_name, name, path = references
+
+            target_obj = resolve_target(oid, type_name, name)
+            target_ptr = get_target_pointer(target_obj, path)
+
+            if target_ptr:
+                references.append(target_ptr)
 
         if not target_pointers:
             logger.warning("Reference analysis did not result in any targets")
@@ -451,7 +497,8 @@ def find_conflicts(
         if (
             existing_obj
             and existing_obj.type_name == obj.type_name
-            and obj.type_name in ("CustomTransitionEffect", "hkbBlendingTransitionEffect")
+            and obj.type_name
+            in ("CustomTransitionEffect", "hkbBlendingTransitionEffect")
         ):
             hierarchy.objects[obj.object_id] = Resolution(obj, "<reuse>", existing_obj)
         else:
@@ -498,6 +545,9 @@ def resolve_conflicts(
     common = CommonActionsMixin(behavior)
     state_id_map: dict[int, int] = {}
 
+    # TODO this should be optional
+    # TODO define various conflict resolution strategies, like skip on conflict, reuse
+    # on conflict, and whether to continue following a path if the parent had a conflict
     def is_object_included(object_id: str) -> bool:
         # The root object will not have any parents to check
         if object_id == list(hierarchy.objects.keys())[0]:
@@ -585,7 +635,7 @@ def resolve_conflicts(
 
             if object_id in behavior.objects:
                 resolution.original.object_id = behavior.new_id()
-            
+
             resolution.result = resolution.original
         elif resolution.action == "<reuse>":
             resolution.result = behavior.objects[object_id]

@@ -7,7 +7,7 @@ from copy import deepcopy
 from lxml import etree as ET
 import networkx as nx
 
-from .xml import get_xml_parser
+from .xml import get_xml_parser, add_type_comments
 from .type_registry import TypeRegistry
 from .query import query_objects
 
@@ -47,15 +47,11 @@ class Tagfile:
         self._next_object_id = max(objectid_values, default=0) + 1
 
     def save_to_file(self, file_path: str) -> None:
-        tmp = deepcopy(self._tree)
 
         # Add comments on the copy. We don't want to keep these as they can mess up
         # parsing and object evaluation (e.g. locating fields)
-        for el in tmp.findall(".//object"):
-            oid = el.get("id")
-            type_name = self.objects[oid].type_name
-            el.insert(0, ET.Comment(type_name))
-
+        tmp = deepcopy(self._tree)
+        add_type_comments(tmp, self)
         ET.indent(tmp)
         tmp.write(file_path)
 
