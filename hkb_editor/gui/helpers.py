@@ -114,30 +114,30 @@ def create_simple_value_widget(
             **kwargs,
             user_data=user_data,
         )
-    elif value_type == int:
+    elif value_type is int:
         dpg.add_input_int(
             label=label,
-            default_value=default or 0,
+            default_value=int(default) if default is not None else 0,
             callback=callback,
             on_enter=accept_on_enter,
             tag=tag,
             user_data=user_data,
             **kwargs,
         )
-    elif value_type == float:
+    elif value_type is float:
         dpg.add_input_float(
             label=label,
-            default_value=default or 0.0,
+            default_value=float(default) if default is not None else 0.0,
             callback=callback,
             on_enter=accept_on_enter,
             tag=tag,
             user_data=user_data,
             **kwargs,
         )
-    elif value_type == bool:
+    elif value_type is bool:
         dpg.add_checkbox(
             label=label,
-            default_value=default or False,
+            default_value=bool(default) if default is not None else False,
             callback=callback,
             tag=tag,
             **kwargs,
@@ -146,7 +146,7 @@ def create_simple_value_widget(
     elif value_type in (type(None), str):
         dpg.add_input_text(
             label=label,
-            default_value=default or "",
+            default_value=str(default) if default is not None else "",
             callback=callback,
             on_enter=accept_on_enter,
             tag=tag,
@@ -207,7 +207,7 @@ def create_value_widget(
             try:
                 var_idx = util.variable(default, create=False)
                 default = behavior.get_variable(var_idx)
-            except:
+            except Exception:
                 pass
 
             def on_variable_selected(sender: str, variable: int, user_data: Any):
@@ -225,7 +225,7 @@ def create_value_widget(
             try:
                 event_idx = util.event(default, create=False)
                 default = behavior.get_event(event_idx)
-            except:
+            except Exception:
                 pass
 
             def on_event_selected(sender: str, event: int, user_data: Any):
@@ -243,7 +243,7 @@ def create_value_widget(
             try:
                 anim_idx = util.animation(default)
                 default = behavior.get_animation(anim_idx)
-            except:
+            except Exception:
                 pass
 
             def on_animation_selected(sender: str, animation: int, user_data: Any):
@@ -624,7 +624,7 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
         row_items = dpg.get_item_children(row, 1)
         values = []
         for cell in row_items:
-            if dpg.get_item_configuration(cell).get("span_columns") == True:
+            if dpg.get_item_configuration(cell).get("span_columns") is True:
                 # Selectables that span all columns should only be treated as text
                 value = dpg.get_item_label(cell)
             else:
@@ -633,7 +633,7 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
             try:
                 # Values like indices and other numbers should not be treated as strings
                 value = float(value)
-            except:
+            except Exception:
                 pass
 
             values.append(value)

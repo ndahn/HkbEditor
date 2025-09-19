@@ -1039,17 +1039,15 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_add(idx: int, new_value: tuple[str, VariableType, int, int, str]):
+        def on_add(idx: int, new_value: list):
             if self.beh.find_variable(new_value[0], None):
                 self.logger.warning(
                     "A variable named '%s' already exists (%d)", new_value[0], idx
                 )
 
             if idx not in (-1, len(self.beh._variables)):
-                # TODO show warning dialog listing affected variables
-                pass
+                self.logger.warning(f"Inserting variable {new_value[0]} at index {idx} will affect all references to variables {idx + 1} and beyond")
 
-            new_value = list(new_value)
             try:
                 new_value[4] = literal_eval(new_value[4])
             except Exception:
@@ -1058,6 +1056,9 @@ class BehaviorEditor(GraphEditor):
 
             self.beh.create_variable(*new_value, idx)
             undo_manager.on_create_variable(self.beh, new_value, idx)
+
+            # Update new_value from the created variable
+            new_value[:] = self.beh.get_variable(idx).astuple()
 
         def on_update(
             idx: int,
@@ -1105,7 +1106,7 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_add(idx: int, new_value: tuple[str]):
+        def on_add(idx: int, new_value: list):
             new_value = new_value[0]
             if self.beh.find_event(new_value, None):
                 self.logger.warning(
@@ -1119,7 +1120,7 @@ class BehaviorEditor(GraphEditor):
             self.beh.create_event(new_value, idx)
             undo_manager.on_create_event(self.beh, new_value, idx)
 
-        def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
+        def on_update(idx: int, old_value: tuple[str], new_value: list):
             old_value = old_value[0]
             new_value = new_value[0]
 
@@ -1154,7 +1155,7 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
-        def on_add(idx: int, new_value: tuple[str]):
+        def on_add(idx: int, new_value: list):
             new_value = new_value[0]
             if self.beh.find_animation(new_value, None):
                 self.logger.warning(
@@ -1164,7 +1165,7 @@ class BehaviorEditor(GraphEditor):
             self.beh.create_animation(new_value, idx)
             undo_manager.on_create_animation(self.beh, new_value, idx)
 
-        def on_update(idx: int, old_value: tuple[str], new_value: tuple[str]):
+        def on_update(idx: int, old_value: tuple[str], new_value: list):
             old_value = old_value[0]
             new_value = new_value[0]
 

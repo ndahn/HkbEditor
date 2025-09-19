@@ -288,7 +288,10 @@ class HavokBehavior(Tagfile):
             vtype = self.get_variable_type(idx)
 
         if vtype == VariableType.BOOL:
-            if not isinstance(default, bool):
+            if default in (None, ""):
+                default = False
+
+            elif not isinstance(default, bool):
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -297,7 +300,10 @@ class HavokBehavior(Tagfile):
             word_value = 1 if default else 0
             default = word_value
         elif vtype == VariableType.INT8:
-            if not isinstance(default, int) or default.bit_length() > 8:
+            if default in (None, ""):
+                default = 0
+
+            elif not isinstance(default, int) or default.bit_length() > 8:
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -305,7 +311,10 @@ class HavokBehavior(Tagfile):
             word_value = ctypes.c_int8(default).value
             default = word_value
         elif vtype == VariableType.INT16:
-            if not isinstance(default, int) or default.bit_length() > 16:
+            if default in (None, ""):
+                default = 0
+
+            elif not isinstance(default, int) or default.bit_length() > 16:
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -313,7 +322,10 @@ class HavokBehavior(Tagfile):
             word_value = ctypes.c_int16(default).value
             default = word_value
         elif vtype == VariableType.INT32:
-            if not isinstance(default, int) or default.bit_length() > 32:
+            if default in (None, ""):
+                default = 0
+
+            elif not isinstance(default, int) or default.bit_length() > 32:
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -321,7 +333,10 @@ class HavokBehavior(Tagfile):
             word_value = ctypes.c_int32(default).value
             default = word_value
         elif vtype == VariableType.REAL:
-            if not isinstance(default, float):
+            if default in (None, ""):
+                default = 0.0
+
+            elif not isinstance(default, float):
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -362,17 +377,26 @@ class HavokBehavior(Tagfile):
             VariableType.QUATERNION,
         ):
             if vtype == VariableType.VECTOR3:
-                if not isinstance(default, Iterable) or len(default) != 3:
+                if default in (None, ""):
+                    default = [0.0, 0.0, 0.0]
+
+                elif not isinstance(default, Iterable) or len(default) != 3:
                     raise ValueError(
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )
             elif vtype == VariableType.VECTOR4:
-                if not isinstance(default, Iterable) or len(default) != 4:
+                if default in (None, ""):
+                    default = [0.0, 0.0, 0.0, 0.0]
+                
+                elif not isinstance(default, Iterable) or len(default) != 4:
                     raise ValueError(
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )
             elif vtype == VariableType.QUATERNION:
-                if not isinstance(default, Iterable) or len(default) != 4:
+                if default in (None, ""):
+                    default = [0.0, 0.0, 0.0, 1.0]
+
+                elif not isinstance(default, Iterable) or len(default) != 4:
                     raise ValueError(
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )

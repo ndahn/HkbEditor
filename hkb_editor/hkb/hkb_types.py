@@ -172,7 +172,6 @@ class HkbPointer(XmlValueHandler):
 
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "pointer":
-            xml = ET.tostring(element, pretty_print=True, encoding="unicode")
             raise ValueError(f"Invalid element <{element.tag}>")
 
         super().__init__(tagfile, element, type_id)

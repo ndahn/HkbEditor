@@ -14,8 +14,8 @@ def edit_simple_array_dialog(
     title: str = "Edit Array",
     help: str = None,
     choices: dict[int, list[str | tuple[str, Any]]] = None,
-    on_add: Callable[[int, str], bool] = None,
-    on_update: Callable[[int, str, str], bool] = None,
+    on_add: Callable[[int, list], bool] = None,
+    on_update: Callable[[int, tuple, list], bool] = None,
     on_delete: Callable[[int], bool] = None,
     final_only: bool = True,
     on_close: Callable[[str, list[str], Any], None] = None,
@@ -44,6 +44,9 @@ def edit_simple_array_dialog(
         center_window(popup, dialog)
 
     def add_entry(sender, new_value: tuple, index: int):
+        # In case on_add wants to edit the values
+        new_value = list(new_value)
+
         if index is None:
             index = len(items)
 
@@ -51,7 +54,7 @@ def edit_simple_array_dialog(
         if on_add:
             on_add(index, new_value)
 
-        items.insert(index, new_value)
+        items.insert(index, tuple(new_value))
         fill_table()
 
         # row = dpg.get_item_children(f"{tag}_table", slot=1)[index]
@@ -69,22 +72,21 @@ def edit_simple_array_dialog(
                     new_value = item[1]
                     break
 
-        old_value_tuple = items[item_idx]
-        new_value_tuple = list(old_value_tuple)
-        new_value_tuple[val_idx] = new_value
-        new_value_tuple = tuple(new_value_tuple)
+        old_item = items[item_idx]
+        new_item = list(old_item)
+        new_item[val_idx] = new_value
 
         # May raise as a veto
         if on_update:
             try:
-                on_update(item_idx, old_value_tuple, new_value_tuple)
+                on_update(item_idx, old_item, new_item)
             except Exception as e:
                 # Rejected, regenerate the table before chickening out
                 fill_table()
                 logging.getLogger().error(f"Value update rejected: {e}")
                 return
 
-        items[item_idx] = new_value_tuple
+        items[item_idx] = tuple(new_item)
 
     def delete_entry(sender: str, app_data: Any, index: int):
         if index is None:
