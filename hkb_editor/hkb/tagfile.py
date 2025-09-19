@@ -178,11 +178,12 @@ class Tagfile:
         visited = set(candidates)
 
         while candidates:
-            candidate = candidates.pop()
+            candidate_id = candidates.pop()
+            visited.add(candidate_id)
 
             # Search upwards through the hierarchy to see if any ancestors match our criteria
             parents: list[ET._Element] = self._tree.xpath(
-                f"/*/object[.//pointer[@id='{candidate}']]"
+                f"/*/object[.//pointer[@id='{candidate_id}']]"
             )
 
             for parent_elem in parents:
@@ -194,7 +195,6 @@ class Tagfile:
                 # Parent didn't match, but might still have a matching parent
                 if oid not in visited:
                     candidates.append(oid)
-                    visited.add(oid)
 
         return None
 

@@ -16,7 +16,7 @@ from hkb_editor.hkb.index_attributes import (
     variable_attributes,
     animation_attributes,
 )
-from hkb_editor.hkb import HkbPointer, HkbRecord, HkbArray
+from hkb_editor.hkb import HkbPointer, HkbRecord, HkbArray, XmlValueHandler
 from hkb_editor.hkb.type_registry import TypeMismatch
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui import style
@@ -33,6 +33,8 @@ class Resolution:
 
 @dataclass
 class MergeHierarchy:
+    root_id: str = None
+    root_meta: dict[str:Any] = field(default_factory=dict)
     events: dict[int, Resolution] = field(default_factory=dict)
     variables: dict[int, Resolution] = field(default_factory=dict)
     animations: dict[int, Resolution] = field(default_factory=dict)
@@ -45,6 +47,7 @@ class MergeHierarchy:
 def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     g = behavior.build_graph(root_id)
 
+    root_meta: dict[str, list] = {}
     events: dict[int, str] = {}
     variables: dict[int, HkbVariable] = {}
     animations: dict[int, str] = {}
@@ -104,15 +107,57 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     root = ET.fromstring(b"<behavior_hierarchy/>", get_xml_parser())
     root.set("references", str(references))
 
+    # The root object might need additional data to be merged correctly
+    root_obj = behavior.objects[root_id]
+
+    if root_obj.type_name == "hkbStateMachine::StateInfo":
+        # Include the wildcard transition info
+        sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
+        root_sm = next(behavior.find_hierarchy_parent_for(root_obj, sm_type))
+        transition_info: HkbRecord = root_sm["wildcardTransitions"].get_target()
+        state_id = root_obj["stateId"].get_value()
+
+        transition: HkbRecord
+        for transition in transition_info["transitions"]:
+            if transition["toStateId"].get_value() == state_id:
+                meta_wildcards = root_meta.setdefault("wildcard_transitions", [])
+                meta_wildcards.append(transition)
+
+                transition_effect: HkbRecord = transition["transition"].get_target()
+                if transition_effect and transition_effect not in objects:
+                    objects.append(transition_effect)
+
+                    if transition_effect.type_id not in type_map:
+                        type_map[transition_effect.type_id] = (
+                            transition_effect.type_name
+                        )
+
+                trans_event_idx = transition["eventId"].get_value()
+                trans_event_name = behavior.get_event(trans_event_idx, None)
+                events[trans_event_idx] = trans_event_name
+
+    xml_root_meta = ET.SubElement(root, "root_meta", root_id=root_id)
     xml_events = ET.SubElement(root, "events")
     xml_variables = ET.SubElement(root, "variables")
     xml_animations = ET.SubElement(root, "animations")
     xml_types = ET.SubElement(root, "types")
     xml_objects = ET.SubElement(root, "objects", graph=str(nx.to_edgelist(g)))
 
+    # Root meta
+    for key, items in root_meta.items():
+        meta_group = ET.SubElement(xml_root_meta, key)
+
+        for item in items:
+            if isinstance(item, XmlValueHandler):
+                meta_group.append(deepcopy(item.element))
+            else:
+                ET.SubElement(meta_group, "item", value=str(item))
+
+    # Events
     for idx, evt in events.items():
         ET.SubElement(xml_events, "event", idx=str(idx), name=evt)
 
+    # Variables
     for idx, var in variables.items():
         # Need to include ALL variable attributes so we can reconsruct it if needed
         if var:
@@ -129,17 +174,21 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
         else:
             ET.SubElement(xml_variables, "variable", idx=str(idx), name="")
 
+    # Animations
     for idx, anim in animations.items():
         ET.SubElement(xml_animations, "animation", idx=str(idx), name=anim)
 
+    # Types
     for type_id, type_name in type_map.items():
         ET.SubElement(xml_types, "type", id=type_id, name=type_name)
 
+    # Objects
     for obj in objects:
         # Be careful not to remove the object elements from their original xml doc!
         xml_objects.append(deepcopy(obj.as_object()))
 
     add_type_comments(root, behavior)
+    ET.indent(root)
     ret = ET.tostring(root, pretty_print=True, encoding="unicode")
     logging.getLogger().info(f"Serialized {len(objects)} objects")
     return ret
@@ -299,9 +348,8 @@ def paste_hierarchy(
     if xmldoc.tag != "behavior_hierarchy":
         raise ValueError("Not a valid behavior hierarchy")
 
-    root = xmldoc.find("objects").getchildren()[0]
-    root_id = root.get("id")
-    root_type = root.get("typeid")
+    root_id = xmldoc.find("root_meta").get("root_id")
+    root_type = xmldoc.xpath(f".//object[@id='{root_id}']")[0].get("typeid")
     root_type_name = xmldoc.xpath(f".//type[@id='{root_type}']")[0].get("name")
 
     try:
@@ -373,7 +421,7 @@ def find_conflicts(
 
     # Events
     for evt in xml.findall(".//event"):
-        idx = evt.get("idx")
+        idx = int(evt.get("idx"))
         name = evt.get("name")
 
         if name:
@@ -385,7 +433,7 @@ def find_conflicts(
 
     # Variables
     for var in xml.findall(".//variable"):
-        idx = var.get("idx")
+        idx = int(var.get("idx"))
         name = var.get("name")
 
         if name:
@@ -414,7 +462,7 @@ def find_conflicts(
 
     # Animations
     for anim in xml.findall(".//animation"):
-        idx = anim.get("idx")
+        idx = int(anim.get("idx"))
         name = anim.get("name")
 
         if name:
@@ -452,7 +500,6 @@ def find_conflicts(
         xmlobj.set("typeid", new_type_id)
 
         try:
-
             # If the record comes from a different game (or version), the xml element might
             # have extra fields or miss some we are expecting. By constructing a new object
             # we ensure that all required fields are present.
@@ -533,6 +580,19 @@ def find_conflicts(
         # - hkbStateMachine
         # - hkbStateMachine::TransitionInfoArray
         # - hkbClipGenerator
+
+    # Additional root info
+    hierarchy.root_id = xml.find("root_meta").get("root_id")
+    root_obj: HkbRecord = hierarchy.objects[hierarchy.root_id].original
+
+    if root_obj.type_name == "hkbStateMachine::StateInfo":
+        transitions: list = hierarchy.root_meta.setdefault("wildcard_transitions", [])
+        transition_type = behavior.type_registry.find_first_type_by_name(
+            "hkbStateMachine::TransitionInfo"
+        )
+
+        for transition_elem in xml.xpath(".//root_meta/wildcard_transitions/record"):
+            transitions.append(HkbRecord(behavior, transition_elem, transition_type))
 
     return hierarchy
 
@@ -651,7 +711,10 @@ def resolve_conflicts(
     # into a new statemachine
     sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
     target_record = behavior.find_object_for(target_pointer)
-    target_sm = next(behavior.find_hierarchy_parent_for(target_record, sm_type))
+    if target_record.type_id == sm_type:
+        target_sm = target_record
+    else:
+        target_sm = next(behavior.find_hierarchy_parent_for(target_record, sm_type))
 
     # Fix object references
     for object_id, resolution in hierarchy.objects.items():
@@ -754,6 +817,43 @@ def resolve_conflicts(
                 if new_id is not None:
                     obj["startStateId"].set_value(new_id)
 
+    # Handle additional root metadata
+    root_res = hierarchy.objects[hierarchy.root_id]
+
+    # Root is a StateInfo and probably has wildcard transitions in its original statemachine
+    if (
+        root_res.action == "<new>"
+        and root_res.result.type_name == "hkbStateMachine::StateInfo"
+    ):
+        for transition in hierarchy.root_meta.get("wildcard_transitions", []):
+            trans_ptr: HkbPointer = transition["transition"]
+
+            # Update the transition effect pointer
+            trans_id = trans_ptr.get_value()
+            if trans_id:
+                trans_res = hierarchy.objects[trans_id]
+                if trans_res.action != "<skip>":
+                    trans_ptr.set_value(trans_res.result)
+
+            evt_idx = transition["eventId"].get_value()
+            new_evt_idx = hierarchy.events[evt_idx].result[0]
+            transition["eventId"].set_value(new_evt_idx)
+
+            new_state_id = hierarchy.state_ids[hierarchy.root_id].result
+            transition["toStateId"].set_value(new_state_id)
+
+            wildcard_transitions = target_sm["wildcardTransitions"].get_target()
+            print("###", target_sm["wildcardTransitions"], target_sm["name"].get_value())
+            # if not wildcard_transitions:
+            #     wildcards_type = target_sm["wildcardTransitions"].subtype_id
+            #     wildcard_transitions = HkbRecord.new(
+            #         behavior, wildcards_type, None, behavior.new_id()
+            #     )
+            #     target_sm["wildcardTransitions"].set_value(wildcard_transitions)
+            #     behavior.add_object(wildcard_transitions)
+
+            wildcard_transitions["transitions"].append(transition)
+
 
 def open_merge_hierarchy_dialog(
     behavior: HavokBehavior,
@@ -806,114 +906,104 @@ def open_merge_hierarchy_dialog(
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
-        with dpg.child_window(border=False, height=520):
-            with dpg.group(horizontal=True):
-                if graph_data:
-                    from hkb_editor.gui.graph_widget import GraphWidget
+        with dpg.group(horizontal=True):
+            if graph_data:
+                from hkb_editor.gui.graph_widget import GraphWidget
 
-                    graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
-                    highlighted_rows: dict[str, list[int]] = {}
-                    highlight_color = list(style.yellow)
+                graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
+                highlighted_rows: dict[str, list[int]] = {}
+                highlight_color = list(style.yellow)
 
-                    if len(highlight_color) < 3:
-                        highlight_color.append(100)
-                    else:
-                        highlight_color[3] = 100
+                if len(highlight_color) < 3:
+                    highlight_color.append(100)
+                else:
+                    highlight_color[3] = 100
 
-                    def get_node_frontpage(node):
+                def get_node_frontpage(node):
+                    obj: HkbRecord = hierarchy.objects[node.id].original
+
+                    try:
+                        return [
+                            (obj["name"].get_value(), style.yellow),
+                            (obj.type_name, style.white),
+                            (node.id, style.blue),
+                        ]
+                    except AttributeError:
+                        return [
+                            (obj.type_name, style.white),
+                            (node.id, style.blue),
+                        ]
+
+                def highlight_row(table_type: str, key: str, row_map: dict[str, int]):
+                    table = f"{tag}_{table_type}_table"
+                    row = f"{tag}_{table_type}_row_{key}"
+                    row_idx = row_map[row]
+
+                    dpg.highlight_table_row(table, row_idx, highlight_color)
+                    highlighted_rows.setdefault(table, []).append(row_idx)
+
+                def on_node_selected(node):
+                    for table, rows in highlighted_rows.items():
+                        for row in rows:
+                            dpg.unhighlight_table_row(table, row)
+                        rows.clear()
+
+                    if node:
                         obj: HkbRecord = hierarchy.objects[node.id].original
 
-                        try:
-                            return [
-                                (obj["name"].get_value(), style.yellow),
-                                (obj.type_name, style.white),
-                                (node.id, style.blue),
-                            ]
-                        except AttributeError:
-                            return [
-                                (obj.type_name, style.white),
-                                (node.id, style.blue),
-                            ]
+                        # Highlight events, variables and animations this object references
+                        if obj.type_name in event_attributes:
+                            for path in event_attributes[obj.type_name]:
+                                for evt in obj.get_fields(path, resolve=True).values():
+                                    if evt >= 0:
+                                        highlight_row("event", evt, event_rows)
 
-                    def highlight_row(
-                        table_type: str, key: str, row_map: dict[str, int]
-                    ):
-                        table = f"{tag}_{table_type}_table"
-                        row = f"{tag}_{table_type}_row_{key}"
-                        row_idx = row_map[row]
+                        if obj.type_name in variable_attributes:
+                            for path in variable_attributes[obj.type_name]:
+                                for var in obj.get_fields(path, resolve=True).values():
+                                    if var >= 0:
+                                        highlight_row("variable", var, variable_rows)
 
-                        dpg.highlight_table_row(table, row_idx, highlight_color)
-                        highlighted_rows.setdefault(table, []).append(row_idx)
+                        if obj.type_name in animation_attributes:
+                            for path in animation_attributes[obj.type_name]:
+                                for anim in obj.get_fields(path, resolve=True).values():
+                                    if anim >= 0:
+                                        highlight_row("animation", anim, animation_rows)
 
-                    def on_node_selected(node):
-                        for table, rows in highlighted_rows.items():
-                            for row in rows:
-                                dpg.unhighlight_table_row(table, row)
-                            rows.clear()
+                        for resolution in hierarchy.type_map.values():
+                            if obj.type_id == resolution.result[0]:
+                                # Old type ID is unique, new one may not be
+                                old_type_id = resolution.original[0]
+                                highlight_row("type", old_type_id, type_rows)
+                                break
 
-                        if node:
-                            obj: HkbRecord = hierarchy.objects[node.id].original
+                        highlight_row("object", obj.object_id, object_rows)
 
-                            # Highlight events, variables and animations this object references
-                            if obj.type_name in event_attributes:
-                                for path in event_attributes[obj.type_name]:
-                                    for evt in obj.get_fields(
-                                        path, resolve=True
-                                    ).values():
-                                        if evt >= 0:
-                                            highlight_row("event", evt, event_rows)
-
-                            if obj.type_name in variable_attributes:
-                                for path in variable_attributes[obj.type_name]:
-                                    for var in obj.get_fields(
-                                        path, resolve=True
-                                    ).values():
-                                        if var >= 0:
-                                            highlight_row(
-                                                "variable", var, variable_rows
-                                            )
-
-                            if obj.type_name in animation_attributes:
-                                for path in animation_attributes[obj.type_name]:
-                                    for anim in obj.get_fields(
-                                        path, resolve=True
-                                    ).values():
-                                        if anim >= 0:
-                                            highlight_row(
-                                                "animation", anim, animation_rows
-                                            )
-
-                            for resolution in hierarchy.type_map.values():
-                                if obj.type_id == resolution.result[0]:
-                                    # Old type ID is unique, new one may not be
-                                    old_type_id = resolution.original[0]
-                                    highlight_row("type", old_type_id, type_rows)
-                                    break
-
-                            highlight_row("object", obj.object_id, object_rows)
-
-                    with dpg.child_window(
+                with dpg.child_window(
+                    width=500,
+                    height=500,
+                    resizable_x=True,
+                    no_scrollbar=True,
+                    no_scroll_with_mouse=True,
+                    horizontal_scrollbar=False,
+                ):
+                    graph_preview = GraphWidget(
+                        graph,
+                        on_node_selected=on_node_selected,
+                        get_node_frontpage=get_node_frontpage,
+                        hover_enabled=True,
                         width=500,
                         height=500,
-                        resizable_x=True,
-                        no_scrollbar=True,
-                        no_scroll_with_mouse=True,
-                        horizontal_scrollbar=False,
-                    ):
-                        graph_preview = GraphWidget(
-                            graph,
-                            on_node_selected=on_node_selected,
-                            get_node_frontpage=get_node_frontpage,
-                            hover_enabled=True,
-                            width=500,
-                            height=500,
-                            tag=f"{tag}_graph_preview",
-                        )
+                        tag=f"{tag}_graph_preview",
+                    )
 
-                        # Reveal everything when first showing
-                        graph_preview.reveal_all_nodes()
-                        dpg.split_frame()  # wait for dimensions to be known
-                        graph_preview.zoom_show_all()
+                    # Reveal everything when first showing
+                    graph_preview.reveal_all_nodes()
+                    dpg.split_frame()  # wait for dimensions to be known
+                    graph_preview.zoom_show_all()
+
+            # List of conflicts and resolutions
+            with dpg.child_window(border=False, height=520):
 
                 # Events
                 with dpg.group():
@@ -1127,7 +1217,7 @@ def open_merge_hierarchy_dialog(
 
         instructions = """\
 The above hierarchy will be added to the behavior. Items with the "<new>" action will be added
-under a new ID/index, while items with the "<remap>" action will use already existing objects
+under a new ID/index, while items with the "<reuse>" action will use already existing objects
 from the behavior. 
 
 Note that new events, variables and animations must still have unique names - you'll have to fix

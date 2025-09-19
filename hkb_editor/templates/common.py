@@ -286,8 +286,9 @@ class CommonActionsMixin:
 
         for state_ptr in statemachine["states"]:
             state = state_ptr.get_target()
-            state_id = state["stateId"].get_value()
-            max_id = max(max_id, state_id)
+            if state:
+                state_id = state["stateId"].get_value()
+                max_id = max(max_id, state_id)
 
         return max_id + 1
 
