@@ -363,7 +363,7 @@ def paste_hierarchy(
 
     if not target_pointer.will_accept(mapped_root_type):
         raise ValueError(
-            f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type}"
+            f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type} ({root_type_name})"
         )
 
     loading = common_loading_indicator("Analyzing hierarchy")
@@ -498,6 +498,7 @@ def find_conflicts(
         old_type_id = xmlobj.get("typeid")
         new_type_id = hierarchy.type_map[old_type_id].result[0]
         xmlobj.set("typeid", new_type_id)
+        obj = tmp = None
 
         try:
             # If the record comes from a different game (or version), the xml element might
@@ -535,6 +536,8 @@ def find_conflicts(
                     )
 
                 mismatching_types.add(type_name)
+        except Exception as e:
+            raise ValueError(f"Failed to reconstruct object {xmlobj.get('id')} from xml") from e
 
         # Pointers
         # Find pointers in the behavior referencing this object's ID. If more than one

@@ -57,7 +57,7 @@ class HkbString(XmlValueHandler):
 
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "string":
-            raise ValueError(f"Invalid element {element}")
+            raise ValueError(f"Invalid element <{element.tag}>")
 
         super().__init__(tagfile, element, type_id)
 
@@ -80,7 +80,7 @@ class HkbInteger(XmlValueHandler):
 
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "integer":
-            raise ValueError(f"Invalid element {element}")
+            raise ValueError(f"Invalid element <{element.tag}>")
 
         super().__init__(tagfile, element, type_id)
 
@@ -113,7 +113,7 @@ class HkbFloat(XmlValueHandler):
 
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "real":
-            raise ValueError(f"Invalid element {element}")
+            raise ValueError(f"Invalid element <{element.tag}>")
 
         super().__init__(tagfile, element, type_id)
 
@@ -146,7 +146,7 @@ class HkbBool(XmlValueHandler):
 
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "bool":
-            raise ValueError(f"Invalid element {element}")
+            raise ValueError(f"Invalid element <{element.tag}>")
 
         super().__init__(tagfile, element, type_id)
 
@@ -173,7 +173,7 @@ class HkbPointer(XmlValueHandler):
     def __init__(self, tagfile: Tagfile, element: ET._Element, type_id: str):
         if element.tag != "pointer":
             xml = ET.tostring(element, pretty_print=True, encoding="unicode")
-            raise ValueError(f"Xml element is not a pointer:\n{xml}")
+            raise ValueError(f"Invalid element <{element.tag}>")
 
         super().__init__(tagfile, element, type_id)
 
@@ -685,6 +685,11 @@ class HkbRecord(XmlValueHandler):
                     f"{current_path}/{field_name}" if current_path else field_name
                 )
 
+                # Check the field itself first
+                if isinstance(field, field_type):
+                    yield (field_path, field)
+
+                # Check if the field has children
                 if isinstance(field, HkbRecord):
                     todo.append((field, field_path))
 
@@ -698,9 +703,6 @@ class HkbRecord(XmlValueHandler):
                         for i, item in enumerate(field):
                             item_path = f"{field_path}/:{i}"
                             todo.append((item, item_path))
-
-                elif isinstance(field, field_type):
-                    yield (field_path, field)
 
     def __getitem__(self, name: str) -> XmlValueHandler:
         ftype = self.get_field_type(name)
