@@ -44,7 +44,9 @@ class MergeHierarchy:
     pin_objects: bool = True
 
 
-def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
+def copy_hierarchy(root_obj: HkbRecord) -> str:
+    behavior = root_obj.tagfile
+    root_id = root_obj.object_id
     g = behavior.build_graph(root_id)
 
     root_meta: dict[str, list] = {}
@@ -108,8 +110,6 @@ def copy_hierarchy(behavior: HavokBehavior, root_id: str) -> str:
     root.set("references", str(references))
 
     # The root object might need additional data to be merged correctly
-    root_obj = behavior.objects[root_id]
-
     if root_obj.type_name == "hkbStateMachine::StateInfo":
         # Include the wildcard transition info
         sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")

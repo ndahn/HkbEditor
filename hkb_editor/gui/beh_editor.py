@@ -15,11 +15,12 @@ from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
     HkbRecord,
+    HkbArray,
     HkbPointer,
 )
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
-from hkb_editor.hkb.xml import find_hollowed_objects
+from hkb_editor.hkb.xml import find_hollowed_objects, xml_from_str
 from hkb_editor.templates.glue import get_templates
 
 from hkb_editor.external import (
@@ -50,7 +51,7 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
-from .workflows.clone_hierarchy import copy_hierarchy, import_hierarchy
+from .workflows.clone_hierarchy import copy_hierarchy, import_hierarchy, paste_hierarchy
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
@@ -832,6 +833,150 @@ class BehaviorEditor(GraphEditor):
     def get_node_frontpage_short(self, node_id: str) -> str:
         return self.beh.objects[node_id]["name"].get_value()
 
+    def _create_attach_menu(self, node: Node):
+
+        def get_target_type_id(obj: XmlValueHandler):
+            if isinstance(obj, HkbPointer):
+                return obj.subtype_id
+
+            if isinstance(obj, HkbArray) and obj.is_pointer_array:
+                return self.beh.type_registry.get_subtype(obj.element_type_id)
+
+            raise ValueError(f"Expected HkbPointer or HkbArray, got {obj}")
+
+        def do_attach(target_obj: XmlValueHandler, new_obj: HkbRecord) -> HkbPointer:
+            if isinstance(target_obj, HkbPointer):
+                old_value = target_obj.get_value()
+                target_obj.set_value(new_obj)
+                undo_manager.on_update_value(target_obj, old_value, new_obj.object_id)
+
+            elif isinstance(target_obj, HkbArray):
+                ptr: HkbPointer = target_obj.append(new_obj)
+                undo_manager.on_update_array_item(target_obj, -1, None, ptr)
+
+            else:
+                raise ValueError(f"Invalid target object {target_obj}")
+
+            self.logger.info(f"Attached {new_obj} to {target_obj}")
+
+            self.regenerate_canvas()
+            canvas_node = self.canvas.nodes[new_obj.object_id]
+            self.on_node_selected(canvas_node)
+
+        def attach_new_object(sender: str, app_data: str, target_obj: XmlValueHandler):
+            target_type_id = get_target_type_id(target_obj)
+
+            create_object_dialog(
+                self.beh,
+                self.alias_manager,
+                lambda s, new_obj, target_obj: do_attach(target_obj, new_obj),
+                allowed_types=[target_type_id],
+                include_derived_types=True,
+                selected_type_id=target_type_id,
+                user_data=target_obj,
+                tag=f"{self.tag}_attach_new_object_{node.id}_{path}",
+            )
+
+        def attach_from_xml(sender: str, app_data: str, target_obj: XmlValueHandler):
+            target_type_id = get_target_type_id(target_obj)
+
+            try:
+                xml = xml_from_str(pyperclip.paste())
+            except Exception:
+                raise ValueError("Clipboard does not contain valid XML data")
+
+            # Check for type compatibility (mainly to get a nicer exception)
+            xml_type_id = xml.get("typeid")
+            valid_types = self.beh.type_registry.get_compatible_types(target_type_id)
+            if xml_type_id not in valid_types:
+                raise ValueError(
+                    f"Copied XML has type ID {xml_type_id}, but target object only accepts the following types: {valid_types}"
+                )
+
+            with undo_manager.guard(self.beh):
+                try:
+                    new_obj = HkbRecord.init_from_xml(self.beh, target_type_id, xml)
+                except Exception as e:
+                    raise ValueError(
+                        f"Copied XML seems to be incompatible with target object {target_obj}: {e}"
+                    ) from e
+
+                # Seems to have worked, assign a new ID and add the object
+                self.beh.add_object(new_obj, self.beh.new_id())
+
+                do_attach(target_obj, new_obj)
+
+        def attach_hierarchy(sender: str, app_data: str, target_obj: XmlValueHandler):
+            xml = pyperclip.paste()
+
+            if isinstance(target_obj, HkbPointer):
+                target_ptr = target_obj
+
+            elif isinstance(target_obj, HkbArray):
+                target_ptr: HkbPointer = target_obj.append(None)
+                undo_manager.on_update_array_item(target_obj, -1, None, ptr)
+
+            def on_merge_success(hierarchy):
+                new_objects = [
+                    r.result for r in hierarchy.objects.values() if r.action == "<new>"
+                ]
+                self.logger.info(
+                    f"Attached hierarchy of {len(new_objects)} elements to {target_ptr}"
+                )
+
+                if hierarchy.pin_objects:
+                    for obj in new_objects:
+                        self.add_pinned_object(obj)
+
+                self.regenerate_canvas()
+
+            paste_hierarchy(self.beh, target_ptr, xml, on_merge_success)
+
+        def add_attach_menu_items(node: Node, path: str, obj: XmlValueHandler):
+            label = path
+            if isinstance(obj, HkbArray):
+                label += " (append)"
+
+            with dpg.menu(label=label):
+                dpg.add_selectable(
+                    label="New Object",
+                    callback=attach_new_object,
+                    user_data=obj,
+                )
+                dpg.add_selectable(
+                    label="From XML",
+                    callback=attach_from_xml,
+                    user_data=obj,
+                )
+
+                dpg.add_separator()
+
+                dpg.add_selectable(
+                    label="Hierarchy",
+                    callback=attach_hierarchy,
+                    user_data=obj,
+                )
+
+        with dpg.menu(label="Attach"):
+            obj = self.beh.objects[node.id]
+
+            # Pointers
+            ptr: HkbPointer
+            for path, ptr in obj.find_fields_by_type(HkbPointer):
+                if ":" in path.rsplit("/", maxsplit=1)[-1]:
+                    # A path like abc/def:0 means we found a pointer inside a pointer array
+                    continue
+
+                add_attach_menu_items(node, path, ptr)
+
+            dpg.add_separator()
+
+            # Arrays
+            array: HkbArray
+            for path, array in obj.find_fields_by_type(HkbArray):
+                if array.is_pointer_array:
+                    add_attach_menu_items(node, path, array)
+
     def open_node_menu(self, node: Node):
         obj = self.beh.objects.get(node.id)
         if not obj:
@@ -846,14 +991,9 @@ class BehaviorEditor(GraphEditor):
             dpg.add_text(node.id, color=style.blue)
             dpg.add_separator()
 
-            copy_menu = make_copy_menu(obj)
-            dpg.add_separator(parent=copy_menu)
-            dpg.add_selectable(
-                label="Hierarchy",
-                callback=lambda s, a, u: self._copy_hierarchy(u),
-                user_data=node,
-                parent=copy_menu,
-            )
+            # Copy & attach menus
+            make_copy_menu(obj)
+            self._create_attach_menu(node)
 
             dpg.add_separator()
 
@@ -897,10 +1037,6 @@ class BehaviorEditor(GraphEditor):
             self.logger.info("Copied to clipboard")
         except Exception as e:
             self.logger.warning(f"Copying value failed: {e}", exc_info=e)
-
-    def _copy_hierarchy(self, node: Node) -> None:
-        xml = copy_hierarchy(self.beh, node.id)
-        self._copy_to_clipboard(xml)
 
     def _on_value_changed(
         self,
@@ -1046,7 +1182,9 @@ class BehaviorEditor(GraphEditor):
                 )
 
             if idx not in (-1, len(self.beh._variables)):
-                self.logger.warning(f"Inserting variable {new_value[0]} at index {idx} will affect all references to variables {idx + 1} and beyond")
+                self.logger.warning(
+                    f"Inserting variable {new_value[0]} at index {idx} will affect all references to variables {idx + 1} and beyond"
+                )
 
             try:
                 new_value[4] = literal_eval(new_value[4])
@@ -1113,9 +1251,10 @@ class BehaviorEditor(GraphEditor):
                     "An event named '%s' already exists (%d)", new_value, idx
                 )
 
-            if idx not in (-1, len(self.beh._variables)):
-                # TODO show warning dialog listing affected variables
-                pass
+            if idx not in (-1, len(self.beh._events)):
+                self.logger.warning(
+                    f"Inserting event {new_value[0]} at index {idx} will affect all references to events {idx + 1} and beyond"
+                )
 
             self.beh.create_event(new_value, idx)
             undo_manager.on_create_event(self.beh, new_value, idx)
@@ -1160,6 +1299,11 @@ class BehaviorEditor(GraphEditor):
             if self.beh.find_animation(new_value, None):
                 self.logger.warning(
                     "An animation named '%s' already exists (%d)", new_value, idx
+                )
+
+            if idx not in (-1, len(self.beh._animations)):
+                self.logger.warning(
+                    f"Inserting animation {new_value[0]} at index {idx} will affect all references to animations {idx + 1} and beyond"
                 )
 
             self.beh.create_animation(new_value, idx)

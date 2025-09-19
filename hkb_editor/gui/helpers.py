@@ -10,6 +10,7 @@ import pyperclip
 from natsort import natsorted
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord
+from hkb_editor.hkb.xml import xml_to_str
 from hkb_editor.templates.common import (
     CommonActionsMixin,
     Variable,
@@ -317,6 +318,8 @@ def create_value_widget(
 def make_copy_menu(
     record_or_getter: HkbRecord | Callable[[], HkbRecord], *, tag: str = 0
 ) -> str:
+    from hkb_editor.gui.workflows.clone_hierarchy import copy_hierarchy
+
     if tag in (None, 0, ""):
         tag = dpg.generate_uuid()
 
@@ -326,6 +329,17 @@ def make_copy_menu(
         getter_func = record_or_getter
 
     with dpg.menu(label="Copy", tag=tag):
+        dpg.add_selectable(
+            label="XML",
+            callback=lambda: pyperclip.copy(xml_to_str(getter_func().as_object())),
+        )
+        dpg.add_selectable(
+            label="Hierarchy",
+            callback=lambda: pyperclip.copy(copy_hierarchy(getter_func())),
+        )
+
+        dpg.add_separator()
+
         dpg.add_selectable(
             label="ID",
             callback=lambda: pyperclip.copy(getter_func().object_id),
@@ -343,10 +357,6 @@ def make_copy_menu(
         dpg.add_selectable(
             label="Type ID",
             callback=lambda: pyperclip.copy(getter_func().type_id),
-        )
-        dpg.add_selectable(
-            label="XML",
-            callback=lambda: pyperclip.copy(getter_func().xml()),
         )
 
     return tag
@@ -529,8 +539,8 @@ def add_paragraphs(
             line = line.strip()
 
             if section_type == "```":
-                # If we are in a code block section, ignore all formatting cases 
-                # and simply add to the paragraph (or place the paragraph once we 
+                # If we are in a code block section, ignore all formatting cases
+                # and simply add to the paragraph (or place the paragraph once we
                 # reach the code block end)
                 if line.startswith("```"):
                     place_paragraph()
@@ -580,7 +590,7 @@ def add_paragraphs(
                     # If this is the second empty line end the section
                     dpg.pop_container_stack()
                     has_sections = False
-                
+
                 # End the previous section whatever it was
                 section_type = ""
 
@@ -652,7 +662,9 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
     dpg.reorder_items(sender, 1, rows)
 
 
-def common_loading_indicator(label: str, color: tuple[int, int, int, int] = style.red) -> str:
+def common_loading_indicator(
+    label: str, color: tuple[int, int, int, int] = style.red
+) -> str:
     with dpg.window(
         modal=True,
         min_size=(50, 20),

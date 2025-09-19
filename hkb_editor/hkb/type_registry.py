@@ -144,7 +144,7 @@ class TypeRegistry:
     @cache
     def get_compatible_types(self, type_id: str) -> list[str]:
         parents = [type_id]
-        res = []
+        res = [type_id]
 
         while parents:
             p = parents.pop()

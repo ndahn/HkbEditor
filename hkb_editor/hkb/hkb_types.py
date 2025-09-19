@@ -413,7 +413,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
     def append(self, value: T | Any) -> T:
         """Add a new item to this array.
 
-        NOTE: this will ALWAYS create a new object inside the array, even if the passed 
+        NOTE: this will ALWAYS create a new object inside the array, even if the passed
         value could be used as it is. This is to avoid unintentionally moving parts of the
         xml structure around.
 
@@ -491,6 +491,15 @@ class HkbRecord(XmlValueHandler):
         return record
 
     @classmethod
+    def init_from_xml(
+        self, tagfile: Tagfile, type_id: str, xml: ET.Element, object_id: str = None
+    ) -> "HkbRecord":
+        obj = HkbRecord.new(tagfile, type_id, None, object_id)
+        tmp = HkbRecord.from_object(tagfile, xml)
+        obj.set_value(tmp)
+        return obj
+
+    @classmethod
     def from_object(self, tagfile: Tagfile, element: ET._Element) -> "HkbRecord":
         record = element.find("record")
         type_id = element.get("typeid")
@@ -522,6 +531,9 @@ class HkbRecord(XmlValueHandler):
     def set_value(self, values: "HkbRecord | dict[str, XmlValueHandler]") -> None:
         if isinstance(values, HkbRecord):
             values = values.get_value()
+
+        if not isinstance(values, Mapping):
+            raise ValueError(f"Expected HkbRecord or Mapping, but got {values}")
 
         # values may have extra or missing values, so we go from our known fields
         for field in self._fields.keys():
@@ -668,7 +680,10 @@ class HkbRecord(XmlValueHandler):
         return ret
 
     def find_fields_by_type(
-        self, field_type: T
+        self,
+        field_type: T,
+        *,
+        delve_arrays: bool = True,
     ) -> Generator[tuple[str, T], None, None]:
         todo: list[tuple[HkbRecord, str]] = [(self, "")]
 
@@ -692,7 +707,7 @@ class HkbRecord(XmlValueHandler):
                 if isinstance(field, HkbRecord):
                     todo.append((field, field_path))
 
-                elif isinstance(field, HkbArray):
+                elif delve_arrays and isinstance(field, HkbArray):
                     element_type = field.get_item_wrapper()
                     if element_type == field_type:
                         for i, item in enumerate(field):

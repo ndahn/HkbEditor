@@ -43,6 +43,20 @@ def get_xml_parser() -> ET.XMLParser:
     return parser
 
 
+def xml_from_str(xml: str) -> ET.Element:
+    parser = get_xml_parser()
+    return ET.fromstring(xml, parser=parser)
+
+
+def xml_from_file(path: str) -> ET.Element:
+    parser = get_xml_parser()
+    return ET.parse(path, parser=parser)
+
+
+def xml_to_str(xml: ET.Element) -> str:
+    return ET.tostring(xml, pretty_print=True, encoding="unicode")
+
+
 def add_type_comments(root: ET.Element, tagfile: "Tagfile") -> None:
     for el in root.findall(".//object"):
         oid = el.get("id")
