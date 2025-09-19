@@ -19,6 +19,7 @@ from hkb_editor.hkb.hkb_types import (
 )
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
+from hkb_editor.hkb.xml import find_hollowed_objects
 from hkb_editor.templates.glue import get_templates
 
 from hkb_editor.external import (
@@ -136,7 +137,7 @@ class BehaviorEditor(GraphEditor):
             self.logger.error(f"File not found: {file_path}")
             self.config.remove_recent_file(file_path)
             self.config.save()
-            
+
             self._regenerate_recent_files_menu()
             return
 
@@ -215,6 +216,13 @@ class BehaviorEditor(GraphEditor):
 
     def _do_write_to_file(self, file_path):
         loading = common_loading_indicator("Saving")
+
+        hollow = find_hollowed_objects(self.beh._tree)
+        if hollow:
+            hollow_ids = [x.get("id") for x in hollow]
+            self.logger.critical(
+                f"The xml structure contains hollow object tags and is most likely broken. Please report this to Managarm! The following objects are affected: {hollow_ids}"
+            )
 
         try:
             if self.config.save_backups:
@@ -454,7 +462,8 @@ class BehaviorEditor(GraphEditor):
             )
 
             dpg.add_menu_item(
-                label="Generate Bone Mirror Map...", callback=self.open_bone_mirror_map_dialog
+                label="Generate Bone Mirror Map...",
+                callback=self.open_bone_mirror_map_dialog,
             )
 
         # Templates
@@ -505,7 +514,7 @@ class BehaviorEditor(GraphEditor):
 
     def _regenerate_recent_files_menu(self) -> None:
         dpg.delete_item(f"{self.tag}_menu_recent_files", slot=1, children_only=True)
-        #dpg.split_frame()
+        # dpg.split_frame()
 
         def load_file(sender: str, app_data: Any, file_path: str) -> None:
             if self.beh:
@@ -700,10 +709,10 @@ class BehaviorEditor(GraphEditor):
     @property
     def pinned_objects(self) -> list[str]:
         ret = []
-        
+
         for row in dpg.get_item_children(f"{self.tag}_pinned_objects_table", slot=1):
             ret.append(dpg.get_item_user_data(row))
-        
+
         return ret
 
     def add_pinned_object(self, object_id: HkbRecord | str) -> None:
@@ -867,8 +876,8 @@ class BehaviorEditor(GraphEditor):
                 self.beh.delete_object(record.object_id)
                 undo_manager.on_delete_object(self.beh, record)
 
-                # Update any pointers that are referencing the deleted object. We could use 
-                # HavokBehavior.find_referees, but using the graph is much more efficient 
+                # Update any pointers that are referencing the deleted object. We could use
+                # HavokBehavior.find_referees, but using the graph is much more efficient
                 for parent_id in self.canvas.graph.predecessors(record.object_id):
                     parent = self.beh.objects[parent_id]
                     for _, ptr in parent.find_fields_by_type(HkbPointer):
@@ -952,7 +961,8 @@ class BehaviorEditor(GraphEditor):
             return obj
 
         return next(
-            (sm for sm in self.beh.find_hierarchy_parent_for(for_object_id, sm_type)), None
+            (sm for sm in self.beh.find_hierarchy_parent_for(for_object_id, sm_type)),
+            None,
         )
 
     def find_lost_objects(self) -> list[str]:
@@ -988,14 +998,21 @@ class BehaviorEditor(GraphEditor):
         if isinstance(object_id, HkbRecord):
             object_id = object_id.object_id
 
-        # Open the associated state machine
-        root = self.get_active_statemachine(object_id)
+        root = self.get_active_statemachine()
+        if root:
+            # Check if the object is in the already active state machine first
+            if not next(self.beh.query(object_id, search_root=root), None):
+                root = None
 
         if not root:
-            self.logger.info("Object %s is not part of any StateMachine", object_id)
-            return
+            # Find the (first) statemachine the object appears in
+            root = self.get_active_statemachine(object_id)
 
-        self._on_root_selected("", True, root.object_id)
+            if not root:
+                self.logger.info("Object %s is not part of any statemachine", object_id)
+                return
+
+            self._on_root_selected("", True, root.object_id)
 
         # Reveal the node in the state machine graph
         path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
@@ -1310,8 +1327,8 @@ class BehaviorEditor(GraphEditor):
             self.logger.error("Loading bone names failed: %s", e, exc_info=True)
 
     def open_hierarchy_import_dialog(self):
-        file_path = (
-            open_file_dialog(title="Select Hierarchy", filetypes={"Hierarchy": "*.xml"})
+        file_path = open_file_dialog(
+            title="Select Hierarchy", filetypes={"Hierarchy": "*.xml"}
         )
 
         if not file_path:
@@ -1331,7 +1348,7 @@ class BehaviorEditor(GraphEditor):
                     self.add_pinned_object(obj)
 
         import_hierarchy(self.beh, xml, on_import)
-        
+
         self.regenerate_canvas()
 
     def open_bone_mirror_map_dialog(self):
