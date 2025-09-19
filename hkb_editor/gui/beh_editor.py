@@ -948,9 +948,6 @@ class BehaviorEditor(GraphEditor):
                     callback=attach_from_xml,
                     user_data=obj,
                 )
-
-                dpg.add_separator()
-
                 dpg.add_selectable(
                     label="Hierarchy",
                     callback=attach_hierarchy,
