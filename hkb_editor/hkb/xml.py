@@ -62,7 +62,3 @@ def add_type_comments(root: ET.Element, tagfile: "Tagfile") -> None:
         oid = el.get("id")
         type_name = tagfile.objects[oid].type_name
         el.insert(0, ET.Comment(type_name))
-
-
-def find_hollowed_objects(root: ET.Element) -> list[ET.Element]:
-    return root.xpath(".//object[not(.//record)]")

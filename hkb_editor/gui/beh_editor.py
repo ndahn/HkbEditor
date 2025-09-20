@@ -20,7 +20,7 @@ from hkb_editor.hkb.hkb_types import (
 )
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
-from hkb_editor.hkb.xml import find_hollowed_objects, xml_from_str
+from hkb_editor.hkb.xml import xml_from_str
 from hkb_editor.templates.glue import get_templates
 
 from hkb_editor.external import (
@@ -51,7 +51,8 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
-from .workflows.clone_hierarchy import copy_hierarchy, import_hierarchy, paste_hierarchy
+from .workflows.clone_hierarchy import import_hierarchy, paste_hierarchy
+from .workflows.validate_behavior import validate_behavior
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
@@ -217,13 +218,6 @@ class BehaviorEditor(GraphEditor):
 
     def _do_write_to_file(self, file_path):
         loading = common_loading_indicator("Saving")
-
-        hollow = find_hollowed_objects(self.beh._tree)
-        if hollow:
-            hollow_ids = [x.get("id") for x in hollow]
-            self.logger.critical(
-                f"The xml structure contains hollow object tags and is most likely broken. Please report this to Managarm! The following objects are affected: {hollow_ids}"
-            )
 
         try:
             if self.config.save_backups:
@@ -465,6 +459,13 @@ class BehaviorEditor(GraphEditor):
             dpg.add_menu_item(
                 label="Generate Bone Mirror Map...",
                 callback=self.open_bone_mirror_map_dialog,
+            )
+
+            dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="Check Behavior...",
+                callback=self.validate_behavior,
             )
 
         # Templates
@@ -1541,6 +1542,15 @@ class BehaviorEditor(GraphEditor):
             return
 
         bone_mirror_dialog(self.loaded_skeleton_path, tag=tag)
+
+    def validate_behavior(self):
+        loading = common_loading_indicator("Validating behavior...")
+        try:
+            validate_behavior(self.beh)
+            # TODO summary dialog?
+            logging.info("Validation complete, check log for results!")
+        finally:
+            dpg.delete_item(loading)
 
     def open_apply_template_dialog(self, template_file: str):
         tag = f"{self.tag}_apply_template_dialog"
