@@ -113,7 +113,7 @@ def copy_hierarchy(root_obj: HkbRecord) -> str:
     if root_obj.type_name == "hkbStateMachine::StateInfo":
         # Include the wildcard transition info
         sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
-        root_sm = next(behavior.find_hierarchy_parent_for(root_obj, sm_type))
+        root_sm = next(behavior.find_hierarchy_parents_for(root_obj, sm_type))
         transition_info: HkbRecord = root_sm["wildcardTransitions"].get_target()
         state_id = root_obj["stateId"].get_value()
 
@@ -410,7 +410,7 @@ def find_conflicts(
     if target_record.type_id == sm_type:
         target_sm = target_record
     else:
-        target_sm = next(behavior.find_hierarchy_parent_for(target_record, sm_type))
+        target_sm = next(behavior.find_hierarchy_parents_for(target_record, sm_type))
 
     logger = logging.getLogger()
     mismatching_types = set()
@@ -717,7 +717,7 @@ def resolve_conflicts(
     if target_record.type_id == sm_type:
         target_sm = target_record
     else:
-        target_sm = next(behavior.find_hierarchy_parent_for(target_record, sm_type))
+        target_sm = next(behavior.find_hierarchy_parents_for(target_record, sm_type))
 
     # Fix object references
     for object_id, resolution in hierarchy.objects.items():

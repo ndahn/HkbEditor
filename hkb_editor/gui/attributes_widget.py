@@ -1011,8 +1011,13 @@ class AttributesWidget:
         index = int(index)
         array: HkbArray = self.record.get_field(array_path)
 
-        old_value = array.pop(index)
-        undo_manager.on_update_array_item(array, index, old_value, None)
+        with undo_manager.combine():
+            old_value = array.pop(index)
+            undo_manager.on_update_array_item(array, index, old_value, None)
+            self.logger.info(f"Removed {self.record.object_id}/{item_path}")
+
+            if self.on_value_changed:
+                self.on_value_changed(widget, value, (value.get_value(), None))
 
         if index == 0 or index == len(array) -1:
             dpg.delete_item(f"{self.tag}_attribute_{item_path}")

@@ -324,7 +324,7 @@ class BehaviorEditor(GraphEditor):
             if oid not in self.beh.objects:
                 self.remove_pinned_object(oid)
 
-        self.regenerate_canvas()
+        self.regenerate()
         self.attributes_widget.regenerate()
 
     def redo(self) -> None:
@@ -334,7 +334,7 @@ class BehaviorEditor(GraphEditor):
         self.logger.info(f"Redo: {undo_manager.top()}")
         undo_manager.redo()
 
-        self.regenerate_canvas()
+        self.regenerate()
         self.attributes_widget.regenerate()
 
     def create_app_menu(self):
@@ -666,7 +666,7 @@ class BehaviorEditor(GraphEditor):
             self.attributes_widget = AttributesWidget(
                 self.alias_manager,
                 jump_callback=self.jump_to_object,
-                on_graph_changed=self.regenerate_canvas,
+                on_graph_changed=self.regenerate,
                 on_value_changed=self._on_value_changed,
                 pin_object_callback=self.add_pinned_object,
                 tag=f"{self.tag}_attributes_widget",
@@ -859,7 +859,7 @@ class BehaviorEditor(GraphEditor):
 
             self.logger.info(f"Attached {new_obj} to {target_obj}")
 
-            self.regenerate_canvas()
+            self.regenerate()
             canvas_node = self.canvas.nodes[new_obj.object_id]
             self.on_node_selected(canvas_node)
 
@@ -928,7 +928,7 @@ class BehaviorEditor(GraphEditor):
                     for obj in new_objects:
                         self.add_pinned_object(obj)
 
-                self.regenerate_canvas()
+                self.regenerate()
 
             paste_hierarchy(self.beh, target_ptr, xml, on_merge_success)
 
@@ -1010,23 +1010,29 @@ class BehaviorEditor(GraphEditor):
         record = self.beh.objects.get(node.id)
         if record:
             with undo_manager.combine():
+                # Delete the object last so that any code running before can still inspect it
                 self.beh.delete_object(record.object_id)
                 undo_manager.on_delete_object(self.beh, record)
 
                 # Update any pointers that are referencing the deleted object. We could use
                 # HavokBehavior.find_referees, but using the graph is much more efficient
+                first_parent = None
                 for parent_id in self.canvas.graph.predecessors(record.object_id):
+                    if not first_parent:
+                        first_parent = parent_id
+
                     parent = self.beh.objects[parent_id]
                     for _, ptr in parent.find_fields_by_type(HkbPointer):
                         if ptr.get_value() == node.id:
                             ptr.set_value(None)
                             undo_manager.on_update_value(ptr, record.object_id, None)
+                            self._on_value_changed(None, ptr, (node.id, None))
 
-                parent = next(self.canvas.graph.predecessors(record.object_id), None)
-                if parent:
-                    self.selected_node = self.canvas.nodes[parent]
 
-                self.regenerate_canvas()
+                if first_parent:
+                    self.selected_node = self.canvas.nodes[first_parent]
+
+                self.regenerate()
 
     def _copy_to_clipboard(self, data: str) -> None:
         try:
@@ -1045,23 +1051,57 @@ class BehaviorEditor(GraphEditor):
 
         if isinstance(handler, HkbPointer):
             if old_value:
-                # Could be an entirely new pointer object with no previous value
-                self.add_pinned_object(old_value)
-                self.logger.info("Pinned previous object %s", old_value)
+                oid = (
+                    old_value.object_id
+                    if isinstance(old_value, HkbRecord)
+                    else old_value
+                )
 
-            if new_value not in self.canvas.nodes:
-                # Edges have changed, previous node may not be connected anymore, new
-                # node may not be part of the current statemachine graph yet, ...
-                self.regenerate_canvas()
-            else:
-                # Changing a pointer will change the rendered graph
-                self.canvas.regenerate()
+                if oid in self.beh.objects:
+                    # Could be an entirely new pointer object with no previous value
+                    self.add_pinned_object(old_value)
+                    self.logger.info("Pinned previous object %s", old_value)
+
+            # If a StateInfo pointer was removed from a statemachine we need to clean up
+            # the wildcard transitions
+            if (
+                old_value
+                and new_value is None
+                and handler.subtype_name == "hkbStateMachine::StateInfo"
+            ):
+                old_id = old_value.object_id if isinstance(old_value, HkbRecord) else old_value
+                target_sm_id = next(self.canvas.graph.predecessors(old_id))
+                target_sm = self.beh.objects[target_sm_id]
+                state_ids = set()
+
+                for state_ptr in target_sm["states"]:
+                    state_info = state_ptr.get_target()
+                    if state_info:
+                        state_ids.add(state_info["stateId"].get_value())
+
+                transition_info = target_sm["wildcardTransitions"].get_target()
+                transitions: HkbArray = transition_info["transitions"]
+                invalid = []
+
+                for trans_idx, trans in enumerate(transitions):
+                    if trans["toStateId"].get_value() not in state_ids:
+                        invalid.append(trans_idx)
+
+                for invalid_idx in reversed(sorted(invalid)):
+                    trans = transitions.pop(invalid_idx)
+                    invalid_state_id = trans["toStateId"].get_value()
+                    undo_manager.on_update_array_item(
+                        transitions, trans_idx, trans, None
+                    )
+                    self.logger.info(
+                        f"Deleted obsolete wildcard transition {trans_idx} for state {invalid_state_id}"
+                    )
 
     def _update_attributes(self, node):
         record = self.beh.objects[node.id]
         self.attributes_widget.set_record(record)
 
-    def regenerate_canvas(self) -> None:
+    def regenerate(self) -> None:
         sm = self.get_active_statemachine()
 
         if not sm:
@@ -1094,7 +1134,7 @@ class BehaviorEditor(GraphEditor):
             return obj
 
         return next(
-            (sm for sm in self.beh.find_hierarchy_parent_for(for_object_id, sm_type)),
+            (sm for sm in self.beh.find_hierarchy_parents_for(for_object_id, sm_type)),
             None,
         )
 
@@ -1491,7 +1531,7 @@ class BehaviorEditor(GraphEditor):
 
         import_hierarchy(self.beh, xml, on_import)
 
-        self.regenerate_canvas()
+        self.regenerate()
 
     def open_bone_mirror_map_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"

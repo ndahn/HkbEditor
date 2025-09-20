@@ -166,7 +166,7 @@ class Tagfile:
             if obj.type_id in compatible:
                 yield obj
 
-    def find_hierarchy_parent_for(
+    def find_hierarchy_parents_for(
         self, object_id: "HkbRecord | str", parent_type: str
     ) -> Generator["HkbRecord", None, None]:
         from .hkb_types import HkbRecord
