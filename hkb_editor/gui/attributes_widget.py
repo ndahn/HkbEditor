@@ -701,9 +701,9 @@ class AttributesWidget:
 
         # Create a context menu for the widget
         with dpg.popup(widget):
-            dpg.add_text(path.split("/")[-1])
+            dpg.add_text(path.split("/")[-1], color=style.light_grey)
             type_name = self.tagfile.type_registry.get_name(attribute.type_id)
-            dpg.add_text(f"<{type_name}>")
+            dpg.add_text(f"<{type_name}>", color=style.light_grey)
 
             if is_simple:
                 if bound_var_idx >= 0:
