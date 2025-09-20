@@ -758,16 +758,25 @@ class AttributesWidget:
                 callback=self._copy_value_path,
                 user_data=(widget, path, attribute),
             )
-            dpg.add_selectable(
-                label="Copy XML",
-                callback=self._copy_value_xml,
-                user_data=(widget, path, attribute),
-            )
+            # dpg.add_selectable(
+            #     label="Copy XML",
+            #     callback=self._copy_value_xml,
+            #     user_data=(widget, path, attribute),
+            # )
             dpg.add_selectable(
                 label="Paste",
                 callback=self._paste_value,
                 user_data=(widget, path, attribute),
             )
+
+            # Array items can be deleted
+            if ":" in path.rsplit("/", maxsplit=1)[-1]:
+                dpg.add_separator()
+                dpg.add_selectable(
+                    label="Delete Item",
+                    callback=self._delete_array_item,
+                    user_data=(widget, path, attribute),
+                )
 
             if isinstance(attribute, HkbPointer):
 
@@ -992,6 +1001,26 @@ class AttributesWidget:
         except Exception as e:
             self.logger.error("Paste value to %s failed: %s", widget, e)
             return
+
+    def _delete_array_item(self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        widget, item_path, value = user_data
+        array_path, index = item_path.rsplit(":", maxsplit=1)
+        index = int(index)
+        array: HkbArray = self.record.get_field(array_path)
+
+        old_value = array.pop(index)
+        undo_manager.on_update_array_item(array, index, old_value, None)
+
+        if index == 0 or index == len(array) -1:
+            dpg.delete_item(f"{self.tag}_attribute_{item_path}")
+        else:
+            self.regenerate()
+
+        if self.on_graph_changed and isinstance(value, HkbPointer):
+            self.on_graph_changed()
 
     def _paste_hierarchy(self, sender, app_data, pointer: HkbPointer) -> None:
         data = pyperclip.paste()
