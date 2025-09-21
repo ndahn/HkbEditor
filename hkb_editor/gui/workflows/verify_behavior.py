@@ -71,13 +71,23 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
             if array.is_pointer_array:
                 for ptr in array:
                     if not ptr.is_set():
-                        logger.error(f"Pointer array {obj.object_id}/{path} contains null-pointers")
+                        # Will cause the game to crash if it's a statemachine
+                        logger.warning(f"Pointer array {obj.object_id}/{path} contains null-pointers")
                         break
 
 
-def check_abandoned_objects(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
-    # TODO
-    pass
+def check_graph(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
+    logger = root_logger.getChild("attributes")
+
+    root = behavior.find_first_by_type_name("hkRootLevelContainer")
+    #root_sm: HkbRecord = behavior_graph["rootGenerator"].get_target()
+    g = behavior.build_graph(root.object_id)
+
+    unmapped_ids = set(behavior.objects.keys()).difference(g.nodes)
+    abandoned = [behavior.objects[oid] for oid in unmapped_ids]
+
+    if abandoned:
+        logger.warning(f"The following objects are currently unmapped: {[str(o) for o in abandoned]}")
 
 
 def verify_behavior(behavior: HavokBehavior) -> None:
@@ -86,4 +96,4 @@ def verify_behavior(behavior: HavokBehavior) -> None:
     check_xml(behavior, logger)
     check_statemachines(behavior, logger)
     check_attributes(behavior, logger)
-    check_abandoned_objects(behavior, logger)
+    check_graph(behavior, logger)

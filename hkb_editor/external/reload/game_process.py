@@ -142,10 +142,7 @@ class MemoryManager:
             self._find_crash_patch_location(scanner)
 
         except Exception as e:
-            self.logger.error(f"Error scanning patterns: {e}")
-            import traceback
-
-            traceback.print_exc()
+            self.logger.error(f"Error scanning patterns: {e}", exc_info=True)
 
     def _get_module_size(self) -> int:
         """Get the actual size of the main module, or return a default."""
@@ -161,7 +158,7 @@ class MemoryManager:
                     if start_addr == self.base_address:
                         return end_addr - start_addr
         except Exception as e:
-            self.logger.error(f"Could not get module size: {e}")
+            self.logger.debug(f"Could not get module size: {e}")
 
         return 0x10000000  # Default large size
 
