@@ -52,7 +52,7 @@ from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
 from .workflows.clone_hierarchy import import_hierarchy, paste_hierarchy
-from .workflows.validate_behavior import validate_behavior
+from .workflows.verify_behavior import verify_behavior
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
@@ -453,19 +453,19 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             dpg.add_menu_item(
+                label="Verify Behavior...",
+                callback=self.verify_behavior,
+            )
+
+            dpg.add_separator()
+
+            dpg.add_menu_item(
                 label="Import Hierarchy...", callback=self.open_hierarchy_import_dialog
             )
 
             dpg.add_menu_item(
                 label="Generate Bone Mirror Map...",
                 callback=self.open_bone_mirror_map_dialog,
-            )
-
-            dpg.add_separator()
-
-            dpg.add_menu_item(
-                label="Check Behavior...",
-                callback=self.validate_behavior,
             )
 
         # Templates
@@ -1543,10 +1543,10 @@ class BehaviorEditor(GraphEditor):
 
         bone_mirror_dialog(self.loaded_skeleton_path, tag=tag)
 
-    def validate_behavior(self):
+    def verify_behavior(self):
         loading = common_loading_indicator("Validating behavior...")
         try:
-            validate_behavior(self.beh)
+            verify_behavior(self.beh)
             # TODO summary dialog?
             logging.info("Validation complete, check log for results!")
         finally:

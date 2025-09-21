@@ -68,7 +68,7 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
 
 
 
-def validate_behavior(behavior: HavokBehavior) -> None:
+def verify_behavior(behavior: HavokBehavior) -> None:
     logger = logging.getLogger("verify")
     
     check_xml(behavior, logger)

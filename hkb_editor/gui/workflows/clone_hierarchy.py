@@ -302,19 +302,12 @@ def import_hierarchy(
         target_pointers = []
 
         for info in references:
-            if len(info) == 2:
-                # v0.9.2
-                oid, path = info
-                type_name = name = None
-            else:
-                # v0.9.3+
-                oid, type_name, name, path = references
-
+            oid, type_name, name, path = info
             target_obj = resolve_target(oid, type_name, name)
             target_ptr = get_target_pointer(target_obj, path)
 
             if target_ptr:
-                references.append(target_ptr)
+                target_pointers.append(target_ptr)
 
         if not target_pointers:
             logger.warning("Reference analysis did not result in any targets")
