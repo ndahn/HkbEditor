@@ -839,7 +839,6 @@ def resolve_conflicts(
             transition["toStateId"].set_value(new_state_id)
 
             wildcard_transitions = target_sm["wildcardTransitions"].get_target()
-            print("###", target_sm["wildcardTransitions"], target_sm["name"].get_value())
             # if not wildcard_transitions:
             #     wildcards_type = target_sm["wildcardTransitions"].subtype_id
             #     wildcard_transitions = HkbRecord.new(

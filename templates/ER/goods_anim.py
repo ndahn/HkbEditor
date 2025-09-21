@@ -6,7 +6,7 @@ from hkb_editor.hkb.hkb_enums import (
     hkbClipGenerator_PlaybackMode as PlaybackMode,
 )
 from hkb_editor.hkb.hkb_flags import (
-    hkbStateMachine_TransitionInfo_Flags as TransitionFlags,
+    hkbStateMachine_TransitionInfoArray_Flags as TransitionFlags,
 )
 
 

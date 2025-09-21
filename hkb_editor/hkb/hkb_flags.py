@@ -21,7 +21,7 @@ class hkbClipGenerator_Flags(IntFlag):
     IGNORE_MOTION = 32
 
 
-class hkbStateMachine_TransitionInfo_Flags(IntFlag):
+class hkbStateMachine_TransitionInfoArray_Flags(IntFlag):
     NONE = 0
     USE_TRIGGER_INTERVAL = 1
     USE_INITIATE_INTERVAL = 2
@@ -97,5 +97,6 @@ def get_hkb_flags(
         # Seems consistent so far
         return None
 
-    flags_name = type_registry.get_name(record_type_id).replace("::", "_") + "_Flags"
+    type_name = type_registry.get_name(record_type_id)
+    flags_name = type_name.replace("::", "_") + "_Flags"
     return globals().get(flags_name, None)

@@ -8,7 +8,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
 )
 from hkb_editor.hkb.hkb_flags import (
-    hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
+    hkbStateMachine_TransitionInfoArray_Flags as TransitionInfoFlags,
 )
 from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui.workflows.undo import undo_manager

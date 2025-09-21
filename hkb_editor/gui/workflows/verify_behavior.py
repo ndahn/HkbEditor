@@ -66,6 +66,18 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
             if target_id and target_id not in behavior.objects:
                 logger.warning(f"Pointer {obj.object_id}/{path} has non-existing target {target_id}")
 
+        array: HkbArray
+        for path, array in obj.find_fields_by_type(HkbArray):
+            if array.is_pointer_array:
+                for ptr in array:
+                    if not ptr.is_set():
+                        logger.error(f"Pointer array {obj.object_id}/{path} contains null-pointers")
+                        break
+
+
+def check_abandoned_objects(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
+    # TODO
+    pass
 
 
 def verify_behavior(behavior: HavokBehavior) -> None:
@@ -74,3 +86,4 @@ def verify_behavior(behavior: HavokBehavior) -> None:
     check_xml(behavior, logger)
     check_statemachines(behavior, logger)
     check_attributes(behavior, logger)
+    check_abandoned_objects(behavior, logger)

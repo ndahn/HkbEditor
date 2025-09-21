@@ -15,7 +15,7 @@ from hkb_editor.hkb.hkb_enums import (
     hkbVariableInfo_VariableType as VariableType,
 )
 from hkb_editor.hkb.hkb_flags import (
-    hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
+    hkbStateMachine_TransitionInfoArray_Flags as TransitionInfoFlags,
     hkbLayerGenerator_Flags as LayerGeneratorFlags,
 )
 

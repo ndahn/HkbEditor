@@ -68,6 +68,7 @@ class BehaviorEditor(GraphEditor):
         logging.root.addHandler(LogHandler())
 
         self.beh: HavokBehavior = None
+        self._busy = False
         self.alias_manager = AliasManager()
         self.attributes_widget: AttributesWidget = None
         self.pinned_objects_table: str = None
@@ -217,6 +218,10 @@ class BehaviorEditor(GraphEditor):
             dpg.delete_item(loading_screen)
 
     def _do_write_to_file(self, file_path):
+        if self._busy:
+            return
+        
+        self._busy = True
         loading = common_loading_indicator("Saving")
 
         try:
@@ -227,6 +232,7 @@ class BehaviorEditor(GraphEditor):
             self.logger.info(f"Saved to {file_path}")
         finally:
             dpg.delete_item(loading)
+            self._busy = False
 
     def _locate_witchy(self) -> str:
         if not self.config.witchy_exe or not os.path.isfile(self.config.witchy_exe):
@@ -255,20 +261,30 @@ class BehaviorEditor(GraphEditor):
         return self.config.hklib_exe
 
     def _reload_character(self) -> None:
-        if not self.chr_reloader:
-            self.chr_reloader = ChrReloader()
-
+        if self._busy:
+            return
+        
+        self._busy = True
         chr = self.beh.get_character_id()
         loading = common_loading_indicator(f"Reloading {chr}...")
 
         try:
+            if not self.chr_reloader:
+                self.chr_reloader = ChrReloader()
+
             self.chr_reloader.reload_character(chr)
         except Exception as e:
             self.logger.error(f"Reloading {chr} failed: {e}")
         finally:
             dpg.delete_item(loading)
+            self._busy = False
 
     def _repack_binder(self) -> None:
+        if self._busy:
+            return
+        
+        self._busy = True
+
         # Locate external tools
         self._locate_witchy()
         self._locate_hklib()
@@ -276,6 +292,8 @@ class BehaviorEditor(GraphEditor):
         loading = common_loading_indicator("Repacking binder...")
 
         try:
+            self.logger.info("Saving XML...")
+            self.file_save()
             self.logger.info("Converting XML to HKX...")
             xml_to_hkx(self.beh.file)
             self.logger.info("Repacking Binder...")
@@ -283,6 +301,7 @@ class BehaviorEditor(GraphEditor):
             self.logger.info("Done!")
         finally:
             dpg.delete_item(loading)
+            self._busy = False
 
     def exit_app(self):
         with dpg.window(
@@ -1544,13 +1563,19 @@ class BehaviorEditor(GraphEditor):
         bone_mirror_dialog(self.loaded_skeleton_path, tag=tag)
 
     def verify_behavior(self):
+        if self._busy:
+            return
+        
+        self._busy = True
         loading = common_loading_indicator("Validating behavior...")
+
         try:
             verify_behavior(self.beh)
             # TODO summary dialog?
             logging.info("Validation complete, check log for results!")
         finally:
             dpg.delete_item(loading)
+            self._busy = False
 
     def open_apply_template_dialog(self, template_file: str):
         tag = f"{self.tag}_apply_template_dialog"

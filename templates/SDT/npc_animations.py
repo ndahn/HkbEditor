@@ -4,7 +4,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
     CustomManualSelectorGenerator_ChangeTypeOfSelectedIndexAfterActivate as ChangeIndexType,
 )
-from hkb_editor.hkb.hkb_flags import hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags
+from hkb_editor.hkb.hkb_flags import hkbStateMachine_TransitionInfoArray_Flags as TransitionInfoFlags
 
 
 def run(

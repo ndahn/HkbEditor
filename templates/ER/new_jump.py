@@ -10,7 +10,7 @@ from hkb_editor.hkb.hkb_enums import (
     hkbBlendCurveUtils_BlendCurve as BlendCurve,
 )
 from hkb_editor.hkb.hkb_flags import (
-    hkbStateMachine_TransitionInfo_Flags as TransitionInfoFlags,
+    hkbStateMachine_TransitionInfoArray_Flags as TransitionInfoFlags,
 )
 
 
