@@ -113,8 +113,7 @@ def register_clip_dialog(
             generators.append(clip.object_id)
             undo_manager.on_update_array_item(generators, -1, None, clip.object_id)
 
-            callback(dialog, (selected_cmsg, clip), user_data)
-            
+        callback(dialog, (selected_cmsg, clip), user_data)  
         dpg.delete_item(dialog)
 
     # Dialog content

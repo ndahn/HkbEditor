@@ -904,7 +904,6 @@ class AttributesWidget:
         undo_manager.on_update_value(handler, old_value, new_value)
 
         if self.on_value_changed:
-            old_value = handler.get_value()
             self.on_value_changed(sender, handler, (old_value, new_value))
 
         if sender and dpg.does_item_exist(sender):
@@ -1015,9 +1014,7 @@ class AttributesWidget:
             old_value = array.pop(index)
             undo_manager.on_update_array_item(array, index, old_value, None)
             self.logger.info(f"Removed {self.record.object_id}/{item_path}")
-
-            if self.on_value_changed:
-                self.on_value_changed(widget, value, (value.get_value(), None))
+            self._on_value_changed(sender, None, value)
 
         if index == 0 or index == len(array) -1:
             dpg.delete_item(f"{self.tag}_attribute_{item_path}")

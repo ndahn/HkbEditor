@@ -1488,6 +1488,8 @@ class BehaviorEditor(GraphEditor):
                 self.add_pinned_object(cmsg)
                 self.add_pinned_object(clip)
 
+            # Not sure why this is required here, but not for register_clip above
+            self.regenerate()
             self.jump_to_object(cmsg)
 
         active_sm = self.get_active_statemachine()
