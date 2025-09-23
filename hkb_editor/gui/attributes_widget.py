@@ -828,7 +828,7 @@ class AttributesWidget:
                 dpg.add_selectable(
                     label="Clone Hierarchy",
                     callback=self._paste_hierarchy,
-                    user_data=attribute,
+                    user_data=path,
                 )
 
                 if self.jump_callback:
@@ -1024,10 +1024,10 @@ class AttributesWidget:
         if self.on_graph_changed and isinstance(value, HkbPointer):
             self.on_graph_changed()
 
-    def _paste_hierarchy(self, sender, app_data, pointer: HkbPointer) -> None:
-        data = pyperclip.paste()
+    def _paste_hierarchy(self, sender, app_data, path: str) -> None:
+        xml = pyperclip.paste()
 
-        if not data.startswith("<behavior_hierarchy"):
+        if not xml.startswith("<behavior_hierarchy"):
             self.logger.error("Clipboard data is not a node hierarchy")
             return
 
@@ -1044,7 +1044,7 @@ class AttributesWidget:
             if self.on_graph_changed:
                 self.on_graph_changed()
 
-        paste_hierarchy(self.tagfile, pointer, data, on_hierarchy_merged)
+        paste_hierarchy(self.tagfile, xml, self.record, path, on_hierarchy_merged)
 
     def _copy_to_clipboard(self, data: str):
         try:

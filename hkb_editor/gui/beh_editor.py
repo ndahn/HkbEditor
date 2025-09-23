@@ -60,7 +60,7 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
-from .workflows.clone_hierarchy import import_hierarchy, paste_hierarchy
+from .workflows.clone_hierarchy import import_hierarchy, paste_hierarchy, paste_children
 from .workflows.verify_behavior import verify_behavior
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
@@ -896,7 +896,8 @@ class BehaviorEditor(GraphEditor):
             canvas_node = self.canvas.nodes[new_obj.object_id]
             self.on_node_selected(canvas_node)
 
-        def attach_new_object(sender: str, app_data: str, target_obj: XmlValueHandler):
+        def attach_new_object(sender: str, app_data: str, target: tuple[HkbRecord, str]):
+            target_obj = target[0]
             target_type_id = get_target_type_id(target_obj)
 
             create_object_dialog(
@@ -910,7 +911,8 @@ class BehaviorEditor(GraphEditor):
                 tag=f"{self.tag}_attach_new_object_{node.id}_{path}",
             )
 
-        def attach_from_xml(sender: str, app_data: str, target_obj: XmlValueHandler):
+        def attach_from_xml(sender: str, app_data: str, target: tuple[HkbRecord, str]):
+            target_obj = target[0]
             target_type_id = get_target_type_id(target_obj)
 
             try:
@@ -939,53 +941,61 @@ class BehaviorEditor(GraphEditor):
 
                 do_attach(target_obj, new_obj)
 
-        def attach_hierarchy(sender: str, app_data: str, target_obj: XmlValueHandler):
+        def attach_hierarchy(sender: str, app_data: str, target: tuple[HkbRecord, str], children_only: bool = False):
+            target_obj, target_path = target
             xml = pyperclip.paste()
 
-            if isinstance(target_obj, HkbPointer):
-                target_ptr = target_obj
-
-            elif isinstance(target_obj, HkbArray):
-                target_ptr: HkbPointer = target_obj.append(None)
-                undo_manager.on_update_array_item(target_obj, -1, None, ptr)
-
-            def on_merge_success(hierarchy):
+            def on_merge_success(result):
                 new_objects = [
-                    r.result for r in hierarchy.objects.values() if r.action == "<new>"
+                    r.result for r in result.objects.values() if r.action == "<new>"
                 ]
                 self.logger.info(
-                    f"Attached hierarchy of {len(new_objects)} elements to {target_ptr}"
+                    f"Attached hierarchy of {len(new_objects)} elements to {target_obj.object_id}/{target_path}"
                 )
 
-                if hierarchy.pin_objects:
+                if result.pin_objects:
                     for obj in new_objects:
                         self.add_pinned_object(obj)
 
                 self.regenerate()
 
-            paste_hierarchy(self.beh, target_ptr, xml, on_merge_success)
+            if children_only:
+                paste_children(self.beh, xml, target_obj, target_path, on_merge_success)
+            else:
+                paste_hierarchy(self.beh, xml, target_obj, target_path, on_merge_success)
+
+        def attach_children(sender: str, app_data: str, target: tuple[HkbRecord, str]):
+            attach_hierarchy(sender, app_data, target, True)
 
         def add_attach_menu_items(node: Node, path: str, obj: XmlValueHandler):
+            record = self.beh.objects[node.id]
             label = path
             if isinstance(obj, HkbArray):
-                label += " (append)"
+                label += " <array>"
 
             with dpg.menu(label=label):
                 dpg.add_selectable(
                     label="New Object",
                     callback=attach_new_object,
-                    user_data=obj,
+                    user_data=(record, path),
                 )
                 dpg.add_selectable(
                     label="From XML",
                     callback=attach_from_xml,
-                    user_data=obj,
+                    user_data=(record, path),
                 )
                 dpg.add_selectable(
                     label="Hierarchy",
                     callback=attach_hierarchy,
-                    user_data=obj,
+                    user_data=(record, path),
                 )
+            
+                if isinstance(obj, HkbArray):
+                    dpg.add_selectable(
+                        label="Children",
+                        callback=attach_children,
+                        user_data=(record, path),
+                    ) 
 
         with dpg.menu(label="Attach"):
             obj = self.beh.objects[node.id]

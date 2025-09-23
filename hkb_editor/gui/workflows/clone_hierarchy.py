@@ -40,14 +40,18 @@ class MergeHierarchy:
     animations: dict[int, Resolution] = field(default_factory=dict)
     type_map: dict[str, Resolution] = field(default_factory=dict)
     objects: dict[str, Resolution] = field(default_factory=dict)
-    state_ids: dict[str, Resolution] = field(default_factory=dict)
     pin_objects: bool = True
 
 
-def copy_hierarchy(root_obj: HkbRecord) -> str:
-    behavior = root_obj.tagfile
-    root_id = root_obj.object_id
-    g = behavior.build_graph(root_id)
+def copy_hierarchy(start_obj: HkbRecord) -> str:
+    behavior = start_obj.tagfile
+    start_id = start_obj.object_id
+
+    root = behavior.find_first_by_type_name("hkRootLevelContainer")
+    root_graph = behavior.build_graph(root.object_id)
+    hierarchy_graph = root_graph.subgraph(
+        {start_id} | nx.descendants(root_graph, start_id)
+    )
 
     root_meta: dict[str, list] = {}
     events: dict[int, str] = {}
@@ -56,7 +60,7 @@ def copy_hierarchy(root_obj: HkbRecord) -> str:
     objects: list[HkbRecord] = []
     type_map: dict[str, str] = {}
 
-    todo = [root_id]
+    todo = [start_id]
 
     while todo:
         oid = todo.pop()
@@ -96,26 +100,15 @@ def copy_hierarchy(root_obj: HkbRecord) -> str:
         for _, array in obj.find_fields_by_type(HkbArray):
             type_map[array.element_type_id] = array.element_type_name
 
-        todo.extend(g.successors(oid))
-
-    references = []
-
-    for obj, path, _ in behavior.find_references_to(root_id):
-        # If the path is into a pointer array we should ignore the item index
-        path = re.sub(r"/:[0-9]+$", "/:-1", path)
-        references.append((obj.object_id, obj.type_name, obj["name"].get_value(), path))
-
-    # Create using the parser so we can use our guarded xml element class
-    root = ET.fromstring(b"<behavior_hierarchy/>", get_xml_parser())
-    root.set("references", str(references))
+        todo.extend(hierarchy_graph.successors(oid))
 
     # The root object might need additional data to be merged correctly
-    if root_obj.type_name == "hkbStateMachine::StateInfo":
+    if start_obj.type_name == "hkbStateMachine::StateInfo":
         # Include the wildcard transition info
         sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
-        root_sm = next(behavior.find_hierarchy_parents_for(root_obj, sm_type))
+        root_sm = next(behavior.find_hierarchy_parents_for(start_obj, sm_type))
         transition_info: HkbRecord = root_sm["wildcardTransitions"].get_target()
-        state_id = root_obj["stateId"].get_value()
+        state_id = start_obj["stateId"].get_value()
 
         transition: HkbRecord
         for transition in transition_info["transitions"]:
@@ -136,14 +129,35 @@ def copy_hierarchy(root_obj: HkbRecord) -> str:
                 trans_event_name = behavior.get_event(trans_event_idx, None)
                 events[trans_event_idx] = trans_event_name
 
-    xml_root_meta = ET.SubElement(root, "root_meta", root_id=root_id)
-    xml_events = ET.SubElement(root, "events")
-    xml_variables = ET.SubElement(root, "variables")
-    xml_animations = ET.SubElement(root, "animations")
-    xml_types = ET.SubElement(root, "types")
-    xml_objects = ET.SubElement(root, "objects", graph=str(nx.to_edgelist(g)))
+    # Create using the parser so we can use our guarded xml element class
+    xml_root = ET.fromstring(b"<behavior_hierarchy/>", get_xml_parser())
+    xml_root_meta = ET.SubElement(xml_root, "root_meta", root_id=start_id)
+    xml_events = ET.SubElement(xml_root, "events")
+    xml_variables = ET.SubElement(xml_root, "variables")
+    xml_animations = ET.SubElement(xml_root, "animations")
+    xml_types = ET.SubElement(xml_root, "types")
+    xml_objects = ET.SubElement(
+        xml_root, "objects", graph=str(nx.to_edgelist(hierarchy_graph))
+    )
 
-    # Root meta
+    # Root Meta
+    # Find paths through the behavior graph that lead to the start object. This is the
+    # only reliable way of locating an object
+    root_paths = nx.all_shortest_paths(root_graph, root.object_id, start_id)
+    for path in root_paths:
+        chain = []
+        for idx, node_id in enumerate(path[:-1]):
+            obj: HkbRecord = behavior.objects[node_id]
+            next_id = path[idx + 1]
+            for attr_path, ptr in obj.find_fields_by_type(HkbPointer):
+                if ptr.get_value() == next_id:
+                    chain.append(attr_path)
+                    break
+
+        if chain:
+            ET.SubElement(xml_root_meta, "path").text = str(chain)
+
+    # Additional metadata for potentially reconstructing the root node
     for key, items in root_meta.items():
         meta_group = ET.SubElement(xml_root_meta, key)
 
@@ -187,9 +201,9 @@ def copy_hierarchy(root_obj: HkbRecord) -> str:
         # Be careful not to remove the object elements from their original xml doc!
         xml_objects.append(deepcopy(obj.as_object()))
 
-    add_type_comments(root, behavior)
-    ET.indent(root)
-    ret = ET.tostring(root, pretty_print=True, encoding="unicode")
+    add_type_comments(xml_root, behavior)
+    ET.indent(xml_root)
+    ret = ET.tostring(xml_root, pretty_print=True, encoding="unicode")
     logging.getLogger().info(f"Serialized {len(objects)} objects")
     return ret
 
@@ -206,92 +220,47 @@ def import_hierarchy(
     except Exception as e:
         raise ValueError(f"Failed to parse hierarchy: {e}")
 
-    root = xmldoc.find("objects").getchildren()[0]
-    root_id = root.get("id")
-
-    try:
-        references = literal_eval(xmldoc.get("references"))
-    except Exception as e:
-        raise ValueError(f"Could not parse references attribute: {e}")
-
-    if not references:
-        raise ValueError(
-            "Could not determine import target - try manually cloning the hierarchy"
-        )
-
+    root_id = xmldoc.find("root_meta").get("root_id")
     logger = logging.getLogger()
 
-    def resolve_target(
-        target_id: str, target_type_name: str, target_name: str
-    ) -> HkbRecord:
-        # Resolving by ID is fastest, try that first
-        obj = behavior.objects.get(target_id)
-        name = obj["name"].get_value()
+    def resolve_root_path(root_path: list[str]) -> HkbPointer:
+        target_obj = behavior_root
+        target_ptr: HkbPointer
 
-        if obj:
-            if (
-                target_type_name is not None
-                and obj.type_name == target_type_name
-                and name is not None
-                and name == target_name
-            ):
-                return obj
+        # Follow the chain
+        for path in root_path[-1]:
+            target_ptr = target_obj.get_field(path)
+            new_target_obj = target_ptr.get_target()
 
-        target_type_id = behavior.type_registry.find_first_type_by_name(
-            target_type_name
-        )
-        candidates = list(
-            behavior.query(f"typeid:'{target_type_id}' name:'{target_name}'")
-        )
-
-        if len(candidates) == 1:
-            return candidates[0]
-
-        if len(candidates) > 1:
-            raise ValueError(
-                f"Target object is ambiguous, candidates are: {candidates}"
-            )
-
-        raise ValueError(
-            f"Could not resolve target object (id={target_id}, type_name={target_type_name}, name={target_name})"
-        )
-
-    def get_target_pointer(target_obj: HkbRecord, target_path: str) -> HkbPointer:
-        if target_path.endswith("/:-1"):
-            target_array: HkbArray[HkbPointer] = target_obj.get_field(target_path[:-4])
-            if not target_array.is_pointer_array:
-                raise ValueError(f"Invalid target path {target_obj}/{target_path}")
-
-            for ptr in target_array:
-                if ptr.get_value() == root_id:
-                    logger.info(
-                        f"Hierarchy already present at {target_obj}/{target_path}"
-                    )
-                    return
-
-            target_ptr = target_array.append(None)
-            undo_manager.on_update_array_item(target_array, -1, None, target_ptr)
-
-            return target_ptr
-        else:
-            target_ptr = target_obj.get_field(target_path, None)
-            if not target_ptr or not isinstance(target_ptr, HkbPointer):
-                raise ValueError(
-                    f"Failed to resolve target path {target_obj}/{target_path}"
+            if new_target_obj is None:
+                logger.warning(
+                    f"Failed to resolve root path {target_obj}/{path}: target is None"
                 )
+                return None
 
-            return target_ptr
+            target_obj = new_target_obj
+
+        # Check if the last path component went into a pointer array. If so, append
+        # and return a new pointer.
+        target_path = root_path[-1]
+        if re.match(r"^.*:[0-9]+$", target_path):
+            target_path = target_path.rsplit(":", maxsplit=1)[0]
+
+        return target_obj, target_path
 
     def update_target_pointers(hierarchy: MergeHierarchy):
         hierarchy_root = hierarchy.objects[root_id]
         if not hierarchy_root.result or hierarchy_root.action != "<new>":
             return
 
-        new_root_id = hierarchy_root.result.object_id
+        target_id = hierarchy_root.result.object_id
 
-        for ptr in target_pointers:
+        for target_obj, target_path in targets:
             try:
-                ptr.set_value(new_root_id)
+                ptr: HkbPointer = target_obj.get_field(target_path)
+                old_value = ptr.get_value()
+                ptr.set_value(target_id)
+                undo_manager.on_update_value(ptr, old_value, target_id)
             except ValueError as e:
                 logger.warning(f"Pointer update failed: {e}")
 
@@ -299,33 +268,43 @@ def import_hierarchy(
             callback(hierarchy)
 
     with undo_manager.combine():
-        target_pointers = []
+        targets = []
 
-        for info in references:
-            oid, type_name, name, path = info
-            target_obj = resolve_target(oid, type_name, name)
-            target_ptr = get_target_pointer(target_obj, path)
+        behavior_root = behavior.find_first_by_type_name("hkRootLevelContainer")
 
-            if target_ptr:
-                target_pointers.append(target_ptr)
+        for path_elem in xmldoc.xpath(".//root_meta/path"):
+            try:
+                root_path: list[str] = literal_eval(path_elem.text)
+            except Exception:
+                logger.warning(f"Failed to parse root path {path_elem.text}")
+                continue
 
-        if not target_pointers:
+            target = resolve_root_path(root_path)
+            if target:
+                targets.append(target)
+
+        if not targets:
             logger.warning("Reference analysis did not result in any targets")
             return
 
+        target_obj, target_path = targets[0]
+
         paste_hierarchy(
             behavior,
-            target_pointers[0],
             xmldoc,
+            target_obj,
+            target_path,
             update_target_pointers,
+            children_only=False,
             interactive=interactive,
         )
 
 
 def paste_hierarchy(
     behavior: HavokBehavior,
-    target_pointer: HkbPointer,
     xml: str | ET._Element,
+    target_record: HkbRecord,
+    target_path: str,
     callback: Callable[[MergeHierarchy], None] = None,
     *,
     interactive: bool = True,
@@ -345,29 +324,35 @@ def paste_hierarchy(
     root_type = xmldoc.xpath(f".//object[@id='{root_id}']")[0].get("typeid")
     root_type_name = xmldoc.xpath(f".//type[@id='{root_type}']")[0].get("name")
 
+    # Check if the target pointer is compatible with the hierarchy root
+    target_pointer = target_record.get_field(target_path)
+
+    if not isinstance(target_pointer, HkbPointer):
+        raise ValueError(
+            f"Target {target_record.object_id}/{target_path} is not a pointer (is {target_pointer})"
+        )
+
     try:
         mapped_root_type = behavior.type_registry.find_first_type_by_name(
             root_type_name
         )
+        if not target_pointer.will_accept(mapped_root_type):
+            raise ValueError(
+                f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type} ({root_type_name})"
+            )
     except StopIteration:
         raise ValueError(
             f"Could not map object type {root_type} ({root_type_name}) to a known type ID"
         )
 
-    if not target_pointer.will_accept(mapped_root_type):
-        raise ValueError(
-            f"Hierarchy is not compatible with target pointer: expected {target_pointer.subtype_name}, but got {mapped_root_type} ({root_type_name})"
-        )
-
     loading = common_loading_indicator("Analyzing hierarchy")
     try:
-        hierarchy = find_conflicts(behavior, xmldoc, target_pointer)
+        hierarchy = find_conflicts(behavior, xmldoc, target_record)
     finally:
         dpg.delete_item(loading)
 
     def add_objects():
         new_root: HkbRecord = hierarchy.objects[root_id].result
-
         if new_root:
             # Events, variables, etc. have already been created as needed,
             # just need to add the objects
@@ -377,37 +362,164 @@ def paste_hierarchy(
                 if obj and res.action == "<new>":
                     behavior.add_object(obj)
 
+            target_pointer = target_record.get_field(target_path)
             target_pointer.set_value(new_root)
+
+        if target_record.type_name == "hkbStateMachine":
+            fix_state_ids(target_record)
 
         if callback:
             callback(hierarchy)
 
     if interactive:
         open_merge_hierarchy_dialog(
-            behavior, xmldoc, target_pointer, hierarchy, add_objects
+            behavior, xmldoc, hierarchy, target_record, add_objects
         )
     else:
         with undo_manager.guard(behavior):
-            resolve_conflicts(behavior, target_pointer, hierarchy)
+            resolve_conflicts(behavior, target_record, hierarchy)
             hierarchy.pin_objects = True
             add_objects()
 
 
-def find_conflicts(
-    behavior: HavokBehavior, xml: ET.Element, target_ptr: HkbPointer
+def paste_children(
+    behavior: HavokBehavior,
+    xml: str | ET._Element,
+    target_record: HkbRecord,
+    target_path: str,
+    callback: Callable[[MergeHierarchy], None] = None,
+    *,
+    interactive: bool = True,
 ) -> MergeHierarchy:
-    hierarchy = MergeHierarchy()
-    sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
-
-    target_record = behavior.find_object_for(target_ptr)
-    if target_record.type_id == sm_type:
-        target_sm = target_record
+    if isinstance(xml, str):
+        try:
+            xmldoc = ET.fromstring(xml, get_xml_parser())
+        except Exception as e:
+            raise ValueError(f"Failed to parse hierarchy: {e}")
     else:
-        target_sm = next(behavior.find_hierarchy_parents_for(target_record, sm_type))
+        xmldoc = xml
 
-    logger = logging.getLogger()
-    mismatching_types = set()
+    if xmldoc.tag != "behavior_hierarchy":
+        raise ValueError("Not a valid behavior hierarchy")
 
+    root_id = xmldoc.find("root_meta").get("root_id")
+
+    loading = common_loading_indicator("Analyzing hierarchy")
+    try:
+        hierarchy = find_conflicts(behavior, xmldoc, target_record)
+    finally:
+        dpg.delete_item(loading)
+
+    def add_children():
+        nonlocal target_path
+
+        hierarchy.objects[root_id].action = "<skip>"
+
+        source_obj: HkbRecord = hierarchy.objects[root_id].original
+        root_children = set()
+        for _, ptr in source_obj.find_fields_by_type(HkbPointer):
+            if ptr.is_set():
+                root_children.add(ptr.get_value())
+
+        target_array = target_record.get_field(target_path)
+
+        if isinstance(target_array, HkbPointer):
+            target_path = target_path.rsplit(":", maxsplit=1)
+            target_array = target_record.get_field(target_path)
+
+        if not isinstance(target_array, HkbArray):
+            raise ValueError(
+                f"Cloning children failed because the target is nota HkbArray (is {target_array})"
+            )
+
+        refptr = HkbPointer.new(behavior, target_array.element_type_id)
+        logger = logging.getLogger()
+
+        for res in hierarchy.objects.values():
+            obj: HkbRecord = res.result
+            if obj and res.action == "<new>":
+                if obj.object_id in root_children:
+                    if refptr.will_accept(obj):
+                        behavior.add_object(obj)
+                        target_array.append(obj.object_id)
+                    else:
+                        res.action = "<skip>"
+                        logger.warning(
+                            f"Skipping incompatible hierarchy child {str(obj)}"
+                        )
+                else:
+                    behavior.add_object(obj)
+
+        # If we copy only the root's children we should merge the relevant wildcard transitions
+        if source_obj.type_name == "hkbStateMachine":
+            logger.info("Fixing state IDs and wildcard transitions")
+
+            # Collect all wildcard transitions for easy access
+            transitions = {}
+            
+            # Transferred objects will refer to new IDs but may not have been added yet
+            new_id_map = {}
+            for res in hierarchy.objects.values():
+                if res.result:
+                    new_id_map[res.result.object_id] = res.original
+
+            # The source wildcards ID has probably been updated
+            source_wildcards_id = source_obj["wildcardTransitions"].get_value()
+            source_wildcards = new_id_map.get(source_wildcards_id)
+
+            if source_wildcards:
+                for trans in source_wildcards["transitions"]:
+                    transitions[trans["toStateId"].get_value()] = trans
+
+            # Check if the target statemachine has a TransitionInfoArray object and create it
+            # if neccessary
+            target_wildcards = target_record["wildcardTransitions"].get_target()
+            if target_wildcards is None:
+                target_wildcards = HkbRecord.new(
+                    behavior, target_record.get_field_type("wildcardTransitions")
+                )
+
+                behavior.add_object(target_wildcards)
+                undo_manager.on_create_object(behavior, target_wildcards)
+                
+                target_record["wildcardTransitions"].set_value(target_wildcards)
+                undo_manager.on_update_value(
+                    target_record["wildcardTransitions"],
+                    None,
+                    target_wildcards.object_id,
+                )
+
+            # Transfer the transition infos
+            target_wildcards_array: HkbArray = target_wildcards["transitions"]
+            for ptr in source_obj["states"]:
+                target_state = new_id_map.get(ptr.get_value())
+                if target_state:
+                    state_id = target_state["stateId"].get_value()
+                    trans: HkbRecord = transitions.get(state_id)
+                    if trans:
+                        new_trans = HkbRecord(behavior, deepcopy(trans.element), target_wildcards_array.element_type_id)
+                        target_wildcards_array.append(new_trans)
+
+        if target_record.type_name == "hkbStateMachine":
+            fix_state_ids(target_record)
+
+        if callback:
+            callback(hierarchy)
+
+    if interactive:
+        open_merge_hierarchy_dialog(
+            behavior, xmldoc, hierarchy, target_record, add_children
+        )
+    else:
+        with undo_manager.guard(behavior):
+            resolve_conflicts(behavior, target_record, hierarchy)
+            hierarchy.pin_objects = True
+            add_children()
+
+
+def _find_index_attribute_conflicts(
+    behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeHierarchy
+) -> None:
     # For events, variables and animations we check if there is already one with a matching name.
     # If there is no match it probably has to be created. If it exists but the index is different
     # we still treat it as a conflict, albeit one that has a likely solution.
@@ -467,7 +579,12 @@ def find_conflicts(
         else:
             hierarchy.animations[idx] = Resolution((idx, name), "<skip>", (-1, None))
 
-    # Types
+
+def _find_type_conflicts(
+    behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeHierarchy
+) -> None:
+    logger = logging.getLogger()
+
     # Every type should have a corresponding match by name, even when the type IDs disagree
     for type_info in xml.findall(".//type"):
         tid = type_info.get("id")
@@ -483,8 +600,13 @@ def find_conflicts(
 
         hierarchy.type_map[tid] = Resolution((tid, name), "<remap>", (new_id, name))
 
-    # Objects
-    # Find objects with IDs that already exist
+
+def _find_object_conflicts(
+    behavior: HavokBehavior, xml: ET.Element, hierarchy: MergeHierarchy
+) -> None:
+    logger = logging.getLogger()
+    mismatching_types = set()
+
     for xmlobj in xml.find("objects").getchildren():
         # Remap the typeid. Should only be relevant when cloning between different games or
         # versions of hklib, but in those cases it might just make it work
@@ -530,7 +652,9 @@ def find_conflicts(
 
                 mismatching_types.add(type_name)
         except Exception as e:
-            raise ValueError(f"Failed to reconstruct object {xmlobj.get('id')} from xml") from e
+            raise ValueError(
+                f"Failed to reconstruct object {xmlobj.get('id')} from xml"
+            ) from e
 
         # Pointers
         # Find pointers in the behavior referencing this object's ID. If more than one
@@ -547,60 +671,24 @@ def find_conflicts(
         else:
             hierarchy.objects[obj.object_id] = Resolution(obj, "<new>", obj)
 
-        # State IDs
-        if obj.type_name == "hkbStateMachine::StateInfo":
-            # Check if the hierarchy contains a statemachine which references the StateInfo.
-            # StateInfo IDs can only be in conflict if they are pasted into a new statemachine.
-            hsm: list = xml.xpath(
-                f"/*/object[@type_id='{sm_type}' and .//pointer[@id='{obj.object_id}']]"
-            )
-            if hsm:
-                continue
 
-            obj_state_id = obj["stateId"].get_value()
-            state_ptr: HkbPointer
+def find_conflicts(
+    behavior: HavokBehavior, xml: ET.Element, target_record: HkbRecord
+) -> MergeHierarchy:
+    hierarchy = MergeHierarchy()
 
-            for state_ptr in target_sm["states"]:
-                state = state_ptr.get_target()
-
-                if not state:
-                    continue
-
-                target_state_id = state["stateId"].get_value()
-                if target_state_id == obj_state_id:
-                    hierarchy.state_ids[obj.object_id] = Resolution(state, "<new>")
-                else:
-                    hierarchy.state_ids[obj.object_id] = Resolution(state, "<keep>")
-
-        # These will need some corrections, but will not result in additional conflicts
-        # - hkbStateMachine
-        # - hkbStateMachine::TransitionInfoArray
-        # - hkbClipGenerator
-
-    # Additional root info
-    hierarchy.root_id = xml.find("root_meta").get("root_id")
-    root_obj: HkbRecord = hierarchy.objects[hierarchy.root_id].original
-
-    if root_obj.type_name == "hkbStateMachine::StateInfo":
-        transitions: list = hierarchy.root_meta.setdefault("wildcard_transitions", [])
-        transition_type = behavior.type_registry.find_first_type_by_name(
-            "hkbStateMachine::TransitionInfo"
-        )
-
-        for transition_elem in xml.xpath(".//root_meta/wildcard_transitions/record"):
-            transitions.append(HkbRecord(behavior, transition_elem, transition_type))
+    _find_index_attribute_conflicts(behavior, xml, hierarchy)
+    _find_type_conflicts(behavior, xml, hierarchy)
+    _find_object_conflicts(behavior, xml, hierarchy)
 
     return hierarchy
 
 
 def resolve_conflicts(
     behavior: HavokBehavior,
-    target_pointer: HkbPointer,
+    target_record: HkbRecord,
     hierarchy: MergeHierarchy,
 ) -> None:
-    common = CommonActionsMixin(behavior)
-    state_id_map: dict[int, int] = {}
-
     # TODO this should be optional
     # TODO define various conflict resolution strategies, like skip on conflict, reuse
     # on conflict, and whether to continue following a path if the parent had a conflict
@@ -680,6 +768,8 @@ def resolve_conflicts(
     # Handle conflicting objects
     for object_id, resolution in hierarchy.objects.items():
         if resolution.action == "<new>":
+            resolution.result = resolution.original
+
             # If the object is set to <new>, but none of its parents are cloned,
             # the object will not be included after all
             if not is_object_included(object_id):
@@ -690,9 +780,9 @@ def resolve_conflicts(
                 continue
 
             if object_id in behavior.objects:
-                resolution.original.object_id = behavior.new_id()
+                new_id = behavior.new_id()
+                resolution.result.object_id = new_id
 
-            resolution.result = resolution.original
         elif resolution.action == "<reuse>":
             resolution.result = behavior.objects[object_id]
         elif resolution.action == "<skip>":
@@ -701,16 +791,6 @@ def resolve_conflicts(
             raise ValueError(
                 f"Invalid action {resolution.action} for object {object_id}"
             )
-
-    # StateInfo IDs
-    # All conflicts found must be from "naked" StateInfos, e.g. they are copied
-    # into a new statemachine
-    sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
-    target_record = behavior.find_object_for(target_pointer)
-    if target_record.type_id == sm_type:
-        target_sm = target_record
-    else:
-        target_sm = next(behavior.find_hierarchy_parents_for(target_record, sm_type))
 
     # Fix object references
     for object_id, resolution in hierarchy.objects.items():
@@ -732,27 +812,6 @@ def resolve_conflicts(
                 logging.getLogger().warning(
                     f"Object {object_id} references ID {target_id}, which is not part of the cloned hierarchy"
                 )
-
-    # State IDs
-    # In theory it's not possible to paste more than one StateInfo without its statemachine,
-    # but this certainly won't hurt. At the very least we can assume that there will only be
-    # one statemachine with conflicts.
-    state_id_offset = 0
-
-    for object_id, resolution in hierarchy.state_ids.items():
-        obj_res = hierarchy.objects[object_id]
-
-        if not obj_res.result or obj_res.action in ("<reuse>", "<skip>"):
-            # Skip if the object is reused or not cloned
-            continue
-
-        old_state_id = obj_res.result["stateId"].get_value()
-        new_state_id = common.get_next_state_id(target_sm) + state_id_offset
-
-        obj_res.result["stateId"].set_value(new_state_id)
-        resolution.result = new_state_id
-        state_id_map[old_state_id] = new_state_id
-        state_id_offset += 1
 
     # Attribute updates
     for object_id, resolution in hierarchy.objects.items():
@@ -785,76 +844,49 @@ def resolve_conflicts(
                 if anim_res is not None:
                     obj.set_field(path, anim_res.result[0])
 
-        # hkbStateMachine::TransitionInfoArray
-        # - transitions:*/toStateId
-        # - transitions:*/fromNestedStateId
-        # - transitions:*/toNestedStateId
-        if obj.type_name == "hkbStateMachine::TransitionInfoArray":
-            # TODO should verify this object belongs to a StateInfo with state ID conflicts
-            for transition in obj["transitions"]:
-                for attr in ["toStateId", "fromNestedStateId", "toNestedStateId"]:
-                    attr_id = transition[attr].get_value()
-
-                    if attr_id < 0:
-                        continue
-
-                    new_id = state_id_map.get(attr_id)
-                    if new_id is not None:
-                        transition[attr].set_value(new_id)
-
-        # - hkbStateMachine
-        #   - eventToSendWhenStateOrTransitionChanges/id (?)
-        #   - startStateId
-        elif obj.type_name == "hkbStateMachine":
-            start_state_id = obj["startStateId"].get_value()
-
-            if start_state_id >= 0:
-                new_id = state_id_map.get(start_state_id)
-                if new_id is not None:
-                    obj["startStateId"].set_value(new_id)
-
     # Handle additional root metadata
-    root_res = hierarchy.objects[hierarchy.root_id]
+    # root_res = hierarchy.objects[hierarchy.root_id]
 
-    # Root is a StateInfo and probably has wildcard transitions in its original statemachine
-    if (
-        root_res.action == "<new>"
-        and root_res.result.type_name == "hkbStateMachine::StateInfo"
-    ):
-        for transition in hierarchy.root_meta.get("wildcard_transitions", []):
-            trans_ptr: HkbPointer = transition["transition"]
 
-            # Update the transition effect pointer
-            trans_id = trans_ptr.get_value()
-            if trans_id:
-                trans_res = hierarchy.objects[trans_id]
-                if trans_res.action != "<skip>":
-                    trans_ptr.set_value(trans_res.result)
+def fix_state_ids(statemachine: HkbRecord):
+    discovered = set()
+    remapped_states = {}
 
-            evt_idx = transition["eventId"].get_value()
-            new_evt_idx = hierarchy.events[evt_idx].result[0]
-            transition["eventId"].set_value(new_evt_idx)
+    ptr: HkbPointer
+    for ptr in statemachine["states"]:
+        state = ptr.get_target()
+        sid = state["stateId"].get_value()
 
-            new_state_id = hierarchy.state_ids[hierarchy.root_id].result
-            transition["toStateId"].set_value(new_state_id)
+        if sid in discovered:
+            new_sid = max(discovered) + 1
+            state["stateId"].set_value(new_sid)
+            discovered.add(new_sid)
+            remapped_states[sid] = new_sid
+        else:
+            discovered.add(sid)
 
-            wildcard_transitions = target_sm["wildcardTransitions"].get_target()
-            # if not wildcard_transitions:
-            #     wildcards_type = target_sm["wildcardTransitions"].subtype_id
-            #     wildcard_transitions = HkbRecord.new(
-            #         behavior, wildcards_type, None, behavior.new_id()
-            #     )
-            #     target_sm["wildcardTransitions"].set_value(wildcard_transitions)
-            #     behavior.add_object(wildcard_transitions)
+    discovered.clear()
+    transition_info_array = statemachine["wildcardTransitions"].get_target()
+    if transition_info_array:
+        for transition in transition_info_array["transitions"]:
+            # No clue how fromNestedStateId and toNestedStateId work, but they start at 0
+            state_id = transition["toStateId"].get_value()
 
-            wildcard_transitions["transitions"].append(transition)
+            if state_id < 0:
+                continue
 
+            if state_id in discovered:
+                new_id = remapped_states.get(state_id)
+                if new_id is not None:
+                    transition["toStateId"].set_value(new_id)
+            else:
+                discovered.add(state_id)
 
 def open_merge_hierarchy_dialog(
     behavior: HavokBehavior,
     xml: ET.Element,
-    target_pointer: HkbPointer,
     hierarchy: MergeHierarchy,
+    target_record: HkbRecord,
     callback: Callable[[], None],
     *,
     tag: str = None,
@@ -872,7 +904,7 @@ def open_merge_hierarchy_dialog(
         loading = common_loading_indicator("Merging Hierarchy")
         try:
             with undo_manager.guard(behavior):
-                resolve_conflicts(behavior, target_pointer, hierarchy)
+                resolve_conflicts(behavior, target_record, hierarchy)
                 hierarchy.pin_objects = dpg.get_value(f"{tag}_pin_objects")
                 callback()
         finally:
