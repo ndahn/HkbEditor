@@ -1,38 +1,46 @@
-from typing import Any, Generator, Callable, Iterable, TYPE_CHECKING
-import fnmatch
-from lark import Lark, Transformer, LarkError
+from typing import Iterable, Generator, Callable, TYPE_CHECKING
+from abc import ABC, abstractmethod
+from lark import Lark, Transformer, Token
+from lxml import etree
+from fnmatch import fnmatch
 from rapidfuzz import fuzz
+import re
 
 if TYPE_CHECKING:
-    from .hkb_types import HkbRecord, HkbArray
+    from hkb_editor.hkb import HkbRecord
 
 
-# See https://lucene.apache.org/core/2_9_4/queryparsersyntax.html
 lucene_grammar = r"""
     ?start: or_expr
 
-    ?or_expr: and_expr ("OR" and_expr)*     -> or_
-    ?and_expr: not_expr+                    -> and_
-    ?not_expr: "NOT" not_expr               -> not_
+    ?or_expr: and_expr (KW_OR and_expr)*        -> or_
+    ?and_expr: not_expr (KW_AND not_expr)*      -> and_
+    ?not_expr: KW_NOT not_expr                  -> not_
              | atom
 
     ?atom: field
          | bare_value
          | "(" or_expr ")"
 
-    field: PATH_OR_STR ":" VALUE_TOKEN      -> field
-    bare_value: VALUE_TOKEN                 -> value
+    field: PATH_OR_STR "=" VALUE_TOKEN          -> field
+    bare_value: VALUE_TOKEN                     -> value
 
     ESCAPED_STRING: SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING
     SINGLE_QUOTED_STRING: "'" ( /[^'\\]/ | /\\./ )* "'"
     DOUBLE_QUOTED_STRING: "\"" ( /[^"\\]/ | /\\./ )* "\""
     PATH_OR_STR: PATH | ESCAPED_STRING
-    VALUE_TOKEN: RANGE | FUZZY | WILDCARD | WORD | ESCAPED_STRING
-    PATH      : /[A-Za-z_][A-Za-z0-9_.]*/
+
+    // tokens
+    KW_AND: /(?i:AND)/
+    KW_OR:  /(?i:OR)/
+    KW_NOT: /(?i:NOT)/
+
+    VALUE_TOKEN: RANGE | FUZZY | WILDCARD | NONKEYWORD | ESCAPED_STRING
+    PATH      : /[A-Za-z_][A-Za-z0-9_.:*\/]*/
     RANGE     : /\[[^\[\]]+ TO [^\[\]]+\]/
     FUZZY     : /~[^\s()]+/
     WILDCARD  : /[^\s()]+[*]/
-    WORD      : /[^\s()]+/
+    NONKEYWORD: /(?![Aa][Nn][Dd]\b|[Oo][Rr]\b|[Nn][Oo][Tt]\b)[^\s()]+/
 
     %import common.WS
     %ignore WS
@@ -59,142 +67,191 @@ You may run queries over the following fields:
 - any attribute path
 
 Examples:
-- id:*588 OR type_name:hkbStateMachine
-- "bindings:0/memberPath":selectedGeneratorIndex
-- animId:[100000 TO 200000]
-- name:~AddDamageFire
+- id=*588 OR type_name:hkbStateMachine
+- bindings:0/memberPath=selectedGeneratorIndex
+- animId=[100000 TO 200000]
+- name=~AddDamageFire
 """
 
 
-parser = Lark(
-    lucene_grammar, start="start", propagate_positions=False, maybe_placeholders=False
-)
+class Condition(ABC):
+    @abstractmethod
+    def evaluate(self, obj_elem: etree._Element) -> bool: ...
+
+
+class FieldCondition(Condition):
+    def __init__(self, field_path: str, value: str):
+        self.field_path = field_path.strip("\"'")
+        self.value = value.strip("\"'")
+
+    def evaluate(self, obj_elem: etree._Element) -> bool:
+        actual_values = _get_field_value(obj_elem, self.field_path)
+        return any(_match_value(val, self.value) for val in actual_values)
+
+    def __repr__(self):
+        return f"FieldCondition({self.field_path}={self.value})"
+
+
+class ValueCondition(Condition):
+    def __init__(self, value: str):
+        self.value = value.strip("\"'")
+
+    def evaluate(self, obj_elem: etree._Element) -> bool:
+        all_text = " ".join(obj_elem.itertext())
+        return _match_value(all_text, self.value)
+
+    def __repr__(self):
+        return f"ValueCondition({self.value})"
+
+
+class OrCondition(Condition):
+    def __init__(self, conditions: list[Condition]):
+        self.conditions = conditions
+
+    def evaluate(self, obj_elem: etree._Element) -> bool:
+        return any(c.evaluate(obj_elem) for c in self.conditions)
+
+    def __repr__(self):
+        return f"OR({', '.join(map(str, self.conditions))})"
+
+
+class AndCondition(Condition):
+    def __init__(self, conditions: list[Condition]):
+        self.conditions = conditions
+
+    def evaluate(self, obj_elem: etree._Element) -> bool:
+        return all(c.evaluate(obj_elem) for c in self.conditions)
+
+    def __repr__(self):
+        return f"AND({', '.join(map(str, self.conditions))})"
+
+
+class NotCondition(Condition):
+    def __init__(self, condition: Condition):
+        self.condition = condition
+
+    def evaluate(self, obj_elem: etree._Element) -> bool:
+        return not self.condition.evaluate(obj_elem)
+
+    def __repr__(self):
+        return f"NOT({self.condition})"
 
 
 class QueryTransformer(Transformer):
-    def __init__(self, record: "HkbRecord"):
-        self.record = record
+    def _conds(self, args):
+        # drop KW_AND / KW_OR / KW_NOT tokens
+        return [a for a in args if not isinstance(a, Token)]
+    
+    def field(self, args):
+        path, value = str(args[0]), str(args[1]).strip("\"'")
+        return FieldCondition(path, value)
 
-    # logic nodes
-    def or_(self, args: list[str]) -> bool:
-        return any(args)
+    def value(self, args):
+        value = str(args[0]).strip("\"'")
+        return ValueCondition(value)
 
-    def and_(self, args: list[str]) -> bool:
-        return all(args)
+    def or_(self, args):
+        return OrCondition(self._conds(args))
 
-    def not_(self, args: list[str]) -> bool:
-        return not args[0]
+    def and_(self, args):
+        return AndCondition(self._conds(args))
 
-    # terminals
-    def field(self, args: list[str]) -> bool:
-        path, token = str(args[0]), str(args[1])
-        return self._match(path, token)
+    def not_(self, args):
+        return NotCondition(self._conds(args)[0])
 
-    def value(self, args: list[str]) -> bool:
-        # Called when no fields are specified
-        token = str(args[0])
 
-        return any(
-            self._match(path, token)
-            for path in ("object_id", "name", "type_name", "type_id")
-        )
+def _parse_query(query_string: str) -> Condition:
+    parser = Lark(lucene_grammar, parser="earley")
+    tree = parser.parse(query_string)
+    return QueryTransformer().transform(tree)
 
-    def _is_matching(self, value: Any, token: str) -> bool:
-        # fuzzy
-        if token.startswith("~"):
-            return fuzz.partial_ratio(value, token[1:]) >= 50
 
-        # wildcard
-        if "*" in token:
-            return fnmatch.fnmatch(value, token)
+def _get_field_value(obj_elem: etree._Element, field_path: str) -> list[str]:
+    path_parts = field_path.split("/")
+    xpath_parts = []
 
-        # range
-        if token.startswith("[") and " TO " in token:
-            lo, hi = token.strip("[]").split(" TO ")
-            try:
-                return float(lo) <= float(value) <= float(hi)
-            except ValueError:
-                return False
-
-        # Exact match
-        if not isinstance(value, str):
-            value = str(value)
-
-        return value == token
-
-    # common matching function
-    def _match(self, path: str, token: str) -> bool:
-        from hkb_editor.hkb.hkb_types import XmlValueHandler, HkbArray
-
-        if (path.startswith("'") and path.endswith("'")) or (
-            path.startswith('"') and path.endswith('"')
-        ):
-            path = path[1:-1]
-
-        if (token.startswith("'") and token.endswith("'")) or (
-            token.startswith('"') and token.endswith('"')
-        ):
-            token = token[1:-1]
-
-        # Alias
-        if path == "id":
-            path = "object_id"
-
-        try:
-            if "/" in path:
-                # It's an actual item path
-                if ":*" in path:
-                    # Handle array item wildcard
-                    # TODO only supports a single array wildcard for now
-                    loc = path.index(":*")
-                    frags = path[:loc], path[loc + 2 :]
-                    array = self.record.get_field(frags[0])
-                    
-                    if not isinstance(array, HkbArray):
-                        return False
-
-                    for i in range(len(array)):
-                        item_path = f"{frags[0]}:{i}{frags[1]}"
-                        if self._match(item_path, token):
-                            # Return True if any of the items match
-                            return True
-
-                    return False
-                else:
-                    # Still need to match against a string!
-                    actual = str(self.record.get_field(path, resolve=True))
+    for part in path_parts:
+        if ":" in part:
+            field_name, index = part.split(":", 1)
+            if index == "*":
+                xpath_parts.append(f"field[@name='{field_name}']/array/*")
             else:
-                actual = self.record.get_field(path)
-        except (AttributeError, KeyError, ValueError) as e:
-            # Will retrieve stuff like object_id, type_name, etc
-            actual = getattr(self.record, path, None)
-            if actual is None:
-                return False
+                try:
+                    idx = int(index) + 1  # XPath is 1-indexed
+                    xpath_parts.append(f"field[@name='{field_name}']/array/*[{idx}]")
+                except ValueError:
+                    return []
+        else:
+            xpath_parts.append(f"field[@name='{part}']/*")
+    
+    xpath = ".//" + "//".join(xpath_parts)
+    #print("xpath:", xpath)
+    elements = obj_elem.xpath(xpath)
+    values: list[str] = []
 
-        if isinstance(actual, XmlValueHandler):
-            actual = actual.get_value()
+    def get_value(elem: etree._Element):
+        if elem.get("value") is not None:
+            return elem.get("value")
+        
+        if elem.get("id") is not None:
+            return elem.get("id")
+        
+        return elem
 
+    for elem in elements:
+        if elem.tag == "array":
+            for child in elem.getchildren():
+                values.append(get_value(child))
+        else:
+            values.append(get_value(elem))
+
+    return values
+
+
+def _match_value(actual_value: str, search_value: str) -> bool:
+    if search_value == "*":
+        return actual_value is not None
+
+    if search_value.startswith("~"):
+        fuzzy_term = search_value[1:]
+        return fuzz.partial_ratio(actual_value.lower(), fuzzy_term.lower()) > 80
+
+    elif "*" in search_value:
+        return fnmatch(actual_value.lower(), search_value.lower())
+
+    elif search_value.startswith("[") and " TO " in search_value:
         try:
-            return self._is_matching(actual, token)
-        except Exception:
+            m = re.match(r"\[(\S+)\s+TO\s+(\S+)\]", search_value)
+            if m:
+                start, end = m.groups()
+                val = float(actual_value)
+                return float(start) <= val <= float(end)
+        except ValueError:
             return False
+
+        return False
+
+    else:
+        return actual_value.lower() == search_value.lower()
 
 
 def query_objects(
     candidates: Iterable["HkbRecord"],
-    query_str: str,
+    query: str,
     object_filter: Callable[["HkbRecord"], bool] = None,
 ) -> Generator["HkbRecord", None, None]:
+    if not query:
+        yield from filter(object_filter, candidates)
+        return
+        
     try:
-        subset = filter(object_filter, candidates)
+        condition = _parse_query(query)
+        for obj in candidates:
+            if object_filter and not object_filter(obj):
+                continue
 
-        if not query_str or query_str == "*":
-            yield from subset
-            return
-
-        tree = parser.parse(query_str)
-        for obj in subset:
-            if QueryTransformer(obj).transform(tree):
+            if condition.evaluate(obj.element):
                 yield obj
+        
     except Exception as e:
-        raise ValueError(f"Query failed for '{query_str}'") from e
+        raise ValueError(f"Query failed for '{query}'") from e
