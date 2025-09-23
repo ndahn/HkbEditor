@@ -36,14 +36,13 @@ lucene_grammar = r"""
 
     VALUE_TOKEN: RANGE | FUZZY | ESCAPED_STRING | NONKEYWORD
     PATH      : /[A-Za-z_][A-Za-z0-9_.:*\/]*/
-    RANGE     : /\[[^\[\]]+ TO [^\[\]]+\]/
+    RANGE     : /\[[^\[\]]+\.\.[^\[\]]+\]/
     FUZZY     : /~[^\s()]+/
     NONKEYWORD: /(?![Aa][Nn][Dd]\b|[Oo][Rr]\b|[Nn][Oo][Tt]\b)[^\s()]+/
 
     %import common.WS
     %ignore WS
 """
-
 
 
 lucene_url = "https://lucene.apache.org/core/2_9_4/queryparsersyntax.html"
@@ -68,17 +67,17 @@ You may run queries over the following fields:
 Examples:
 - id=*588 OR type_name:hkbStateMachine
 - bindings:0/memberPath=selectedGeneratorIndex
-- animId=[100000 TO 200000]
+- animId=[100000..200000]
 - name=~AddDamageFire
 """
 
 
-class Condition(ABC):
+class _Condition(ABC):
     @abstractmethod
     def evaluate(self, obj_elem: etree._Element) -> bool: ...
 
 
-class FieldCondition(Condition):
+class _FieldCondition(_Condition):
     def __init__(self, field_path: str, value: str):
         self.field_path = field_path.strip("\"'")
         self.value = value.strip("\"'")
@@ -88,10 +87,10 @@ class FieldCondition(Condition):
         return any(_match_value(val, self.value) for val in actual_values)
 
     def __repr__(self):
-        return f"FieldCondition({self.field_path}={self.value})"
+        return f"field({self.field_path}={self.value})"
 
 
-class ValueCondition(Condition):
+class _ValueCondition(_Condition):
     def __init__(self, value: str):
         self.value = value.strip("\"'")
 
@@ -100,11 +99,11 @@ class ValueCondition(Condition):
         return _match_value(all_text, self.value)
 
     def __repr__(self):
-        return f"ValueCondition({self.value})"
+        return f"value({self.value})"
 
 
-class OrCondition(Condition):
-    def __init__(self, conditions: list[Condition]):
+class _OrCondition(_Condition):
+    def __init__(self, conditions: list[_Condition]):
         self.conditions = conditions
 
     def evaluate(self, obj_elem: etree._Element) -> bool:
@@ -114,8 +113,8 @@ class OrCondition(Condition):
         return f"OR({', '.join(map(str, self.conditions))})"
 
 
-class AndCondition(Condition):
-    def __init__(self, conditions: list[Condition]):
+class _AndCondition(_Condition):
+    def __init__(self, conditions: list[_Condition]):
         self.conditions = conditions
 
     def evaluate(self, obj_elem: etree._Element) -> bool:
@@ -125,8 +124,8 @@ class AndCondition(Condition):
         return f"AND({', '.join(map(str, self.conditions))})"
 
 
-class NotCondition(Condition):
-    def __init__(self, condition: Condition):
+class _NotCondition(_Condition):
+    def __init__(self, condition: _Condition):
         self.condition = condition
 
     def evaluate(self, obj_elem: etree._Element) -> bool:
@@ -136,33 +135,33 @@ class NotCondition(Condition):
         return f"NOT({self.condition})"
 
 
-class QueryTransformer(Transformer):
+class _QueryTransformer(Transformer):
     def _conds(self, args):
         # drop KW_AND / KW_OR / KW_NOT tokens
         return [a for a in args if not isinstance(a, Token)]
-    
+
     def field(self, args):
         path, value = str(args[0]), str(args[1]).strip("\"'")
-        return FieldCondition(path, value)
+        return _FieldCondition(path, value)
 
     def value(self, args):
         value = str(args[0]).strip("\"'")
-        return ValueCondition(value)
+        return _ValueCondition(value)
 
     def or_(self, args):
-        return OrCondition(self._conds(args))
+        return _OrCondition(self._conds(args))
 
     def and_(self, args):
-        return AndCondition(self._conds(args))
+        return _AndCondition(self._conds(args))
 
     def not_(self, args):
-        return NotCondition(self._conds(args)[0])
+        return _NotCondition(self._conds(args)[0])
 
 
-def _parse_query(query_string: str) -> Condition:
+def _parse_query(query_string: str) -> _Condition:
     parser = Lark(lucene_grammar, parser="earley")
     tree = parser.parse(query_string)
-    return QueryTransformer().transform(tree)
+    return _QueryTransformer().transform(tree)
 
 
 def _get_field_value(obj_elem: etree._Element, field_path: str) -> list[str]:
@@ -182,19 +181,19 @@ def _get_field_value(obj_elem: etree._Element, field_path: str) -> list[str]:
                     return []
         else:
             xpath_parts.append(f"field[@name='{part}']/*")
-    
+
     xpath = ".//" + "//".join(xpath_parts)
-    #print("xpath:", xpath)
+    # print("xpath:", xpath)
     elements = obj_elem.xpath(xpath)
     values: list[str] = []
 
     def get_value(elem: etree._Element):
         if elem.get("value") is not None:
             return elem.get("value")
-        
+
         if elem.get("id") is not None:
             return elem.get("id")
-        
+
         return elem
 
     for elem in elements:
@@ -218,9 +217,13 @@ def _match_value(actual_value: str, search_value: str) -> bool:
     elif "*" in search_value:
         return fnmatch(actual_value.lower(), search_value.lower())
 
-    elif search_value.startswith("[") and " TO " in search_value:
+    elif (
+        search_value.startswith("[")
+        and search_value.endswith("]")
+        and ".." in search_value
+    ):
         try:
-            m = re.match(r"\[(\S+)\s+TO\s+(\S+)\]", search_value)
+            m = re.match(r"\[(\S+)\.\.(\S+)\]", search_value)
             if m:
                 start, end = m.groups()
                 val = float(actual_value)
@@ -251,6 +254,6 @@ def query_objects(
 
             if condition.evaluate(obj.element):
                 yield obj
-        
+
     except Exception as e:
         raise ValueError(f"Query failed for '{query}'") from e
