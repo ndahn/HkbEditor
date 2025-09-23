@@ -196,5 +196,5 @@ def query_objects(
         for obj in subset:
             if QueryTransformer(obj).transform(tree):
                 yield obj
-    except LarkError as e:
+    except Exception as e:
         raise ValueError(f"Query failed for '{query_str}'") from e

@@ -24,7 +24,6 @@ from hkb_editor.hkb.xml import xml_from_str
 from hkb_editor.templates.glue import get_templates
 
 from hkb_editor.external import (
-    ChrReloader,
     Config,
     load_config,
     xml_to_hkx,
@@ -32,6 +31,16 @@ from hkb_editor.external import (
     unpack_binder,
     pack_binder,
 )
+
+try:
+    from hkb_editor.external.reload import ChrReloader
+except (ImportError, AttributeError):
+    # Not available on non-Windows systems
+    ChrReloader = None
+    logging.getLogger().error(
+        "Failed to import ChrReloader, character reloading won't be available",
+        exc_info=True,
+    )
 
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
@@ -220,7 +229,7 @@ class BehaviorEditor(GraphEditor):
     def _do_write_to_file(self, file_path):
         if self._busy:
             return
-        
+
         self._busy = True
         loading = common_loading_indicator("Saving")
 
@@ -263,14 +272,18 @@ class BehaviorEditor(GraphEditor):
     def _reload_character(self) -> None:
         if self._busy:
             return
-        
+
         self._busy = True
         chr = self.beh.get_character_id()
         loading = common_loading_indicator(f"Reloading {chr}...")
 
         try:
             if not self.chr_reloader:
-                self.chr_reloader = ChrReloader()
+                if ChrReloader:
+                    self.chr_reloader = ChrReloader()
+                else:
+                    self.logger.error("ChrReloader is not available")
+                    return
 
             self.chr_reloader.reload_character(chr)
         except Exception as e:
@@ -282,7 +295,7 @@ class BehaviorEditor(GraphEditor):
     def _repack_binder(self) -> None:
         if self._busy:
             return
-        
+
         self._busy = True
 
         # Locate external tools
@@ -1048,7 +1061,6 @@ class BehaviorEditor(GraphEditor):
                             undo_manager.on_update_value(ptr, record.object_id, None)
                             self._on_value_changed(None, ptr, (node.id, None))
 
-
                 if first_parent:
                     self.selected_node = self.canvas.nodes[first_parent]
 
@@ -1089,7 +1101,11 @@ class BehaviorEditor(GraphEditor):
                 and new_value is None
                 and handler.subtype_name == "hkbStateMachine::StateInfo"
             ):
-                old_id = old_value.object_id if isinstance(old_value, HkbRecord) else old_value
+                old_id = (
+                    old_value.object_id
+                    if isinstance(old_value, HkbRecord)
+                    else old_value
+                )
                 target_sm_id = next(self.canvas.graph.predecessors(old_id))
                 target_sm = self.beh.objects[target_sm_id]
                 state_ids = set()
@@ -1567,7 +1583,7 @@ class BehaviorEditor(GraphEditor):
     def verify_behavior(self):
         if self._busy:
             return
-        
+
         self._busy = True
         loading = common_loading_indicator("Validating behavior...")
 
