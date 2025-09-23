@@ -281,7 +281,9 @@ class GraphWidget:
         node = self.get_node_at_pos(mx, my)
 
         if not node:
-            self.deselect()
+            # Folding when clicking the canvas feels bad
+            #self.deselect()
+            pass
         else:
             self.select(node)
 
