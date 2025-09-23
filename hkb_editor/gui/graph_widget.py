@@ -423,7 +423,9 @@ class GraphWidget:
         selected = self.selected_node
         self.selected_node = None
 
-        for node in self.nodes.values():
+        # By using a topological sort we ensure that nodes closer to the root are drawn first
+        for n in nx.topological_sort(self.graph):
+            node = self.nodes[n]
             if node.visible:
                 want_visible.append(node)
                 node.visible = False
@@ -698,6 +700,7 @@ class GraphWidget:
             # The right side of node_a depends on its width, whereas the left side of all nodes
             # on the same level should be aligned, so this will give a more consistent look.
             mid_x = bx - self.layout.gap_x / 2
+            #mid_x = ax + (bx - ax) / 2
 
             dpg.draw_polygon(
                 [

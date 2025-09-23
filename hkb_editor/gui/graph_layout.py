@@ -83,10 +83,10 @@ class GraphLayout:
 
             if py > 0.0:
                 py += self.step_y * self.zoom_factor
-            else:
-                parent_id = next(
-                    n for n in graph.predecessors(node.id) if nodemap[n].visible
-                )
-                py = nodemap[parent_id].y
+
+            parent_id = next(
+                (n for n in graph.predecessors(node.id) if nodemap[n].visible), None
+            )
+            py = max(nodemap[parent_id].y, py)
 
         return px, py
