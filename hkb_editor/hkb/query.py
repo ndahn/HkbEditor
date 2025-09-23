@@ -30,21 +30,20 @@ lucene_grammar = r"""
     DOUBLE_QUOTED_STRING: "\"" ( /[^"\\]/ | /\\./ )* "\""
     PATH_OR_STR: PATH | ESCAPED_STRING
 
-    // tokens
-    KW_AND: /(?i:AND)/
-    KW_OR:  /(?i:OR)/
-    KW_NOT: /(?i:NOT)/
+    KW_AND: /(?i:AND)\b/
+    KW_OR:  /(?i:OR)\b/
+    KW_NOT: /(?i:NOT)\b/
 
-    VALUE_TOKEN: RANGE | FUZZY | WILDCARD | NONKEYWORD | ESCAPED_STRING
+    VALUE_TOKEN: RANGE | FUZZY | ESCAPED_STRING | NONKEYWORD
     PATH      : /[A-Za-z_][A-Za-z0-9_.:*\/]*/
     RANGE     : /\[[^\[\]]+ TO [^\[\]]+\]/
     FUZZY     : /~[^\s()]+/
-    WILDCARD  : /[^\s()]+[*]/
     NONKEYWORD: /(?![Aa][Nn][Dd]\b|[Oo][Rr]\b|[Nn][Oo][Tt]\b)[^\s()]+/
 
     %import common.WS
     %ignore WS
 """
+
 
 
 lucene_url = "https://lucene.apache.org/core/2_9_4/queryparsersyntax.html"
@@ -243,7 +242,7 @@ def query_objects(
     if not query:
         yield from filter(object_filter, candidates)
         return
-        
+
     try:
         condition = _parse_query(query)
         for obj in candidates:
