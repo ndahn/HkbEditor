@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import re
 from ast import literal_eval
 from copy import deepcopy
+from enum import Enum
 from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
@@ -18,21 +19,27 @@ from hkb_editor.hkb.index_attributes import (
 )
 from hkb_editor.hkb import HkbPointer, HkbRecord, HkbArray, XmlValueHandler
 from hkb_editor.hkb.type_registry import TypeMismatch
-from hkb_editor.templates.common import CommonActionsMixin
 from hkb_editor.gui import style
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.helpers import common_loading_indicator, add_paragraphs
 
 
+class MergeAction(Enum):
+    NEW = 0
+    REUSE = 1
+    IGNORE = 2
+    SKIP = 3
+
+
 @dataclass
 class Resolution:
     original: Any = None
-    action: str = "<new>"
+    action: MergeAction = MergeAction.NEW
     result: Any = None
 
 
 @dataclass
-class MergeHierarchy:
+class MergeResult:
     root_id: str = None
     root_meta: dict[str:Any] = field(default_factory=dict)
     events: dict[int, Resolution] = field(default_factory=dict)
@@ -205,13 +212,14 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
     ET.indent(xml_root)
     ret = ET.tostring(xml_root, pretty_print=True, encoding="unicode")
     logging.getLogger().info(f"Serialized {len(objects)} objects")
+
     return ret
 
 
 def import_hierarchy(
     behavior: HavokBehavior,
     xml: str,
-    callback: Callable[[MergeHierarchy], None] = None,
+    callback: Callable[[MergeResult], None] = None,
     *,
     interactive: bool = True,
 ):
@@ -248,9 +256,9 @@ def import_hierarchy(
 
         return target_obj, target_path
 
-    def update_target_pointers(hierarchy: MergeHierarchy):
+    def update_target_pointers(hierarchy: MergeResult):
         hierarchy_root = hierarchy.objects[root_id]
-        if not hierarchy_root.result or hierarchy_root.action != "<new>":
+        if not hierarchy_root.result or hierarchy_root.action != MergeAction.NEW:
             return
 
         target_id = hierarchy_root.result.object_id
@@ -268,6 +276,7 @@ def import_hierarchy(
             callback(hierarchy)
 
     with undo_manager.combine():
+        # The taret object may be attached in more than one place
         targets = []
 
         behavior_root = behavior.find_first_by_type_name("hkRootLevelContainer")
@@ -305,10 +314,10 @@ def paste_hierarchy(
     xml: str | ET._Element,
     target_record: HkbRecord,
     target_path: str,
-    callback: Callable[[MergeHierarchy], None] = None,
+    callback: Callable[[MergeResult], None] = None,
     *,
     interactive: bool = True,
-) -> MergeHierarchy:
+) -> MergeResult:
     if isinstance(xml, str):
         try:
             xmldoc = ET.fromstring(xml, get_xml_parser())
@@ -359,7 +368,7 @@ def paste_hierarchy(
             for res in hierarchy.objects.values():
                 obj: HkbRecord = res.result
                 # Objects with action <reuse> and <skip> should not be added
-                if obj and res.action == "<new>":
+                if obj and res.action == MergeAction.NEW:
                     behavior.add_object(obj)
 
             target_pointer = target_record.get_field(target_path)
@@ -387,35 +396,19 @@ def paste_children(
     xml: str | ET._Element,
     target_record: HkbRecord,
     target_path: str,
-    callback: Callable[[MergeHierarchy], None] = None,
+    callback: Callable[[MergeResult], None] = None,
     *,
     interactive: bool = True,
-) -> MergeHierarchy:
-    if isinstance(xml, str):
-        try:
-            xmldoc = ET.fromstring(xml, get_xml_parser())
-        except Exception as e:
-            raise ValueError(f"Failed to parse hierarchy: {e}")
-    else:
-        xmldoc = xml
-
-    if xmldoc.tag != "behavior_hierarchy":
-        raise ValueError("Not a valid behavior hierarchy")
-
-    root_id = xmldoc.find("root_meta").get("root_id")
-
-    loading = common_loading_indicator("Analyzing hierarchy")
-    try:
-        hierarchy = find_conflicts(behavior, xmldoc, target_record)
-    finally:
-        dpg.delete_item(loading)
+) -> MergeResult:
+    logger = logging.getLogger()
 
     def add_children():
         nonlocal target_path
 
-        hierarchy.objects[root_id].action = "<skip>"
+        root_id = xmldoc.find("root_meta").get("root_id")
+        results.objects[root_id].action = MergeAction.SKIP
 
-        source_obj: HkbRecord = hierarchy.objects[root_id].original
+        source_obj: HkbRecord = results.objects[root_id].original
         root_children = set()
         for _, ptr in source_obj.find_fields_by_type(HkbPointer):
             if ptr.is_set():
@@ -433,17 +426,16 @@ def paste_children(
             )
 
         refptr = HkbPointer.new(behavior, target_array.element_type_id)
-        logger = logging.getLogger()
 
-        for res in hierarchy.objects.values():
+        for res in results.objects.values():
             obj: HkbRecord = res.result
-            if obj and res.action == "<new>":
+            if obj and res.action == MergeAction.NEW:
                 if obj.object_id in root_children:
                     if refptr.will_accept(obj):
                         behavior.add_object(obj)
                         target_array.append(obj.object_id)
                     else:
-                        res.action = "<skip>"
+                        res.action = MergeAction.SKIP
                         logger.warning(
                             f"Skipping incompatible hierarchy child {str(obj)}"
                         )
@@ -453,229 +445,203 @@ def paste_children(
         # If we copy only the root's children we should merge the relevant wildcard transitions
         if source_obj.type_name == "hkbStateMachine":
             logger.info("Fixing state IDs and wildcard transitions")
-
-            # Collect all wildcard transitions for easy access
-            transitions = {}
-            
-            # Transferred objects will refer to new IDs but may not have been added yet
-            new_id_map = {}
-            for res in hierarchy.objects.values():
-                if res.result:
-                    new_id_map[res.result.object_id] = res.original
-
-            # The source wildcards ID has probably been updated
-            source_wildcards_id = source_obj["wildcardTransitions"].get_value()
-            source_wildcards = new_id_map.get(source_wildcards_id)
-
-            if source_wildcards:
-                for trans in source_wildcards["transitions"]:
-                    transitions[trans["toStateId"].get_value()] = trans
-
-            # Check if the target statemachine has a TransitionInfoArray object and create it
-            # if neccessary
-            target_wildcards = target_record["wildcardTransitions"].get_target()
-            if target_wildcards is None:
-                target_wildcards = HkbRecord.new(
-                    behavior, target_record.get_field_type("wildcardTransitions")
-                )
-
-                behavior.add_object(target_wildcards)
-                undo_manager.on_create_object(behavior, target_wildcards)
-                
-                target_record["wildcardTransitions"].set_value(target_wildcards)
-                undo_manager.on_update_value(
-                    target_record["wildcardTransitions"],
-                    None,
-                    target_wildcards.object_id,
-                )
-
-            # Transfer the transition infos
-            target_wildcards_array: HkbArray = target_wildcards["transitions"]
-            for ptr in source_obj["states"]:
-                target_state = new_id_map.get(ptr.get_value())
-                if target_state:
-                    state_id = target_state["stateId"].get_value()
-                    trans: HkbRecord = transitions.get(state_id)
-                    if trans:
-                        new_trans = HkbRecord(behavior, deepcopy(trans.element), target_wildcards_array.element_type_id)
-                        target_wildcards_array.append(new_trans)
-
-        if target_record.type_name == "hkbStateMachine":
+            transfer_wildcard_transitions(behavior, results, source_obj, target_record)
             fix_state_ids(target_record)
 
         if callback:
-            callback(hierarchy)
+            callback(results)
+    
+    # Parse the xml
+    if isinstance(xml, str):
+        try:
+            xmldoc = ET.fromstring(xml, get_xml_parser())
+        except Exception as e:
+            raise ValueError("Clipboard data is not a valid hierarchy") from e
+    else:
+        xmldoc = xml
 
+    if xmldoc.tag != "behavior_hierarchy":
+        raise ValueError("Not a valid behavior hierarchy")
+
+    # Search for conflicts
+    loading = common_loading_indicator("Analyzing hierarchy")
+    try:
+        results = find_conflicts(behavior, xmldoc, target_record)
+        root_id = xmldoc.find("root_meta").get("root_id")
+        results.objects[root_id].action = MergeAction.IGNORE
+    finally:
+        dpg.delete_item(loading)
+
+    # Let the user decide what to transfer, or just transfer everything
     if interactive:
         open_merge_hierarchy_dialog(
-            behavior, xmldoc, hierarchy, target_record, add_children
+            behavior, xmldoc, results, target_record, add_children
         )
     else:
         with undo_manager.guard(behavior):
-            resolve_conflicts(behavior, target_record, hierarchy)
-            hierarchy.pin_objects = True
+            resolve_conflicts(behavior, target_record, results)
+            results.pin_objects = True
             add_children()
-
-
-def _find_index_attribute_conflicts(
-    behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeHierarchy
-) -> None:
-    # For events, variables and animations we check if there is already one with a matching name.
-    # If there is no match it probably has to be created. If it exists but the index is different
-    # we still treat it as a conflict, albeit one that has a likely solution.
-
-    # Events
-    for evt in xml.findall(".//event"):
-        idx = int(evt.get("idx"))
-        name = evt.get("name")
-
-        if name:
-            match_idx = behavior.find_event(name, -1)
-            action = "<new>" if match_idx < 0 else "<reuse>"
-            hierarchy.events[idx] = Resolution((idx, name), action, (match_idx, name))
-        else:
-            hierarchy.events[idx] = Resolution((idx, name), "<skip>", (-1, None))
-
-    # Variables
-    for var in xml.findall(".//variable"):
-        idx = int(var.get("idx"))
-        name = var.get("name")
-
-        if name:
-            vtype = VariableType[var.get("vtype")]
-            vmin = var.get("min")
-            vmax = var.get("max")
-            default = var.get("default")
-
-            try:
-                default = literal_eval(default)
-            except ValueError:
-                # Assume it's a string
-                pass
-
-            var = HkbVariable(name, vtype, vmin, vmax, default)
-            match_idx = behavior.find_variable(name, -1)
-
-            if match_idx < 0:
-                hierarchy.variables[idx] = Resolution((idx, var), "<new>", (-1, var))
-            else:
-                hierarchy.variables[idx] = Resolution(
-                    (idx, var), "<reuse>", (match_idx, var)
-                )
-        else:
-            hierarchy.variables[idx] = Resolution((idx, var), "<skip>", (-1, None))
-
-    # Animations
-    for anim in xml.findall(".//animation"):
-        idx = int(anim.get("idx"))
-        name = anim.get("name")
-
-        if name:
-            match_idx = behavior.find_animation(name, -1)
-            action = "<new>" if match_idx < 0 else "<reuse>"
-            hierarchy.animations[idx] = Resolution(
-                (idx, name), action, (match_idx, name)
-            )
-        else:
-            hierarchy.animations[idx] = Resolution((idx, name), "<skip>", (-1, None))
-
-
-def _find_type_conflicts(
-    behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeHierarchy
-) -> None:
-    logger = logging.getLogger()
-
-    # Every type should have a corresponding match by name, even when the type IDs disagree
-    for type_info in xml.findall(".//type"):
-        tid = type_info.get("id")
-        name = type_info.get("name")
-
-        try:
-            new_id = behavior.type_registry.find_first_type_by_name(name)
-        except StopIteration:
-            raise ValueError(f"Could not resolve type {tid} ({name})")
-
-        if new_id != tid:
-            logger.debug(f"Remapping object type {tid} ({name}) to {new_id}")
-
-        hierarchy.type_map[tid] = Resolution((tid, name), "<remap>", (new_id, name))
-
-
-def _find_object_conflicts(
-    behavior: HavokBehavior, xml: ET.Element, hierarchy: MergeHierarchy
-) -> None:
-    logger = logging.getLogger()
-    mismatching_types = set()
-
-    for xmlobj in xml.find("objects").getchildren():
-        # Remap the typeid. Should only be relevant when cloning between different games or
-        # versions of hklib, but in those cases it might just make it work
-        old_type_id = xmlobj.get("typeid")
-        new_type_id = hierarchy.type_map[old_type_id].result[0]
-        xmlobj.set("typeid", new_type_id)
-        obj = tmp = None
-
-        try:
-            # If the record comes from a different game (or version), the xml element might
-            # have extra fields or miss some we are expecting. By constructing a new object
-            # we ensure that all required fields are present.
-            obj = HkbRecord.new(behavior, new_type_id, None, xmlobj.get("id"))
-            tmp = HkbRecord.from_object(behavior, xmlobj)
-
-            # Fix up element type IDs. Search for arrays in obj, but modify them in tmp so
-            # they can be resolved properly. Pointers don't need fixing since they don't
-            # save their subtype in the xml.
-            array: HkbArray
-            for path, _ in obj.find_fields_by_type(HkbArray):
-                array = tmp.get_field(path, None)
-                if array:
-                    array.element_type_id = hierarchy.type_map[
-                        array.element_type_id
-                    ].result[0]
-
-            obj.set_value(tmp)
-
-            # Verify object has the expected fields
-            behavior.type_registry.verify_object(obj)
-        except TypeMismatch as e:
-            type_name = behavior.type_registry.get_name(new_type_id)
-            if type_name not in mismatching_types:
-                if e.missing:
-                    logger.warning(
-                        f"Hierarchy type {old_type_id} ({type_name}) is missing expected fields, will use default initializers: {e.missing}"
-                    )
-
-                if e.extra:
-                    logger.warning(
-                        f"Hierarchy type {old_type_id} ({type_name}) contains unexpected fields which will be ignored: {e.extra}"
-                    )
-
-                mismatching_types.add(type_name)
-        except Exception as e:
-            raise ValueError(
-                f"Failed to reconstruct object {xmlobj.get('id')} from xml"
-            ) from e
-
-        # Pointers
-        # Find pointers in the behavior referencing this object's ID. If more than one
-        # other object is already referencing it, it is most likely a reused object like
-        # e.g. DefaultTransition.
-        existing_obj = behavior.objects.get(obj.object_id)
-        if (
-            existing_obj
-            and existing_obj.type_name == obj.type_name
-            and obj.type_name
-            in ("CustomTransitionEffect", "hkbBlendingTransitionEffect")
-        ):
-            hierarchy.objects[obj.object_id] = Resolution(obj, "<reuse>", existing_obj)
-        else:
-            hierarchy.objects[obj.object_id] = Resolution(obj, "<new>", obj)
 
 
 def find_conflicts(
     behavior: HavokBehavior, xml: ET.Element, target_record: HkbRecord
-) -> MergeHierarchy:
-    hierarchy = MergeHierarchy()
+) -> MergeResult:
+    hierarchy = MergeResult()
+
+    def _find_index_attribute_conflicts(
+        behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeResult
+    ) -> None:
+        # For events, variables and animations we check if there is already one with a matching name.
+        # If there is no match it probably has to be created. If it exists but the index is different
+        # we still treat it as a conflict, albeit one that has a likely solution.
+
+        # Events
+        for evt in xml.findall(".//event"):
+            idx = int(evt.get("idx"))
+            name = evt.get("name")
+
+            if name:
+                match_idx = behavior.find_event(name, -1)
+                action = MergeAction.NEW if match_idx < 0 else MergeAction.REUSE
+                hierarchy.events[idx] = Resolution((idx, name), action, (match_idx, name))
+            else:
+                hierarchy.events[idx] = Resolution((idx, name), MergeAction.SKIP, (-1, None))
+
+        # Variables
+        for var in xml.findall(".//variable"):
+            idx = int(var.get("idx"))
+            name = var.get("name")
+
+            if name:
+                vtype = VariableType[var.get("vtype")]
+                vmin = var.get("min")
+                vmax = var.get("max")
+                default = var.get("default")
+
+                try:
+                    default = literal_eval(default)
+                except ValueError:
+                    # Assume it's a string
+                    pass
+
+                var = HkbVariable(name, vtype, vmin, vmax, default)
+                match_idx = behavior.find_variable(name, -1)
+
+                if match_idx < 0:
+                    hierarchy.variables[idx] = Resolution((idx, var), MergeAction.NEW, (-1, var))
+                else:
+                    hierarchy.variables[idx] = Resolution(
+                        (idx, var), MergeAction.REUSE, (match_idx, var)
+                    )
+            else:
+                hierarchy.variables[idx] = Resolution((idx, var), MergeAction.SKIP, (-1, None))
+
+        # Animations
+        for anim in xml.findall(".//animation"):
+            idx = int(anim.get("idx"))
+            name = anim.get("name")
+
+            if name:
+                match_idx = behavior.find_animation(name, -1)
+                action = MergeAction.NEW if match_idx < 0 else MergeAction.REUSE
+                hierarchy.animations[idx] = Resolution(
+                    (idx, name), action, (match_idx, name)
+                )
+            else:
+                hierarchy.animations[idx] = Resolution((idx, name), MergeAction.SKIP, (-1, None))
+
+
+    def _find_type_conflicts(
+        behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeResult
+    ) -> None:
+        logger = logging.getLogger()
+
+        # Every type should have a corresponding match by name, even when the type IDs disagree
+        for type_info in xml.findall(".//type"):
+            tid = type_info.get("id")
+            name = type_info.get("name")
+
+            try:
+                new_id = behavior.type_registry.find_first_type_by_name(name)
+            except StopIteration:
+                raise ValueError(f"Could not resolve type {tid} ({name})")
+
+            if new_id != tid:
+                logger.debug(f"Remapping object type {tid} ({name}) to {new_id}")
+
+            hierarchy.type_map[tid] = Resolution((tid, name), MergeAction.REUSE, (new_id, name))
+
+
+    def _find_object_conflicts(
+        behavior: HavokBehavior, xml: ET.Element, hierarchy: MergeResult
+    ) -> None:
+        logger = logging.getLogger()
+        mismatching_types = set()
+
+        for xmlobj in xml.find("objects").getchildren():
+            # Remap the typeid. Should only be relevant when cloning between different games or
+            # versions of hklib, but in those cases it might just make it work
+            old_type_id = xmlobj.get("typeid")
+            new_type_id = hierarchy.type_map[old_type_id].result[0]
+            xmlobj.set("typeid", new_type_id)
+            obj = tmp = None
+
+            try:
+                # If the record comes from a different game (or version), the xml element might
+                # have extra fields or miss some we are expecting. By constructing a new object
+                # we ensure that all required fields are present.
+                obj = HkbRecord.new(behavior, new_type_id, None, xmlobj.get("id"))
+                tmp = HkbRecord.from_object(behavior, xmlobj)
+
+                # Fix up element type IDs. Search for arrays in obj, but modify them in tmp so
+                # they can be resolved properly. Pointers don't need fixing since they don't
+                # save their subtype in the xml.
+                array: HkbArray
+                for path, _ in obj.find_fields_by_type(HkbArray):
+                    array = tmp.get_field(path, None)
+                    if array:
+                        array.element_type_id = hierarchy.type_map[
+                            array.element_type_id
+                        ].result[0]
+
+                obj.set_value(tmp)
+
+                # Verify object has the expected fields
+                behavior.type_registry.verify_object(obj)
+            except TypeMismatch as e:
+                type_name = behavior.type_registry.get_name(new_type_id)
+                if type_name not in mismatching_types:
+                    if e.missing:
+                        logger.warning(
+                            f"Hierarchy type {old_type_id} ({type_name}) is missing expected fields, will use default initializers: {e.missing}"
+                        )
+
+                    if e.extra:
+                        logger.warning(
+                            f"Hierarchy type {old_type_id} ({type_name}) contains unexpected fields which will be ignored: {e.extra}"
+                        )
+
+                    mismatching_types.add(type_name)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to reconstruct object {xmlobj.get('id')} from xml"
+                ) from e
+
+            # Pointers
+            # Find pointers in the behavior referencing this object's ID. If more than one
+            # other object is already referencing it, it is most likely a reused object like
+            # e.g. DefaultTransition.
+            existing_obj = behavior.objects.get(obj.object_id)
+            if (
+                existing_obj
+                and existing_obj.type_name == obj.type_name
+                and obj.type_name
+                in ("CustomTransitionEffect", "hkbBlendingTransitionEffect")
+            ):
+                hierarchy.objects[obj.object_id] = Resolution(obj, MergeAction.REUSE, existing_obj)
+            else:
+                hierarchy.objects[obj.object_id] = Resolution(obj, MergeAction.NEW, obj)
 
     _find_index_attribute_conflicts(behavior, xml, hierarchy)
     _find_type_conflicts(behavior, xml, hierarchy)
@@ -687,7 +653,7 @@ def find_conflicts(
 def resolve_conflicts(
     behavior: HavokBehavior,
     target_record: HkbRecord,
-    hierarchy: MergeHierarchy,
+    hierarchy: MergeResult,
 ) -> None:
     # TODO this should be optional
     # TODO define various conflict resolution strategies, like skip on conflict, reuse
@@ -703,8 +669,7 @@ def resolve_conflicts(
             if not other.result or other.result.object_id == object_id:
                 continue
 
-            if other.action == "<new>":
-                # <new> is the only action type that will include descendents
+            if other.action in (MergeAction.NEW, MergeAction.IGNORE):
                 ptr: HkbPointer
                 for _, ptr in other.result.find_fields_by_type(HkbPointer):
                     if ptr.get_value() == object_id:
@@ -712,19 +677,19 @@ def resolve_conflicts(
 
         return False
 
-    # Create missing events, variables and animations. If the value is not "<new>" we can
+    # Create missing events, variables and animations. If the value is not MergeAction.NEW we can
     # expect that a mapping to another value has been applied
     for idx, resolution in hierarchy.events.items():
         name = resolution.original[1]
-        if resolution.action == "<new>":
+        if resolution.action == MergeAction.NEW:
             new_idx = behavior.create_event(name)
             resolution.result = (new_idx, name)
-        elif resolution.action == "<reuse>":
+        elif resolution.action == MergeAction.REUSE:
             new_idx = behavior.find_event(name)
             resolution.result = (new_idx, name)
-        elif resolution.action == "<keep>":
+        elif resolution.action == MergeAction.IGNORE:
             resolution.result = resolution.original
-        elif resolution.action == "<skip>":
+        elif resolution.action == MergeAction.SKIP:
             resolution.result = (-1, None)
         else:
             raise ValueError(
@@ -733,15 +698,15 @@ def resolve_conflicts(
 
     for idx, resolution in hierarchy.variables.items():
         var: HkbVariable = resolution.original[1]
-        if resolution.action == "<new>":
+        if resolution.action == MergeAction.NEW:
             new_idx = behavior.create_variable(*var.astuple())
             resolution.result = (new_idx, var)
-        elif resolution.action == "<reuse>":
+        elif resolution.action == MergeAction.REUSE:
             new_idx = behavior.find_variable(var.name)
             resolution.result = (new_idx, var)
-        elif resolution.action == "<keep>":
+        elif resolution.action == MergeAction.IGNORE:
             resolution.result = resolution.original
-        elif resolution.action == "<skip>":
+        elif resolution.action == MergeAction.SKIP:
             resolution.result = (-1, None)
         else:
             raise ValueError(
@@ -750,15 +715,15 @@ def resolve_conflicts(
 
     for idx, resolution in hierarchy.animations.items():
         name = resolution.original[1]
-        if resolution.action == "<new>":
+        if resolution.action == MergeAction.NEW:
             new_idx = behavior.create_animation(name)
             resolution.result = (new_idx, name)
-        elif resolution.action == "<reuse>":
+        elif resolution.action == MergeAction.REUSE:
             new_idx = behavior.find_animation(name)
             resolution.result = (new_idx, name)
-        elif resolution.action == "<keep>":
+        elif resolution.action == MergeAction.IGNORE:
             resolution.result = resolution.original
-        elif resolution.action == "<skip>":
+        elif resolution.action == MergeAction.SKIP:
             resolution.result = (-1, None)
         else:
             raise ValueError(
@@ -767,13 +732,13 @@ def resolve_conflicts(
 
     # Handle conflicting objects
     for object_id, resolution in hierarchy.objects.items():
-        if resolution.action == "<new>":
+        if resolution.action == MergeAction.NEW:
             resolution.result = resolution.original
 
             # If the object is set to <new>, but none of its parents are cloned,
             # the object will not be included after all
             if not is_object_included(object_id):
-                resolution.action = "<skip>"
+                resolution.action = MergeAction.SKIP
                 logging.getLogger().info(
                     f"Skipping object {object_id} as none of its parents are cloned"
                 )
@@ -783,9 +748,14 @@ def resolve_conflicts(
                 new_id = behavior.new_id()
                 resolution.result.object_id = new_id
 
-        elif resolution.action == "<reuse>":
+        elif resolution.action == MergeAction.REUSE:
             resolution.result = behavior.objects[object_id]
-        elif resolution.action == "<skip>":
+        elif resolution.action == MergeAction.IGNORE:
+            # Will not be added, but giving it a new ID will be prevent other objects from 
+            # accidently referring to existing objects from the behavior
+            resolution.result = resolution.original
+            resolution.result.object_id = behavior.new_id()
+        elif resolution.action == MergeAction.SKIP:
             resolution.result = None
         else:
             raise ValueError(
@@ -796,7 +766,9 @@ def resolve_conflicts(
     for object_id, resolution in hierarchy.objects.items():
         # Fix any pointers pointing to conflicting objects
         obj: HkbRecord = resolution.result
-        if not obj or resolution.action in ("<reuse>", "<skip>"):
+        # We still want to update the pointers of ignored objects so that they can be 
+        # followed later if needed
+        if not obj or resolution.action not in (MergeAction.NEW, MergeAction.IGNORE):
             continue
 
         ptr: HkbPointer
@@ -817,7 +789,7 @@ def resolve_conflicts(
     for object_id, resolution in hierarchy.objects.items():
         obj: HkbRecord = resolution.result
 
-        if not obj or resolution.action in ("<reuse>", "<skip>"):
+        if not obj or resolution.action in (MergeAction.REUSE, MergeAction.SKIP):
             # Skip if object is not cloned or an existing object is reused
             continue
 
@@ -846,6 +818,60 @@ def resolve_conflicts(
 
     # Handle additional root metadata
     # root_res = hierarchy.objects[hierarchy.root_id]
+
+
+
+def transfer_wildcard_transitions(behavior: HavokBehavior, results: MergeResult, source_sm: HkbRecord, target_sm: HkbRecord):
+    # Collect all wildcard transitions for easy access
+    transitions = {}
+
+    # Transferred objects will refer to new IDs but may not have been added yet
+    new_id_map = {}
+    for res in results.objects.values():
+        if res.result:
+            new_id_map[res.result.object_id] = res.original
+
+    # The source wildcards ID has probably been updated
+    source_wildcards_id = source_sm["wildcardTransitions"].get_value()
+    source_wildcards = new_id_map.get(source_wildcards_id)
+
+    if source_wildcards:
+        for trans in source_wildcards["transitions"]:
+            transitions[trans["toStateId"].get_value()] = trans
+
+    # Check if the target statemachine has a TransitionInfoArray object and create it
+    # if neccessary
+    target_wildcards = target_sm["wildcardTransitions"].get_target()
+    if target_wildcards is None:
+        target_wildcards = HkbRecord.new(
+            behavior, target_sm.get_field_type("wildcardTransitions")
+        )
+
+        behavior.add_object(target_wildcards)
+        undo_manager.on_create_object(behavior, target_wildcards)
+
+        target_sm["wildcardTransitions"].set_value(target_wildcards)
+        undo_manager.on_update_value(
+            target_sm["wildcardTransitions"],
+            None,
+            target_wildcards.object_id,
+        )
+
+    # Transfer the transition infos
+    target_wildcards_array: HkbArray = target_wildcards["transitions"]
+    for ptr in source_sm["states"]:
+        target_state = new_id_map.get(ptr.get_value())
+        if target_state:
+            state_id = target_state["stateId"].get_value()
+            trans: HkbRecord = transitions.get(state_id)
+            if trans:
+                new_trans = HkbRecord(
+                    behavior,
+                    deepcopy(trans.element),
+                    target_wildcards_array.element_type_id,
+                )
+                target_wildcards_array.append(new_trans)
+
 
 
 def fix_state_ids(statemachine: HkbRecord):
@@ -882,10 +908,11 @@ def fix_state_ids(statemachine: HkbRecord):
             else:
                 discovered.add(state_id)
 
+
 def open_merge_hierarchy_dialog(
     behavior: HavokBehavior,
     xml: ET.Element,
-    hierarchy: MergeHierarchy,
+    hierarchy: MergeResult,
     target_record: HkbRecord,
     callback: Callable[[], None],
     *,
@@ -898,7 +925,7 @@ def open_merge_hierarchy_dialog(
     graph_preview = None
 
     def update_action(sender: str, action: str, resolution: Resolution):
-        resolution.action = action
+        resolution.action = MergeAction[action]
 
     def resolve():
         loading = common_loading_indicator("Merging Hierarchy")
@@ -1061,14 +1088,17 @@ def open_merge_hierarchy_dialog(
                                     dpg.add_text(str(resolution.result[0]))
                                     dpg.add_text(resolution.result[1])
 
-                                    actions = ["<new>", "<reuse>", "<keep>"]
+                                    actions = [a.name for a in MergeAction]
                                     if resolution.result[0] < 0:
                                         # Can't reuse if there's no match
-                                        actions.remove("<reuse>")
+                                        actions.remove(MergeAction.REUSE.name)
+                                    else:
+                                        # Can't add if the constant already exists
+                                        actions.remove(MergeAction.NEW.name)
 
                                     dpg.add_combo(
                                         actions,
-                                        default_value=resolution.action,
+                                        default_value=resolution.action.name,
                                         callback=update_action,
                                         user_data=resolution,
                                     )
@@ -1105,14 +1135,17 @@ def open_merge_hierarchy_dialog(
                                     dpg.add_text(str(resolution.result[0]))
                                     dpg.add_text(resolution.result[1].name)
 
-                                    actions = ["<new>", "<reuse>", "<keep>"]
+                                    actions = [a.name for a in MergeAction]
                                     if resolution.result[0] < 0:
                                         # Can't reuse if there's no match
-                                        actions.remove("<reuse>")
+                                        actions.remove(MergeAction.REUSE.name)
+                                    else:
+                                        # Can't add if the constant already exists
+                                        actions.remove(MergeAction.NEW.name)
 
                                     dpg.add_combo(
                                         actions,
-                                        default_value=resolution.action,
+                                        default_value=resolution.action.name,
                                         callback=update_action,
                                         user_data=resolution,
                                     )
@@ -1149,14 +1182,17 @@ def open_merge_hierarchy_dialog(
                                     dpg.add_text(str(resolution.result[0]))
                                     dpg.add_text(resolution.result[1])
 
-                                    actions = ["<new>", "<reuse>", "<keep>"]
+                                    actions = [a.name for a in MergeAction]
                                     if resolution.result[0] < 0:
                                         # Can't reuse if there's no match
-                                        actions.remove("<reuse>")
+                                        actions.remove(MergeAction.REUSE.name)
+                                    else:
+                                        # Can't add if the constant already exists
+                                        actions.remove(MergeAction.NEW.name)
 
                                     dpg.add_combo(
                                         actions,
-                                        default_value=resolution.action,
+                                        default_value=resolution.action.name,
                                         callback=update_action,
                                         user_data=resolution,
                                     )
@@ -1192,8 +1228,8 @@ def open_merge_hierarchy_dialog(
                                     dpg.add_text(resolution.result[0])
                                     dpg.add_text(f"({resolution.result[1]})")
                                     dpg.add_combo(
-                                        ["<remap>"],
-                                        default_value=resolution.action,
+                                        [MergeAction.REUSE.name],
+                                        default_value=resolution.action.name,
                                         callback=update_action,
                                         user_data=resolution,
                                     )
@@ -1226,14 +1262,14 @@ def open_merge_hierarchy_dialog(
                                     dpg.add_text(oid)
                                     dpg.add_text(name)
 
-                                    actions = ["<new>", "<reuse>", "<skip>"]
+                                    actions = [a.name for a in MergeAction]
                                     if oid not in behavior.objects:
                                         # Can't reuse if there is no match
-                                        actions.remove("<reuse>")
+                                        actions.remove(MergeAction.REUSE.name)
 
                                     dpg.add_combo(
                                         actions,
-                                        default_value=resolution.action,
+                                        default_value=resolution.action.name,
                                         callback=update_action,
                                         user_data=resolution,
                                     )
@@ -1243,12 +1279,12 @@ def open_merge_hierarchy_dialog(
         dpg.add_separator()
 
         instructions = """\
-The above hierarchy will be added to the behavior. Items with the "<new>" action will be added
-under a new ID/index, while items with the "<reuse>" action will use already existing objects
-from the behavior. 
+The above hierarchy will be added to the behavior.
 
-Note that new events, variables and animations must still have unique names - you'll have to fix
-these afterwards.
+- NEW: add with a new ID/index
+- REUSE: use already existing objects
+- IGNORE: don't add, but include children (this can create gaps)
+- SKIP: don't add and ignore all children (unless reachable otherwise)
 """
         add_paragraphs(instructions, 150, color=style.light_blue)
 
