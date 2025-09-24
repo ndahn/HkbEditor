@@ -60,7 +60,12 @@ from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
-from .workflows.clone_hierarchy import import_hierarchy, paste_hierarchy, paste_children
+from .workflows.clone_hierarchy import (
+    import_hierarchy,
+    paste_hierarchy,
+    paste_children,
+    MergeAction,
+)
 from .workflows.verify_behavior import verify_behavior
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
@@ -896,7 +901,9 @@ class BehaviorEditor(GraphEditor):
             canvas_node = self.canvas.nodes[new_obj.object_id]
             self.on_node_selected(canvas_node)
 
-        def attach_new_object(sender: str, app_data: str, target: tuple[HkbRecord, str]):
+        def attach_new_object(
+            sender: str, app_data: str, target: tuple[HkbRecord, str]
+        ):
             target_obj = target[0]
             target_type_id = get_target_type_id(target_obj)
 
@@ -941,13 +948,20 @@ class BehaviorEditor(GraphEditor):
 
                 do_attach(target_obj, new_obj)
 
-        def attach_hierarchy(sender: str, app_data: str, target: tuple[HkbRecord, str], children_only: bool = False):
+        def attach_hierarchy(
+            sender: str,
+            app_data: str,
+            target: tuple[HkbRecord, str],
+            children_only: bool = False,
+        ):
             target_obj, target_path = target
             xml = pyperclip.paste()
 
             def on_merge_success(result):
                 new_objects = [
-                    r.result for r in result.objects.values() if r.action == "<new>"
+                    r.result
+                    for r in result.objects.values()
+                    if r.action == MergeAction.NEW
                 ]
                 self.logger.info(
                     f"Attached hierarchy of {len(new_objects)} elements to {target_obj.object_id}/{target_path}"
@@ -962,7 +976,9 @@ class BehaviorEditor(GraphEditor):
             if children_only:
                 paste_children(self.beh, xml, target_obj, target_path, on_merge_success)
             else:
-                paste_hierarchy(self.beh, xml, target_obj, target_path, on_merge_success)
+                paste_hierarchy(
+                    self.beh, xml, target_obj, target_path, on_merge_success
+                )
 
         def attach_children(sender: str, app_data: str, target: tuple[HkbRecord, str]):
             attach_hierarchy(sender, app_data, target, True)
@@ -984,7 +1000,7 @@ class BehaviorEditor(GraphEditor):
                     callback=attach_from_xml,
                     user_data=(record, path),
                 )
-            
+
                 if isinstance(obj, HkbArray):
                     dpg.add_selectable(
                         label="Hierarchy (full)",
@@ -1576,7 +1592,9 @@ class BehaviorEditor(GraphEditor):
 
         def on_import(hierarchy):
             new_objects = [
-                r.result for r in hierarchy.objects.values() if r.action == "<new>"
+                r.result
+                for r in hierarchy.objects.values()
+                if r.action == MergeAction.NEW
             ]
             self.logger.info(f"Imported hierarchy of {len(new_objects)} elements")
 

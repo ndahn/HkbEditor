@@ -46,7 +46,7 @@ from .workflows.bind_attribute import (
 )
 from .workflows.aliases import AliasManager
 from .workflows.undo import undo_manager
-from .workflows.clone_hierarchy import paste_hierarchy
+from .workflows.clone_hierarchy import paste_hierarchy, MergeAction
 from .helpers import create_flag_checkboxes, add_paragraphs
 from . import style
 
@@ -907,7 +907,10 @@ class AttributesWidget:
             self.on_value_changed(sender, handler, (old_value, new_value))
 
         if sender and dpg.does_item_exist(sender):
-            dpg.set_value(sender, ui_repr)
+            try:
+                dpg.set_value(sender, ui_repr)
+            except Exception:
+                print("###", ui_repr)
 
     def _cut_value(
         self, sender, app_data, user_data: tuple[str, XmlValueHandler]
@@ -1033,7 +1036,7 @@ class AttributesWidget:
 
         def on_hierarchy_merged(hierarchy):
             new_objects = [
-                r.result for r in hierarchy.objects.values() if r.action == "<new>"
+                r.result for r in hierarchy.objects.values() if r.action == MergeAction.NEW
             ]
             self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
 

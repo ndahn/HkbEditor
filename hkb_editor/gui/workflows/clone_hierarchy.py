@@ -155,9 +155,9 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
         chain = []
         for idx, node_id in enumerate(path[:-1]):
             obj: HkbRecord = behavior.objects[node_id]
-            next_id = path[idx + 1]
+            next_node = path[idx + 1]
             for attr_path, ptr in obj.find_fields_by_type(HkbPointer):
-                if ptr.get_value() == next_id:
+                if ptr.get_value() == next_node:
                     chain.append(attr_path)
                     break
 
@@ -232,12 +232,19 @@ def import_hierarchy(
     logger = logging.getLogger()
 
     def resolve_root_path(root_path: list[str]) -> HkbPointer:
-        target_obj = behavior_root
+        target_obj = behavior.find_first_by_type_name("hkRootLevelContainer")
         target_ptr: HkbPointer
 
         # Follow the chain
-        for path in root_path[-1]:
-            target_ptr = target_obj.get_field(path)
+        for path in root_path[:-1]:
+            try:
+                target_ptr = target_obj.get_field(path)
+            except KeyError:
+                logger.warning(
+                    f"Failed to resolve root path {target_obj}/{path}", exc_info=True
+                )
+                return None
+
             new_target_obj = target_ptr.get_target()
 
             if new_target_obj is None:
@@ -252,7 +259,7 @@ def import_hierarchy(
         # and return a new pointer.
         target_path = root_path[-1]
         if re.match(r"^.*:[0-9]+$", target_path):
-            target_path = target_path.rsplit(":", maxsplit=1)[0]
+            target_path = target_path.rsplit(":", maxsplit=1)[0] + ":-1"
 
         return target_obj, target_path
 
@@ -263,9 +270,21 @@ def import_hierarchy(
 
         target_id = hierarchy_root.result.object_id
 
-        for target_obj, target_path in targets:
+        # First one is set by paste_hierarchy already
+        for target_obj, target_path in targets[1:]:
             try:
-                ptr: HkbPointer = target_obj.get_field(target_path)
+                if target_path.endswith(":-1"):
+                    array: HkbArray = target_obj.get_field(target_path[:-3])
+                    ptr = array.append(None)
+                else:
+                    ptr = target_obj.get_field(target_path)
+
+                if not isinstance(ptr, HkbPointer):
+                    logger.error(
+                        f"Target path {target_obj.object_id}/{target_path} did not yield a pointer (is {str(ptr)})"
+                    )
+                    continue
+
                 old_value = ptr.get_value()
                 ptr.set_value(target_id)
                 undo_manager.on_update_value(ptr, old_value, target_id)
@@ -277,9 +296,7 @@ def import_hierarchy(
 
     with undo_manager.combine():
         # The taret object may be attached in more than one place
-        targets = []
-
-        behavior_root = behavior.find_first_by_type_name("hkRootLevelContainer")
+        targets: list[tuple[HkbRecord, str]] = []
 
         for path_elem in xmldoc.xpath(".//root_meta/path"):
             try:
@@ -304,7 +321,6 @@ def import_hierarchy(
             target_obj,
             target_path,
             update_target_pointers,
-            children_only=False,
             interactive=interactive,
         )
 
@@ -334,7 +350,15 @@ def paste_hierarchy(
     root_type_name = xmldoc.xpath(f".//type[@id='{root_type}']")[0].get("name")
 
     # Check if the target pointer is compatible with the hierarchy root
-    target_pointer = target_record.get_field(target_path)
+    if target_path.endswith(":-1"):
+        target_path = target_path[:-3]
+    
+    target_field = target_record.get_field(target_path)
+    if isinstance(target_field, HkbArray):
+        target_pointer = target_field.append(None)
+        target_path += f":{len(target_field) - 1}"
+    else:
+        target_pointer = target_field
 
     if not isinstance(target_pointer, HkbPointer):
         raise ValueError(
@@ -450,7 +474,7 @@ def paste_children(
 
         if callback:
             callback(results)
-    
+
     # Parse the xml
     if isinstance(xml, str):
         try:
@@ -504,9 +528,13 @@ def find_conflicts(
             if name:
                 match_idx = behavior.find_event(name, -1)
                 action = MergeAction.NEW if match_idx < 0 else MergeAction.REUSE
-                hierarchy.events[idx] = Resolution((idx, name), action, (match_idx, name))
+                hierarchy.events[idx] = Resolution(
+                    (idx, name), action, (match_idx, name)
+                )
             else:
-                hierarchy.events[idx] = Resolution((idx, name), MergeAction.SKIP, (-1, None))
+                hierarchy.events[idx] = Resolution(
+                    (idx, name), MergeAction.SKIP, (-1, None)
+                )
 
         # Variables
         for var in xml.findall(".//variable"):
@@ -529,13 +557,17 @@ def find_conflicts(
                 match_idx = behavior.find_variable(name, -1)
 
                 if match_idx < 0:
-                    hierarchy.variables[idx] = Resolution((idx, var), MergeAction.NEW, (-1, var))
+                    hierarchy.variables[idx] = Resolution(
+                        (idx, var), MergeAction.NEW, (-1, var)
+                    )
                 else:
                     hierarchy.variables[idx] = Resolution(
                         (idx, var), MergeAction.REUSE, (match_idx, var)
                     )
             else:
-                hierarchy.variables[idx] = Resolution((idx, var), MergeAction.SKIP, (-1, None))
+                hierarchy.variables[idx] = Resolution(
+                    (idx, var), MergeAction.SKIP, (-1, None)
+                )
 
         # Animations
         for anim in xml.findall(".//animation"):
@@ -549,8 +581,9 @@ def find_conflicts(
                     (idx, name), action, (match_idx, name)
                 )
             else:
-                hierarchy.animations[idx] = Resolution((idx, name), MergeAction.SKIP, (-1, None))
-
+                hierarchy.animations[idx] = Resolution(
+                    (idx, name), MergeAction.SKIP, (-1, None)
+                )
 
     def _find_type_conflicts(
         behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeResult
@@ -570,8 +603,9 @@ def find_conflicts(
             if new_id != tid:
                 logger.debug(f"Remapping object type {tid} ({name}) to {new_id}")
 
-            hierarchy.type_map[tid] = Resolution((tid, name), MergeAction.REUSE, (new_id, name))
-
+            hierarchy.type_map[tid] = Resolution(
+                (tid, name), MergeAction.REUSE, (new_id, name)
+            )
 
     def _find_object_conflicts(
         behavior: HavokBehavior, xml: ET.Element, hierarchy: MergeResult
@@ -639,7 +673,9 @@ def find_conflicts(
                 and obj.type_name
                 in ("CustomTransitionEffect", "hkbBlendingTransitionEffect")
             ):
-                hierarchy.objects[obj.object_id] = Resolution(obj, MergeAction.REUSE, existing_obj)
+                hierarchy.objects[obj.object_id] = Resolution(
+                    obj, MergeAction.REUSE, existing_obj
+                )
             else:
                 hierarchy.objects[obj.object_id] = Resolution(obj, MergeAction.NEW, obj)
 
@@ -751,7 +787,7 @@ def resolve_conflicts(
         elif resolution.action == MergeAction.REUSE:
             resolution.result = behavior.objects[object_id]
         elif resolution.action == MergeAction.IGNORE:
-            # Will not be added, but giving it a new ID will be prevent other objects from 
+            # Will not be added, but giving it a new ID will be prevent other objects from
             # accidently referring to existing objects from the behavior
             resolution.result = resolution.original
             resolution.result.object_id = behavior.new_id()
@@ -766,7 +802,7 @@ def resolve_conflicts(
     for object_id, resolution in hierarchy.objects.items():
         # Fix any pointers pointing to conflicting objects
         obj: HkbRecord = resolution.result
-        # We still want to update the pointers of ignored objects so that they can be 
+        # We still want to update the pointers of ignored objects so that they can be
         # followed later if needed
         if not obj or resolution.action not in (MergeAction.NEW, MergeAction.IGNORE):
             continue
@@ -820,8 +856,12 @@ def resolve_conflicts(
     # root_res = hierarchy.objects[hierarchy.root_id]
 
 
-
-def transfer_wildcard_transitions(behavior: HavokBehavior, results: MergeResult, source_sm: HkbRecord, target_sm: HkbRecord):
+def transfer_wildcard_transitions(
+    behavior: HavokBehavior,
+    results: MergeResult,
+    source_sm: HkbRecord,
+    target_sm: HkbRecord,
+):
     # Collect all wildcard transitions for easy access
     transitions = {}
 
@@ -871,7 +911,6 @@ def transfer_wildcard_transitions(behavior: HavokBehavior, results: MergeResult,
                     target_wildcards_array.element_type_id,
                 )
                 target_wildcards_array.append(new_trans)
-
 
 
 def fix_state_ids(statemachine: HkbRecord):
@@ -953,7 +992,7 @@ def open_merge_hierarchy_dialog(
     # Window content
     with dpg.window(
         width=1100 if graph_data else 600,
-        height=670,
+        height=690,
         label="Merge Hierarchy",
         modal=False,
         on_close=close,
@@ -1279,10 +1318,8 @@ def open_merge_hierarchy_dialog(
         dpg.add_separator()
 
         instructions = """\
-The above hierarchy will be added to the behavior.
-
-- NEW: add with a new ID/index
-- REUSE: use already existing objects
+- NEW: add a copy with a new ID/index
+- REUSE: use an already existing object
 - IGNORE: don't add, but include children (this can create gaps)
 - SKIP: don't add and ignore all children (unless reachable otherwise)
 """

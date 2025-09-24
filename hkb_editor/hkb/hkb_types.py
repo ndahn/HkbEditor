@@ -711,11 +711,11 @@ class HkbRecord(XmlValueHandler):
                     element_type = field.get_item_wrapper()
                     if element_type == field_type:
                         for i, item in enumerate(field):
-                            item_path = f"{field_path}/:{i}"
+                            item_path = f"{field_path}:{i}"
                             yield (item_path, item)
                     elif element_type == HkbRecord:
                         for i, item in enumerate(field):
-                            item_path = f"{field_path}/:{i}"
+                            item_path = f"{field_path}:{i}"
                             todo.append((item, item_path))
 
     def __getitem__(self, name: str) -> XmlValueHandler:
