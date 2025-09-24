@@ -1,10 +1,10 @@
 from typing import Iterable, Generator, Callable, TYPE_CHECKING
 from abc import ABC, abstractmethod
+import re
 from lark import Lark, Transformer, Token
 from lxml import etree
 from fnmatch import fnmatch
 from rapidfuzz import fuzz
-import re
 
 if TYPE_CHECKING:
     from hkb_editor.hkb import HkbRecord
@@ -67,7 +67,7 @@ You may run queries over the following fields:
 Examples:
 - id=*588 OR type_name:hkbStateMachine
 - bindings:0/memberPath=selectedGeneratorIndex
-- animId=[100000..200000]
+- NOT animId=[100000..200000]
 - name=~AddDamageFire
 """
 
@@ -129,10 +129,20 @@ class _NotCondition(_Condition):
         self.condition = condition
 
     def evaluate(self, obj_elem: etree._Element) -> bool:
+        # Special-case: NOT on a field requires the field to exist
+        if isinstance(self.condition, _FieldCondition):
+            vals = _get_field_value(obj_elem, self.condition.field_path)
+            if not vals:
+                # No match if the field isn't present
+                return False
+
+            return not any(_match_value(v, self.condition.value) for v in vals)
+
         return not self.condition.evaluate(obj_elem)
 
     def __repr__(self):
         return f"NOT({self.condition})"
+
 
 
 class _QueryTransformer(Transformer):
@@ -256,4 +266,4 @@ def query_objects(
                 yield obj
 
     except Exception as e:
-        raise ValueError(f"Query failed for '{query}'") from e
+        raise ValueError(f"Query failed: {query}") from e

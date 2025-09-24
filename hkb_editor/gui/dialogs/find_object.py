@@ -48,7 +48,14 @@ def find_dialog(
         matches = item_getter(filt)
         idx = -1
 
-        for idx, item in enumerate(matches):
+        def get_matches(matches):
+            # Helper to catch exceptions from invalid queries
+            try:
+                yield from matches
+            except Exception:
+                return
+
+        for idx, item in enumerate(get_matches(matches)):
             if filt != dpg.get_value(sender):
                 # Crude attempt to return early
                 break
