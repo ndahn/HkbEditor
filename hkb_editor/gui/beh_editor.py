@@ -984,18 +984,25 @@ class BehaviorEditor(GraphEditor):
                     callback=attach_from_xml,
                     user_data=(record, path),
                 )
-                dpg.add_selectable(
-                    label="Hierarchy",
-                    callback=attach_hierarchy,
-                    user_data=(record, path),
-                )
             
                 if isinstance(obj, HkbArray):
                     dpg.add_selectable(
-                        label="Children",
+                        label="Hierarchy (full)",
+                        callback=attach_hierarchy,
+                        user_data=(record, path),
+                    )
+
+                    dpg.add_selectable(
+                        label="Hierarchy (children only)",
                         callback=attach_children,
                         user_data=(record, path),
-                    ) 
+                    )
+                else:
+                    dpg.add_selectable(
+                        label="Hierarchy",
+                        callback=attach_hierarchy,
+                        user_data=(record, path),
+                    )
 
         with dpg.menu(label="Attach"):
             obj = self.beh.objects[node.id]
