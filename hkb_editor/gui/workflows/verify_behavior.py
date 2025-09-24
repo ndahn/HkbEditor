@@ -75,6 +75,24 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
                         logger.warning(f"Pointer array {obj.object_id}/{path} contains null-pointers")
                         break
 
+        if obj.type_name in event_attributes:
+            paths = event_attributes[obj.type_name]
+            for path, idx in obj.get_fields(paths, resolve=True).items():
+                if idx >= 0 and not behavior.get_event(idx, None):
+                    logger.warning(f"Object {str(obj)} references missing event {idx}")
+
+        if obj.type_name in variable_attributes:
+            paths = variable_attributes[obj.type_name]
+            for path, idx in obj.get_fields(paths, resolve=True).items():
+                if idx >= 0 and not behavior.get_variable(idx, None):
+                    logger.warning(f"Object {str(obj)} references missing variable {idx}")
+
+        if obj.type_name in animation_attributes:
+            paths = animation_attributes[obj.type_name]
+            for path, idx in obj.get_fields(paths, resolve=True).items():
+                if idx >= 0 and not behavior.get_animation(idx, None):
+                    logger.warning(f"Object {str(obj)} references missing animation {idx}")
+
 
 def check_graph(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
     logger = root_logger.getChild("attributes")
@@ -93,7 +111,14 @@ def check_graph(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
 def verify_behavior(behavior: HavokBehavior) -> None:
     logger = logging.getLogger("verify")
     
+    logger.info("-> checking xml syntax...")
     check_xml(behavior, logger)
+    
+    logger.info("-> checking statemachines and states...")
     check_statemachines(behavior, logger)
+    
+    logger.info("-> checking object attributes...")
     check_attributes(behavior, logger)
+
+    logger.info("-> checking graph structure...")
     check_graph(behavior, logger)
