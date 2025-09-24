@@ -82,7 +82,7 @@ class _FieldCondition(_Condition):
         self.field_path = field_path.strip("\"'")
         self.value = value.strip("\"'")
 
-    def evaluate(self, obj: "HkbRecord") -> bool:
+    def _get_field_values(self, obj: "HkbRecord") -> list[str]:
         if self.field_path in ("id", "objectid", "object_id"):
             return _match_value(obj.object_id, self.value)
 
@@ -91,7 +91,10 @@ class _FieldCondition(_Condition):
                 _match_value(val, self.value) for val in (obj.type_id, obj.type_name)
             )
 
-        actual_values = _get_field_value(obj.element, self.field_path)
+        return _get_field_value(obj.element, self.field_path)
+
+    def evaluate(self, obj: "HkbRecord") -> bool:
+        actual_values = self._get_field_values(obj)
         return any(_match_value(val, self.value) for val in actual_values)
 
     def __repr__(self):
@@ -146,7 +149,7 @@ class _NotCondition(_Condition):
     def evaluate(self, obj: "HkbRecord") -> bool:
         # Special-case: NOT on a field requires the field to exist
         if isinstance(self.condition, _FieldCondition):
-            vals = _get_field_value(obj.element, self.condition.field_path)
+            vals = self.condition._get_field_values(obj)
             if not vals:
                 # No match if the field isn't present
                 return False
