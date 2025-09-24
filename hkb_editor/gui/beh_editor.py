@@ -7,6 +7,7 @@ import traceback
 from threading import Thread
 import textwrap
 import time
+import re
 import pyperclip
 from dearpygui import dearpygui as dpg
 import networkx as nx
@@ -705,7 +706,7 @@ class BehaviorEditor(GraphEditor):
                 self.alias_manager,
                 jump_callback=self.jump_to_object,
                 on_graph_changed=self.regenerate,
-                on_value_changed=self._on_value_changed,
+                on_value_changed=self._on_value_modified,
                 pin_object_callback=self.add_pinned_object,
                 tag=f"{self.tag}_attributes_widget",
             )
@@ -1061,8 +1062,13 @@ class BehaviorEditor(GraphEditor):
             dpg.add_separator()
 
             dpg.add_selectable(
-                label="Delete",
+                label="Delete (single)",
                 callback=lambda s, a, u: self._delete_node(u),
+                user_data=node,
+            )
+            dpg.add_selectable(
+                label="Delete (cascade)",
+                callback=lambda s, a, u: self._delete_node_cascade(u),
                 user_data=node,
             )
 
@@ -1074,30 +1080,97 @@ class BehaviorEditor(GraphEditor):
 
     def _delete_node(self, node: Node) -> None:
         record = self.beh.objects.get(node.id)
-        if record:
-            with undo_manager.combine():
-                # Delete the object last so that any code running before can still inspect it
-                self.beh.delete_object(record.object_id)
-                undo_manager.on_delete_object(self.beh, record)
+        if not record:
+            return
 
-                # Update any pointers that are referencing the deleted object. We could use
-                # HavokBehavior.find_referees, but using the graph is much more efficient
-                first_parent = None
-                for parent_id in self.canvas.graph.predecessors(record.object_id):
-                    if not first_parent:
-                        first_parent = parent_id
+        self.logger.info(f"Deleting single node {node.id}")
+        with undo_manager.combine():
+            self._on_node_delete(node.id)
+            
+            # Delete the object last so that any code running before can still inspect it
+            self.beh.delete_object(record.object_id)
+            undo_manager.on_delete_object(self.beh, record)
 
-                    parent = self.beh.objects[parent_id]
-                    for _, ptr in parent.find_fields_by_type(HkbPointer):
-                        if ptr.get_value() == node.id:
-                            ptr.set_value(None)
-                            undo_manager.on_update_value(ptr, record.object_id, None)
-                            self._on_value_changed(None, ptr, (node.id, None))
+        self.regenerate()
+    
+    def _delete_node_cascade(self, node: Node) -> None:
+        record = self.beh.objects.get(node.id)
+        if not record:
+            return
 
-                if first_parent:
-                    self.selected_node = self.canvas.nodes[first_parent]
+        root = self.beh.find_first_by_type_name("hkRootLevelContainer")
+        root_graph = self.beh.build_graph(root.object_id)
+        node_graph = self.beh.build_graph(node.id)
 
-                self.regenerate()
+        delete_list: list[str] = []
+        children = set(nx.descendants(root_graph, node.id))
+        for child, in_degree in root_graph.in_degree(children):
+            # Ignore any in-edges from parents in the node's subtree
+            for parent in root_graph.predecessors(child):
+                if parent in node_graph:
+                    in_degree -= 1
+
+            if in_degree == 0:
+                delete_list.append(child)
+
+        self.logger.info(f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents")
+        with undo_manager.guard(self.beh):
+            self._on_node_delete(node.id)
+
+            self.beh.delete_object(node.id)
+            for child in delete_list:
+                self.beh.delete_object(child)
+
+        self.regenerate()
+
+    def _on_node_delete(self, object_id: str) -> None:
+        obj = self.beh.objects[object_id]
+        if obj.type_name == "hkbStateMachine::StateInfo":
+            self._on_stateinfo_removed(object_id)
+
+        # Update any pointers that are referencing the deleted object. We could use
+        # HavokBehavior.find_referees, but using the graph is much more efficient
+        first_parent = None
+        for parent_id in self.canvas.graph.predecessors(object_id):
+            if not first_parent:
+                first_parent = parent_id
+
+            parent = self.beh.objects[parent_id]
+            for path, ptr in parent.find_fields_by_type(HkbPointer):
+                if ptr.get_value() == object_id:
+                    index_match = re.match(r"^(.*):([0-9]+)$", path)
+                    if index_match:
+                        # Pointer belongs to a pointer array remove this index
+                        index = int(index_match.group(2))
+                        array: HkbArray = parent.get_field(index_match.group(1))
+                        old_value = array.pop(index)
+                        undo_manager.on_update_array_item(array, index, old_value, None)
+                    else:
+                        # Regular field
+                        ptr.set_value(None)
+                        undo_manager.on_update_value(ptr, object_id, None)
+
+        if first_parent:
+            self.selected_node = self.canvas.nodes[first_parent]
+
+    def _on_stateinfo_removed(self, stateinfo_id: str) -> None:
+        stateinfo = self.beh.objects[stateinfo_id]
+        state_id = stateinfo["stateId"].get_value()
+
+        target_sm_id = next(self.canvas.graph.predecessors(stateinfo_id))
+        target_sm = self.beh.objects[target_sm_id]
+
+        transition_info = target_sm["wildcardTransitions"].get_target()
+        transitions: HkbArray = transition_info["transitions"]
+        
+        for idx, trans in enumerate(transitions):
+            if trans["toStateId"].get_value() == state_id:
+                transitions.pop(idx)
+                undo_manager.on_update_array_item(transitions, idx, trans, None)
+                self.logger.info(
+                    f"Deleted obsolete wildcard transition {idx} for state {state_id}"
+                )
+                break
 
     def _copy_to_clipboard(self, data: str) -> None:
         try:
@@ -1106,7 +1179,7 @@ class BehaviorEditor(GraphEditor):
         except Exception as e:
             self.logger.warning(f"Copying value failed: {e}", exc_info=e)
 
-    def _on_value_changed(
+    def _on_value_modified(
         self,
         sender,
         handler: XmlValueHandler,
@@ -1139,32 +1212,7 @@ class BehaviorEditor(GraphEditor):
                     if isinstance(old_value, HkbRecord)
                     else old_value
                 )
-                target_sm_id = next(self.canvas.graph.predecessors(old_id))
-                target_sm = self.beh.objects[target_sm_id]
-                state_ids = set()
-
-                for state_ptr in target_sm["states"]:
-                    state_info = state_ptr.get_target()
-                    if state_info:
-                        state_ids.add(state_info["stateId"].get_value())
-
-                transition_info = target_sm["wildcardTransitions"].get_target()
-                transitions: HkbArray = transition_info["transitions"]
-                invalid = []
-
-                for trans_idx, trans in enumerate(transitions):
-                    if trans["toStateId"].get_value() not in state_ids:
-                        invalid.append(trans_idx)
-
-                for invalid_idx in reversed(sorted(invalid)):
-                    trans = transitions.pop(invalid_idx)
-                    invalid_state_id = trans["toStateId"].get_value()
-                    undo_manager.on_update_array_item(
-                        transitions, trans_idx, trans, None
-                    )
-                    self.logger.info(
-                        f"Deleted obsolete wildcard transition {trans_idx} for state {invalid_state_id}"
-                    )
+                self._on_stateinfo_removed(old_id)
 
     def _update_attributes(self, node):
         record = self.beh.objects[node.id]

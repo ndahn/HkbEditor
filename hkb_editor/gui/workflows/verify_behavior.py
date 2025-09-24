@@ -8,6 +8,14 @@ from hkb_editor.hkb.index_attributes import (
 )
 
 
+def _safe_pointer_get(ptr: HkbPointer) -> HkbRecord:
+    if not ptr.is_set():
+        return None
+
+    val = ptr.get_value()
+    return ptr.tagfile.objects.get(val)
+
+
 def check_xml(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
     logger = root_logger.getChild("xml")
     hollow = behavior._tree.xpath(".//object[not(.//record)]")
@@ -32,11 +40,11 @@ def check_statemachines(behavior: HavokBehavior, root_logger: logging.Logger) ->
         states: dict[int, HkbRecord] = {}
 
         for state_ptr in sm["states"]:
-            state_info = state_ptr.get_target()
+            state_info = _safe_pointer_get(state_ptr)
             if state_info:
                 states[state_info["stateId"].get_value()] = state_info
 
-        transition_info = sm["wildcardTransitions"].get_target()
+        transition_info = _safe_pointer_get(sm["wildcardTransitions"])
         if not transition_info:
             continue
 
@@ -64,7 +72,7 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
         for path, ptr in obj.find_fields_by_type(HkbPointer):
             target_id = ptr.get_value()
             if target_id and target_id not in behavior.objects:
-                logger.warning(f"Pointer {obj.object_id}/{path} has non-existing target {target_id}")
+                logger.error(f"Pointer {obj.object_id}/{path} has non-existing target {target_id}")
 
         array: HkbArray
         for path, array in obj.find_fields_by_type(HkbArray):
@@ -105,7 +113,7 @@ def check_graph(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
     abandoned = [behavior.objects[oid] for oid in unmapped_ids]
 
     if abandoned:
-        logger.warning(f"The following objects are currently unmapped: {[str(o) for o in abandoned]}")
+        logger.warning(f"The following objects are abandoned: {[str(o) for o in abandoned]}")
 
 
 def verify_behavior(behavior: HavokBehavior) -> None:
