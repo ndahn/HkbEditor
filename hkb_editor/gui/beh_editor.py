@@ -852,7 +852,6 @@ class BehaviorEditor(GraphEditor):
         return [r[1] for r in sorted(roots)]
 
     def get_graph(self, root_id: str) -> nx.DiGraph:
-        self.logger.info("Building graph for node %s", root_id)
         return self.beh.build_graph(root_id)
 
     def get_node_frontpage(self, node: Node) -> list[str]:
@@ -1059,18 +1058,19 @@ class BehaviorEditor(GraphEditor):
             make_copy_menu(obj)
             self._create_attach_menu(node)
 
-            dpg.add_separator()
+            with dpg.menu(label="Delete"):
+                dpg.add_selectable(
+                    label="Subtree",
+                    callback=lambda s, a, u: self._delete_node_cascade(u),
+                    user_data=node,
+                )
+                dpg.add_selectable(
+                    label="Single node",
+                    callback=lambda s, a, u: self._delete_node(u),
+                    user_data=node,
+                )
 
-            dpg.add_selectable(
-                label="Delete (single)",
-                callback=lambda s, a, u: self._delete_node(u),
-                user_data=node,
-            )
-            dpg.add_selectable(
-                label="Delete (cascade)",
-                callback=lambda s, a, u: self._delete_node_cascade(u),
-                user_data=node,
-            )
+            dpg.add_separator()
 
             dpg.add_selectable(
                 label="Pin Object",
