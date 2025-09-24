@@ -74,7 +74,7 @@ Examples:
 
 class _Condition(ABC):
     @abstractmethod
-    def evaluate(self, obj_elem: etree._Element) -> bool: ...
+    def evaluate(self, obj: "HkbRecord") -> bool: ...
 
 
 class _FieldCondition(_Condition):
@@ -82,8 +82,16 @@ class _FieldCondition(_Condition):
         self.field_path = field_path.strip("\"'")
         self.value = value.strip("\"'")
 
-    def evaluate(self, obj_elem: etree._Element) -> bool:
-        actual_values = _get_field_value(obj_elem, self.field_path)
+    def evaluate(self, obj: "HkbRecord") -> bool:
+        if self.field_path in ("id", "objectid", "object_id"):
+            return _match_value(obj.object_id, self.value)
+
+        if self.field_path in ("type", "typename", "type_name", "typeid", "type_id"):
+            return any(
+                _match_value(val, self.value) for val in (obj.type_id, obj.type_name)
+            )
+
+        actual_values = _get_field_value(obj.element, self.field_path)
         return any(_match_value(val, self.value) for val in actual_values)
 
     def __repr__(self):
@@ -94,9 +102,16 @@ class _ValueCondition(_Condition):
     def __init__(self, value: str):
         self.value = value.strip("\"'")
 
-    def evaluate(self, obj_elem: etree._Element) -> bool:
-        all_text = " ".join(obj_elem.itertext())
-        return _match_value(all_text, self.value)
+    def _candidates(self, obj: "HkbRecord") -> Generator[str, None, None]:
+        if "name" in obj.fields:
+            yield obj["name"].get_value()
+
+        yield obj.type_name
+        yield obj.object_id
+        yield obj.type_id
+
+    def evaluate(self, obj: "HkbRecord") -> bool:
+        return any(_match_value(val, self.value) for val in self._candidates(obj))
 
     def __repr__(self):
         return f"value({self.value})"
@@ -106,8 +121,8 @@ class _OrCondition(_Condition):
     def __init__(self, conditions: list[_Condition]):
         self.conditions = conditions
 
-    def evaluate(self, obj_elem: etree._Element) -> bool:
-        return any(c.evaluate(obj_elem) for c in self.conditions)
+    def evaluate(self, obj: "HkbRecord") -> bool:
+        return any(c.evaluate(obj) for c in self.conditions)
 
     def __repr__(self):
         return f"OR({', '.join(map(str, self.conditions))})"
@@ -117,8 +132,8 @@ class _AndCondition(_Condition):
     def __init__(self, conditions: list[_Condition]):
         self.conditions = conditions
 
-    def evaluate(self, obj_elem: etree._Element) -> bool:
-        return all(c.evaluate(obj_elem) for c in self.conditions)
+    def evaluate(self, obj: "HkbRecord") -> bool:
+        return all(c.evaluate(obj) for c in self.conditions)
 
     def __repr__(self):
         return f"AND({', '.join(map(str, self.conditions))})"
@@ -128,21 +143,20 @@ class _NotCondition(_Condition):
     def __init__(self, condition: _Condition):
         self.condition = condition
 
-    def evaluate(self, obj_elem: etree._Element) -> bool:
+    def evaluate(self, obj: "HkbRecord") -> bool:
         # Special-case: NOT on a field requires the field to exist
         if isinstance(self.condition, _FieldCondition):
-            vals = _get_field_value(obj_elem, self.condition.field_path)
+            vals = _get_field_value(obj.element, self.condition.field_path)
             if not vals:
                 # No match if the field isn't present
                 return False
 
             return not any(_match_value(v, self.condition.value) for v in vals)
 
-        return not self.condition.evaluate(obj_elem)
+        return not self.condition.evaluate(obj)
 
     def __repr__(self):
         return f"NOT({self.condition})"
-
 
 
 class _QueryTransformer(Transformer):
@@ -262,7 +276,7 @@ def query_objects(
             if object_filter and not object_filter(obj):
                 continue
 
-            if condition.evaluate(obj.element):
+            if condition.evaluate(obj):
                 yield obj
 
     except Exception as e:
