@@ -30,7 +30,7 @@ from hkb_editor.hkb.index_attributes import (
 from hkb_editor.hkb.xml import get_xml_parser
 from hkb_editor.templates.common import CommonActionsMixin
 
-from .dialogs import select_object, select_event, select_variable, select_animation
+from ..dialogs import select_object, select_event, select_variable, select_animation
 from .table_tree import (
     table_tree_leaf,
     add_lazy_table_tree_node,
@@ -38,17 +38,17 @@ from .table_tree import (
     set_foldable_row_status,
     is_row_visible,
 )
-from .workflows.bind_attribute import (
+from ..workflows.bind_attribute import (
     bindable_attribute,
     select_variable_to_bind,
     get_bound_attributes,
     set_bindable_attribute_state,
 )
-from .workflows.aliases import AliasManager
-from .workflows.undo import undo_manager
-from .workflows.clone_hierarchy import paste_hierarchy, MergeAction
-from .helpers import create_flag_checkboxes, add_paragraphs
-from . import style
+from ..workflows.aliases import AliasManager
+from ..workflows.undo import undo_manager
+from ..workflows.clone_hierarchy import paste_hierarchy, MergeAction
+from ..helpers import create_flag_checkboxes, add_paragraphs
+from .. import style
 
 
 class AttributesWidget:
@@ -225,6 +225,15 @@ class AttributesWidget:
             if type_name in (
                 "hkVector4",
                 "hkVector4f",
+            ):
+                with table_tree_leaf(
+                    table=self.attributes_table,
+                    tag=tag,
+                    before=before,
+                ):
+                    widget = self._create_attribute_widget_vector4(attribute, path)
+            
+            elif type_name in (
                 "hkQuaternion",
                 "hkQuaternionf",
             ):
@@ -233,7 +242,7 @@ class AttributesWidget:
                     tag=tag,
                     before=before,
                 ):
-                    widget = self._create_attribute_widget_vector4(attribute, path)
+                    widget = self._create_attribute_widget_quaternion(attribute, path)
 
             else:
                 # create items on demand, dpg performance tanks with too many widgets
@@ -404,13 +413,44 @@ class AttributesWidget:
             filter_key=label,
             default_open=False,
         ) as tree_node:
-            # In some cases the array might could be still empty
+            # In some cases the array could still be empty
+            for i in range(0, 4 - len(array)):
+                array.append(0.0)
+
+            for i, comp in zip(range(4), "xyzw"):
+                value = array[i].get_value()
+                dpg.add_input_double(
+                    label=comp,
+                    default_value=value,
+                    callback=self._on_value_changed,
+                    user_data=array[i],
+                )
+
+        return tree_node
+
+    def _create_attribute_widget_quaternion(
+        self,
+        array: HkbArray,
+        path: str,
+    ) -> str:
+        label = path.split("/")[-1]
+
+        def update_values():
+            pass
+
+        with dpg.tree_node(
+            label=label,
+            filter_key=label,
+            default_open=False,
+        ) as tree_node:
+            # In some cases the array could still be empty
             for i in range(0, 4 - len(array)):
                 if i == 3:
                     array.append(1.0)
                 else:
                     array.append(0.0)
 
+            # TODO knobs would be nice, but dpg doesn't have full rotation ones
             for i, comp in zip(range(4), "xyzw"):
                 value = array[i].get_value()
                 dpg.add_input_double(
@@ -432,7 +472,6 @@ class AttributesWidget:
             tag = dpg.generate_uuid()
 
         def delete_last_item(sender, app_data, user_data) -> None:
-            # TODO deleting an item may invalidate variable bindings!
             idx = len(array) - 1
             if idx < 0:
                 return
@@ -790,7 +829,7 @@ class AttributesWidget:
 
                 def create_object_for_pointer():
                     # Late import to avoid cyclic import
-                    from .workflows.create_object import create_object_dialog
+                    from ..workflows.create_object import create_object_dialog
 
                     current = attribute.get_target()
                     selected_type = None

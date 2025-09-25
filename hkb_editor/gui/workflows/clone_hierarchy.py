@@ -967,7 +967,7 @@ def open_merge_hierarchy_dialog(
     ) as dialog:
         with dpg.group(horizontal=True):
             if graph_data:
-                from hkb_editor.gui.graph_widget import GraphWidget
+                from hkb_editor.gui.widgets import GraphWidget
 
                 graph = nx.from_edgelist(literal_eval(graph_data), nx.DiGraph)
                 highlighted_rows: dict[str, list[int]] = {}

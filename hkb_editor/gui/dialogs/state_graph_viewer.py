@@ -5,7 +5,6 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray
-from hkb_editor.gui.graph_widget import GraphWidget
 from hkb_editor.gui.graph_layout import GraphLayout, Node
 from hkb_editor.gui.helpers import make_copy_menu
 
@@ -29,6 +28,8 @@ def open_state_graph_viewer(
     tag: str = None,
     user_data: Any = None,
 ) -> str:
+    from hkb_editor.gui.widgets import GraphWidget
+    
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 

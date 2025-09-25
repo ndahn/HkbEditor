@@ -6,7 +6,7 @@ from hkb_editor.hkb import Tagfile, HkbRecord
 from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.workflows.aliases import AliasManager
 from hkb_editor.gui.dialogs import find_dialog
-from hkb_editor.gui.attributes_widget import AttributesWidget
+from hkb_editor.gui.widgets import AttributesWidget
 from hkb_editor.gui.helpers import center_window
 from hkb_editor.gui import style
 

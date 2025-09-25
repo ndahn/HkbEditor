@@ -7,7 +7,7 @@ from logging import getLogger
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
-from .graph_widget import GraphWidget, GraphLayout, Node
+from .widgets.graph_widget import GraphWidget, GraphLayout, Node
 from .dialogs import open_file_dialog, save_file_dialog, about_dialog
 from .helpers import center_window
 from . import style

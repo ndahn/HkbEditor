@@ -404,6 +404,7 @@ class HavokBehavior(Tagfile):
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )
             elif vtype == VariableType.QUATERNION:
+                # Should be XYZW
                 if default in (None, ""):
                     default = [0.0, 0.0, 0.0, 1.0]
 
@@ -412,7 +413,6 @@ class HavokBehavior(Tagfile):
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )
 
-                # Should be XYZW
                 # TODO must the quaternion be normalized?
 
             # Add a new 4-tuple to quads, words will store the quad index.

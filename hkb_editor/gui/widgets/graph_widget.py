@@ -5,9 +5,9 @@ import math
 
 from hkb_editor.external import get_config
 
-from .graph_layout import GraphLayout, Node
-from . import style
-from .helpers import estimate_drawn_text_size
+from ..graph_layout import GraphLayout, Node
+from .. import style
+from ..helpers import estimate_drawn_text_size
 
 
 class GraphWidget:
@@ -126,7 +126,7 @@ class GraphWidget:
 
     def get_node_at_pos(self, x: float, y: float) -> Node:
         for node in self.nodes.values():
-            # TODO Something like a b-tree might have better performance,
+            # Something like a b-tree might have better performance,
             # but so far this is not a bottleneck
             if node.visible:
                 if node.contains(x, y):

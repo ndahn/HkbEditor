@@ -22,7 +22,6 @@ from hkb_editor.hkb.hkb_types import (
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.xml import xml_from_str
-from hkb_editor.hkb.index_attributes import event_attributes, variable_attributes, animation_attributes
 from hkb_editor.templates.glue import get_templates
 
 from hkb_editor.external import (
@@ -36,18 +35,17 @@ from hkb_editor.external import (
 
 try:
     from hkb_editor.external.reload import ChrReloader
-except (ImportError, AttributeError):
+except (ImportError, AttributeError) as e:
     # Not available on non-Windows systems
     ChrReloader = None
     logging.getLogger().error(
-        "Failed to import ChrReloader, character reloading won't be available",
-        exc_info=True,
+        f"Failed to load character reloader: {e}",
     )
 
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
 from .graph_editor import GraphEditor, Node
-from .attributes_widget import AttributesWidget
+from .widgets.attributes_widget import AttributesWidget
 from .dialogs import (
     about_dialog,
     open_file_dialog,
@@ -1379,11 +1377,10 @@ class BehaviorEditor(GraphEditor):
             undo_manager.on_update_variable(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            
-            # TODO list variable bindings affected by this
             undo_manager.on_delete_variable(self.beh, idx)
             self.beh.delete_variable(idx)
-
+            self.logger.warning("Deleting a variable may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!")
+        
         edit_simple_array_dialog(
             [
                 (v.name, v.vtype.value, v.vmin, v.vmax, str(v.default))
@@ -1433,9 +1430,9 @@ class BehaviorEditor(GraphEditor):
             undo_manager.on_update_event(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            # TODO list transition infos affected by this
             self.beh.delete_event(idx)
             undo_manager.on_delete_event(self.beh, idx)
+            self.logger.warning("Deleting an event may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!")
 
         edit_simple_array_dialog(
             [(e,) for e in self.beh.get_events()],
@@ -1483,9 +1480,9 @@ class BehaviorEditor(GraphEditor):
             undo_manager.on_update_animation(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            # TODO list generators affected by this
             self.beh.delete_animation(idx)
             undo_manager.on_delete_animation(self.beh, idx)
+            self.logger.warning("Deleting an animation may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!")
 
         edit_simple_array_dialog(
             [(a,) for a in self.beh.get_animations()],
