@@ -33,8 +33,7 @@ class HavokBehavior(Tagfile):
 
         # Locate the root statemachine
         self.root_sm = None
-        root_graph = self.build_graph(self.behavior_root.object_id)
-        for node, _ in nx.bfs_successors(root_graph, self.behavior_root.object_id):
+        for node, _ in nx.bfs_successors(self.root_graph, self.behavior_root.object_id):
             obj = self.objects[node]
             if obj.type_name == "hkbStateMachine":
                 self.root_sm = obj

@@ -47,9 +47,11 @@ class Tagfile:
         self._next_object_id = max(objectid_values, default=0) + 1
 
         self.behavior_root: HkbRecord = self.find_first_by_type_name("hkRootLevelContainer")
+        # For the ER behavior this takes about 300ms to construct and increases our 
+        # memory footprint by 22kB, so the tradeoff seems worth it
+        self.root_graph = self.build_graph(self.behavior_root.object_id)
 
     def save_to_file(self, file_path: str) -> None:
-
         # Add comments on the copy. We don't want to keep these as they can mess up
         # parsing and object evaluation (e.g. locating fields)
         tmp = deepcopy(self._tree)

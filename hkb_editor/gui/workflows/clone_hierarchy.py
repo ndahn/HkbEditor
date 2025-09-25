@@ -54,8 +54,7 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
     behavior = start_obj.tagfile
     start_id = start_obj.object_id
 
-    root = behavior.behavior_root
-    root_graph = behavior.build_graph(root.object_id)
+    root_graph = behavior.root_graph
     hierarchy_graph = root_graph.subgraph(
         {start_id} | nx.descendants(root_graph, start_id)
     )
@@ -150,7 +149,9 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
     # Root Meta
     # Find paths through the behavior graph that lead to the start object. This is the
     # only reliable way of locating an object
-    root_paths = nx.all_shortest_paths(root_graph, root.object_id, start_id)
+    root_paths = nx.all_shortest_paths(
+        root_graph, behavior.behavior_root.object_id, start_id
+    )
     for path in root_paths:
         chain = []
         for idx, node_id in enumerate(path[:-1]):
@@ -352,7 +353,7 @@ def paste_hierarchy(
     # Check if the target pointer is compatible with the hierarchy root
     if target_path.endswith(":-1"):
         target_path = target_path[:-3]
-    
+
     target_field = target_record.get_field(target_path)
     if isinstance(target_field, HkbArray):
         target_pointer = target_field.append(None)

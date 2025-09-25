@@ -22,6 +22,7 @@ from hkb_editor.hkb.hkb_types import (
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.xml import xml_from_str
+from hkb_editor.hkb.index_attributes import event_attributes, variable_attributes, animation_attributes
 from hkb_editor.templates.glue import get_templates
 
 from hkb_editor.external import (
@@ -96,7 +97,9 @@ class BehaviorEditor(GraphEditor):
 
         super().__init__(tag)
 
-        about = about_dialog(no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup")
+        about = about_dialog(
+            no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup"
+        )
         dpg.set_frame_callback(dpg.get_frame_count() + 1, lambda: center_window(about))
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
@@ -1105,8 +1108,7 @@ class BehaviorEditor(GraphEditor):
         if not record:
             return
 
-        root = self.beh.behavior_root
-        root_graph = self.beh.build_graph(root.object_id)
+        root_graph = self.beh.root_graph
         node_graph = self.beh.build_graph(node.id)
 
         delete_list: list[str] = []
@@ -1377,6 +1379,7 @@ class BehaviorEditor(GraphEditor):
             undo_manager.on_update_variable(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
+            
             # TODO list variable bindings affected by this
             undo_manager.on_delete_variable(self.beh, idx)
             self.beh.delete_variable(idx)
