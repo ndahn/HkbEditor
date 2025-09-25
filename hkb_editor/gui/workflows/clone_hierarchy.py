@@ -54,10 +54,7 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
     behavior = start_obj.tagfile
     start_id = start_obj.object_id
 
-    root_graph = behavior.root_graph
-    hierarchy_graph = root_graph.subgraph(
-        {start_id} | nx.descendants(root_graph, start_id)
-    )
+    hierarchy_graph = behavior.build_graph(start_id)
 
     root_meta: dict[str, list] = {}
     events: dict[int, str] = {}
@@ -147,23 +144,9 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
     )
 
     # Root Meta
-    # Find paths through the behavior graph that lead to the start object. This is the
-    # only reliable way of locating an object
-    root_paths = nx.all_shortest_paths(
-        root_graph, behavior.behavior_root.object_id, start_id
-    )
-    for path in root_paths:
-        chain = []
-        for idx, node_id in enumerate(path[:-1]):
-            obj: HkbRecord = behavior.objects[node_id]
-            next_node = path[idx + 1]
-            for attr_path, ptr in obj.find_fields_by_type(HkbPointer):
-                if ptr.get_value() == next_node:
-                    chain.append(attr_path)
-                    break
-
-        if chain:
-            ET.SubElement(xml_root_meta, "path").text = str(chain)
+    # Unique paths to reach the object, important when importing a subtree
+    for root_path in behavior.get_unique_object_paths(start_id):
+        ET.SubElement(xml_root_meta, "path").text = str(root_path)
 
     # Additional metadata for potentially reconstructing the root node
     for key, items in root_meta.items():
@@ -229,32 +212,14 @@ def import_hierarchy(
     except Exception as e:
         raise ValueError(f"Failed to parse hierarchy: {e}")
 
-    root_id = xmldoc.find("root_meta").get("root_id")
     logger = logging.getLogger()
 
     def resolve_root_path(root_path: list[str]) -> HkbPointer:
-        target_obj = behavior.behavior_root
-        target_ptr: HkbPointer
-
-        # Follow the chain
-        for path in root_path[:-1]:
-            try:
-                target_ptr = target_obj.get_field(path)
-            except KeyError:
-                logger.warning(
-                    f"Failed to resolve root path {target_obj}/{path}", exc_info=True
-                )
-                return None
-
-            new_target_obj = target_ptr.get_target()
-
-            if new_target_obj is None:
-                logger.warning(
-                    f"Failed to resolve root path {target_obj}/{path}: target is None"
-                )
-                return None
-
-            target_obj = new_target_obj
+        try:
+            target_obj = behavior.resolve_unique_object_path(root_path[:-1])
+        except Exception:
+            logger.error(f"Failed to resolve root path {root_path}", exc_info=True)
+            return None
 
         # Check if the last path component went into a pointer array. If so, append
         # and return a new pointer.
@@ -264,8 +229,8 @@ def import_hierarchy(
 
         return target_obj, target_path
 
-    def update_target_pointers(hierarchy: MergeResult):
-        hierarchy_root = hierarchy.objects[root_id]
+    def update_target_pointers(results: MergeResult):
+        hierarchy_root = results.objects[results.root_id]
         if not hierarchy_root.result or hierarchy_root.action != MergeAction.NEW:
             return
 
@@ -293,7 +258,7 @@ def import_hierarchy(
                 logger.warning(f"Pointer update failed: {e}")
 
         if callback:
-            callback(hierarchy)
+            callback(results)
 
     with undo_manager.combine():
         # The taret object may be attached in more than one place
@@ -381,16 +346,16 @@ def paste_hierarchy(
 
     loading = common_loading_indicator("Analyzing hierarchy")
     try:
-        hierarchy = find_conflicts(behavior, xmldoc, target_record)
+        results = find_conflicts(behavior, xmldoc, target_record)
     finally:
         dpg.delete_item(loading)
 
     def add_objects():
-        new_root: HkbRecord = hierarchy.objects[root_id].result
+        new_root: HkbRecord = results.objects[results.root_id].result
         if new_root:
             # Events, variables, etc. have already been created as needed,
             # just need to add the objects
-            for res in hierarchy.objects.values():
+            for res in results.objects.values():
                 obj: HkbRecord = res.result
                 # Objects with action <reuse> and <skip> should not be added
                 if obj and res.action == MergeAction.NEW:
@@ -403,16 +368,16 @@ def paste_hierarchy(
             fix_state_ids(target_record)
 
         if callback:
-            callback(hierarchy)
+            callback(results)
 
     if interactive:
         open_merge_hierarchy_dialog(
-            behavior, xmldoc, hierarchy, target_record, add_objects
+            behavior, xmldoc, results, target_record, add_objects
         )
     else:
         with undo_manager.guard(behavior):
-            resolve_conflicts(behavior, target_record, hierarchy)
-            hierarchy.pin_objects = True
+            resolve_conflicts(behavior, target_record, results)
+            results.pin_objects = True
             add_objects()
 
 
@@ -492,8 +457,7 @@ def paste_children(
     loading = common_loading_indicator("Analyzing hierarchy")
     try:
         results = find_conflicts(behavior, xmldoc, target_record)
-        root_id = xmldoc.find("root_meta").get("root_id")
-        results.objects[root_id].action = MergeAction.IGNORE
+        results.objects[results.root_id].action = MergeAction.IGNORE
     finally:
         dpg.delete_item(loading)
 
@@ -512,10 +476,11 @@ def paste_children(
 def find_conflicts(
     behavior: HavokBehavior, xml: ET.Element, target_record: HkbRecord
 ) -> MergeResult:
-    hierarchy = MergeResult()
+    results = MergeResult()
+    results.root_id = xml.find("root_meta").get("root_id")
 
     def _find_index_attribute_conflicts(
-        behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeResult
+        behavior: HavokBehavior, xml: ET._Element, results: MergeResult
     ) -> None:
         # For events, variables and animations we check if there is already one with a matching name.
         # If there is no match it probably has to be created. If it exists but the index is different
@@ -529,11 +494,11 @@ def find_conflicts(
             if name:
                 match_idx = behavior.find_event(name, -1)
                 action = MergeAction.NEW if match_idx < 0 else MergeAction.REUSE
-                hierarchy.events[idx] = Resolution(
+                results.events[idx] = Resolution(
                     (idx, name), action, (match_idx, name)
                 )
             else:
-                hierarchy.events[idx] = Resolution(
+                results.events[idx] = Resolution(
                     (idx, name), MergeAction.SKIP, (-1, None)
                 )
 
@@ -558,15 +523,15 @@ def find_conflicts(
                 match_idx = behavior.find_variable(name, -1)
 
                 if match_idx < 0:
-                    hierarchy.variables[idx] = Resolution(
+                    results.variables[idx] = Resolution(
                         (idx, var), MergeAction.NEW, (-1, var)
                     )
                 else:
-                    hierarchy.variables[idx] = Resolution(
+                    results.variables[idx] = Resolution(
                         (idx, var), MergeAction.REUSE, (match_idx, var)
                     )
             else:
-                hierarchy.variables[idx] = Resolution(
+                results.variables[idx] = Resolution(
                     (idx, var), MergeAction.SKIP, (-1, None)
                 )
 
@@ -578,16 +543,16 @@ def find_conflicts(
             if name:
                 match_idx = behavior.find_animation(name, -1)
                 action = MergeAction.NEW if match_idx < 0 else MergeAction.REUSE
-                hierarchy.animations[idx] = Resolution(
+                results.animations[idx] = Resolution(
                     (idx, name), action, (match_idx, name)
                 )
             else:
-                hierarchy.animations[idx] = Resolution(
+                results.animations[idx] = Resolution(
                     (idx, name), MergeAction.SKIP, (-1, None)
                 )
 
     def _find_type_conflicts(
-        behavior: HavokBehavior, xml: ET._Element, hierarchy: MergeResult
+        behavior: HavokBehavior, xml: ET._Element, results: MergeResult
     ) -> None:
         logger = logging.getLogger()
 
@@ -604,12 +569,12 @@ def find_conflicts(
             if new_id != tid:
                 logger.debug(f"Remapping object type {tid} ({name}) to {new_id}")
 
-            hierarchy.type_map[tid] = Resolution(
+            results.type_map[tid] = Resolution(
                 (tid, name), MergeAction.REUSE, (new_id, name)
             )
 
     def _find_object_conflicts(
-        behavior: HavokBehavior, xml: ET.Element, hierarchy: MergeResult
+        behavior: HavokBehavior, xml: ET.Element, results: MergeResult
     ) -> None:
         logger = logging.getLogger()
         mismatching_types = set()
@@ -618,7 +583,7 @@ def find_conflicts(
             # Remap the typeid. Should only be relevant when cloning between different games or
             # versions of hklib, but in those cases it might just make it work
             old_type_id = xmlobj.get("typeid")
-            new_type_id = hierarchy.type_map[old_type_id].result[0]
+            new_type_id = results.type_map[old_type_id].result[0]
             xmlobj.set("typeid", new_type_id)
             obj = tmp = None
 
@@ -636,7 +601,7 @@ def find_conflicts(
                 for path, _ in obj.find_fields_by_type(HkbArray):
                     array = tmp.get_field(path, None)
                     if array:
-                        array.element_type_id = hierarchy.type_map[
+                        array.element_type_id = results.type_map[
                             array.element_type_id
                         ].result[0]
 
@@ -674,35 +639,35 @@ def find_conflicts(
                 and obj.type_name
                 in ("CustomTransitionEffect", "hkbBlendingTransitionEffect")
             ):
-                hierarchy.objects[obj.object_id] = Resolution(
+                results.objects[obj.object_id] = Resolution(
                     obj, MergeAction.REUSE, existing_obj
                 )
             else:
-                hierarchy.objects[obj.object_id] = Resolution(obj, MergeAction.NEW, obj)
+                results.objects[obj.object_id] = Resolution(obj, MergeAction.NEW, obj)
 
-    _find_index_attribute_conflicts(behavior, xml, hierarchy)
-    _find_type_conflicts(behavior, xml, hierarchy)
-    _find_object_conflicts(behavior, xml, hierarchy)
+    _find_index_attribute_conflicts(behavior, xml, results)
+    _find_type_conflicts(behavior, xml, results)
+    _find_object_conflicts(behavior, xml, results)
 
-    return hierarchy
+    return results
 
 
 def resolve_conflicts(
     behavior: HavokBehavior,
     target_record: HkbRecord,
-    hierarchy: MergeResult,
+    results: MergeResult,
 ) -> None:
     # TODO this should be optional
     # TODO define various conflict resolution strategies, like skip on conflict, reuse
     # on conflict, and whether to continue following a path if the parent had a conflict
     def is_object_included(object_id: str) -> bool:
         # The root object will not have any parents to check
-        if object_id == list(hierarchy.objects.keys())[0]:
+        if object_id == list(results.objects.keys())[0]:
             return True
 
         # Check parents: if all of them are skipped or reused,
         # this one should be skipped, too
-        for other in hierarchy.objects.values():
+        for other in results.objects.values():
             if not other.result or other.result.object_id == object_id:
                 continue
 
@@ -716,7 +681,7 @@ def resolve_conflicts(
 
     # Create missing events, variables and animations. If the value is not MergeAction.NEW we can
     # expect that a mapping to another value has been applied
-    for idx, resolution in hierarchy.events.items():
+    for idx, resolution in results.events.items():
         name = resolution.original[1]
         if resolution.action == MergeAction.NEW:
             new_idx = behavior.create_event(name)
@@ -733,7 +698,7 @@ def resolve_conflicts(
                 f"Invalid action {resolution.action} for event {idx} ({resolution.original})"
             )
 
-    for idx, resolution in hierarchy.variables.items():
+    for idx, resolution in results.variables.items():
         var: HkbVariable = resolution.original[1]
         if resolution.action == MergeAction.NEW:
             new_idx = behavior.create_variable(*var.astuple())
@@ -750,7 +715,7 @@ def resolve_conflicts(
                 f"Invalid action {resolution.action} for variable {idx} ({resolution.original})"
             )
 
-    for idx, resolution in hierarchy.animations.items():
+    for idx, resolution in results.animations.items():
         name = resolution.original[1]
         if resolution.action == MergeAction.NEW:
             new_idx = behavior.create_animation(name)
@@ -768,7 +733,7 @@ def resolve_conflicts(
             )
 
     # Handle conflicting objects
-    for object_id, resolution in hierarchy.objects.items():
+    for object_id, resolution in results.objects.items():
         if resolution.action == MergeAction.NEW:
             resolution.result = resolution.original
 
@@ -800,7 +765,7 @@ def resolve_conflicts(
             )
 
     # Fix object references
-    for object_id, resolution in hierarchy.objects.items():
+    for object_id, resolution in results.objects.items():
         # Fix any pointers pointing to conflicting objects
         obj: HkbRecord = resolution.result
         # We still want to update the pointers of ignored objects so that they can be
@@ -814,8 +779,8 @@ def resolve_conflicts(
             if not target_id:
                 continue
 
-            if target_id in hierarchy.objects:
-                new_target = hierarchy.objects[target_id].result
+            if target_id in results.objects:
+                new_target = results.objects[target_id].result
                 ptr.set_value(new_target)
             else:
                 logging.getLogger().warning(
@@ -823,7 +788,7 @@ def resolve_conflicts(
                 )
 
     # Attribute updates
-    for object_id, resolution in hierarchy.objects.items():
+    for object_id, resolution in results.objects.items():
         obj: HkbRecord = resolution.result
 
         if not obj or resolution.action in (MergeAction.REUSE, MergeAction.SKIP):
@@ -835,26 +800,26 @@ def resolve_conflicts(
         if obj.type_name in event_attributes:
             paths = event_attributes[obj.type_name]
             for path, evt_idx in obj.get_fields(paths, resolve=True).items():
-                evt_res = hierarchy.events.get(evt_idx)
+                evt_res = results.events.get(evt_idx)
                 if evt_res is not None:
                     obj.set_field(path, evt_res.result[0])
 
         if obj.type_name in variable_attributes:
             paths = variable_attributes[obj.type_name]
             for path, var_idx in obj.get_fields(paths, resolve=True).items():
-                var_res = hierarchy.variables.get(var_idx)
+                var_res = results.variables.get(var_idx)
                 if var_res is not None:
                     obj.set_field(path, var_res.result[0])
 
         if obj.type_name in animation_attributes:
             paths = animation_attributes[obj.type_name]
             for path, anim_idx in obj.get_fields(paths, resolve=True).items():
-                anim_res = hierarchy.animations.get(anim_idx)
+                anim_res = results.animations.get(anim_idx)
                 if anim_res is not None:
                     obj.set_field(path, anim_res.result[0])
 
     # Handle additional root metadata
-    # root_res = hierarchy.objects[hierarchy.root_id]
+    # root_res = results.objects[results.root_id]
 
 
 def transfer_wildcard_transitions(
@@ -952,7 +917,7 @@ def fix_state_ids(statemachine: HkbRecord):
 def open_merge_hierarchy_dialog(
     behavior: HavokBehavior,
     xml: ET.Element,
-    hierarchy: MergeResult,
+    results: MergeResult,
     target_record: HkbRecord,
     callback: Callable[[], None],
     *,
@@ -971,8 +936,8 @@ def open_merge_hierarchy_dialog(
         loading = common_loading_indicator("Merging Hierarchy")
         try:
             with undo_manager.guard(behavior):
-                resolve_conflicts(behavior, target_record, hierarchy)
-                hierarchy.pin_objects = dpg.get_value(f"{tag}_pin_objects")
+                resolve_conflicts(behavior, target_record, results)
+                results.pin_objects = dpg.get_value(f"{tag}_pin_objects")
                 callback()
         finally:
             dpg.delete_item(loading)
@@ -1014,7 +979,7 @@ def open_merge_hierarchy_dialog(
                     highlight_color[3] = 100
 
                 def get_node_frontpage(node):
-                    obj: HkbRecord = hierarchy.objects[node.id].original
+                    obj: HkbRecord = results.objects[node.id].original
 
                     try:
                         return [
@@ -1043,7 +1008,7 @@ def open_merge_hierarchy_dialog(
                         rows.clear()
 
                     if node:
-                        obj: HkbRecord = hierarchy.objects[node.id].original
+                        obj: HkbRecord = results.objects[node.id].original
 
                         # Highlight events, variables and animations this object references
                         if obj.type_name in event_attributes:
@@ -1064,7 +1029,7 @@ def open_merge_hierarchy_dialog(
                                     if anim >= 0:
                                         highlight_row("animation", anim, animation_rows)
 
-                        for resolution in hierarchy.type_map.values():
+                        for resolution in results.type_map.values():
                             if obj.type_id == resolution.result[0]:
                                 # Old type ID is unique, new one may not be
                                 old_type_id = resolution.original[0]
@@ -1118,7 +1083,7 @@ def open_merge_hierarchy_dialog(
                             )
 
                             for idx, (key, resolution) in enumerate(
-                                hierarchy.events.items()
+                                results.events.items()
                             ):
                                 row_tag = f"{tag}_event_row_{key}"
                                 with dpg.table_row(tag=row_tag):
@@ -1165,7 +1130,7 @@ def open_merge_hierarchy_dialog(
                             )
 
                             for idx, (key, resolution) in enumerate(
-                                hierarchy.variables.items()
+                                results.variables.items()
                             ):
                                 row_tag = f"{tag}_variable_row_{key}"
                                 with dpg.table_row(tag=row_tag):
@@ -1212,7 +1177,7 @@ def open_merge_hierarchy_dialog(
                             )
 
                             for idx, (key, resolution) in enumerate(
-                                hierarchy.animations.items()
+                                results.animations.items()
                             ):
                                 row_tag = f"{tag}_animation_row_{key}"
                                 with dpg.table_row(tag=row_tag):
@@ -1258,7 +1223,7 @@ def open_merge_hierarchy_dialog(
                             )
 
                             for idx, (key, resolution) in enumerate(
-                                hierarchy.type_map.items()
+                                results.type_map.items()
                             ):
                                 row_tag = f"{tag}_type_row_{key}"
 
@@ -1293,7 +1258,7 @@ def open_merge_hierarchy_dialog(
                             )
 
                             for idx, (oid, resolution) in enumerate(
-                                hierarchy.objects.items()
+                                results.objects.items()
                             ):
                                 row_tag = f"{tag}_object_row_{oid}"
                                 with dpg.table_row(tag=row_tag):

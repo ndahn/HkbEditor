@@ -1661,9 +1661,10 @@ class BehaviorEditor(GraphEditor):
                 for obj in new_objects:
                     self.add_pinned_object(obj)
 
-        import_hierarchy(self.beh, xml, on_import)
+            self.regenerate()
+            self.jump_to_object(hierarchy.root_id)
 
-        self.regenerate()
+        import_hierarchy(self.beh, xml, on_import)
 
     def open_bone_mirror_map_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"

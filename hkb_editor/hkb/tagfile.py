@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from .hkb_types import HkbRecord, HkbPointer, XmlValueHandler
 
 
+_undefined = object()
+
 
 class Tagfile:
     def __init__(self, xml_file: str):
@@ -46,8 +48,10 @@ class Tagfile:
         ]
         self._next_object_id = max(objectid_values, default=0) + 1
 
-        self.behavior_root: HkbRecord = self.find_first_by_type_name("hkRootLevelContainer")
-        # For the ER behavior this takes about 300ms to construct and increases our 
+        self.behavior_root: HkbRecord = self.find_first_by_type_name(
+            "hkRootLevelContainer"
+        )
+        # For the ER behavior this takes about 300ms to construct and increases our
         # memory footprint by 22kB, so the tradeoff seems worth it
         self.root_graph = self.build_graph(self.behavior_root.object_id)
 
@@ -113,9 +117,96 @@ class Tagfile:
 
         return None
 
+    def get_unique_object_paths(
+        self, target_id: "str | HkbRecord"
+    ) -> Generator[list[str], None, None]:
+        """Find paths through the behavior graph that lead to the start object.
+
+        To resolve a unique path to an object, use resolve_unique_object_path.
+
+        Each element of a path is an attribute path, e.g. "transitions:2/transition".
+        To resolve a path, start with the behavior's root object and get the field
+        denoted by the first attribute path. This should return a pointer, which will
+        lead you to the next object on which you resolve the second attribute path,
+        and so on.
+
+        As object IDs are not stable and may change between HkLib conversions, this is
+        the only reliable way of locating an object. Due to the nature of the graph
+        structure it is possible for an object to be referenced by more than one parent,
+        thus yielding multiple unique paths. This method will find all shortest simple
+        paths, as per the networkx definition.
+
+        Parameters
+        ----------
+        target_id : str | HkbRecord
+            The object you want to locate.
+
+        Yields
+        ------
+        Generator[list[str], None, None]
+            Unique paths to reach the target object from the behavior root.
+        """
+        from .hkb_types import HkbPointer
+
+        root_paths = nx.all_shortest_paths(
+            self.root_graph, self.behavior_root.object_id, target_id
+        )
+
+        for path in root_paths:
+            chain = []
+            # Last element is the object itself
+            for idx, node_id in enumerate(path[:-1]):
+                obj: HkbRecord = self.objects[node_id]
+                next_node = path[idx + 1]
+                for attr_path, ptr in obj.find_fields_by_type(HkbPointer):
+                    if ptr.get_value() == next_node:
+                        chain.append(attr_path)
+                        break
+
+            yield chain
+
+    def resolve_unique_object_path(
+        self, object_path: list[str], default: Any = _undefined
+    ) -> "HkbRecord":
+        from .hkb_types import HkbPointer
+
+        target_obj = self.behavior_root
+
+        # Follow the chain
+        for idx, path in enumerate(object_path):
+            try:
+                ptr: HkbPointer = target_obj.get_field(path)
+            except KeyError:
+                if default is not _undefined:
+                    return default
+
+                raise
+
+            if not isinstance(ptr, HkbPointer):
+                if default is not _undefined:
+                    return default
+
+                raise ValueError(
+                    f"Failed to resolve root path ({idx}) {target_obj}/{path}: not a pointer (is {str(ptr)})"
+                )
+
+            new_target_obj = ptr.get_target()
+
+            if new_target_obj is None:
+                if default is not _undefined:
+                    return default
+
+                raise ValueError(
+                    f"Failed to resolve root path ({idx}) {target_obj}/{path}: target is None"
+                )
+
+            target_obj = new_target_obj
+
+        return target_obj
+
     def find_object_for(self, item: "XmlValueHandler | ET._Element") -> "HkbRecord":
         from .hkb_types import XmlValueHandler
-        
+
         if isinstance(item, XmlValueHandler):
             item = item.element
 
@@ -150,7 +241,7 @@ class Tagfile:
             for path, ptr in record.find_fields_by_type(HkbPointer):
                 if ptr.get_value() == object_id:
                     yield (record, path, ptr)
-    
+
     def find_first_by_type_name(
         self, type_name: str, default: Any = None
     ) -> "HkbRecord":
@@ -240,7 +331,7 @@ class Tagfile:
 
         if id in self.objects:
             raise ValueError(f"An object with ID {id} already exists")
-            
+
         record.object_id = id
         self._tree.getroot().append(record.as_object())
         self.objects[id] = record
@@ -248,8 +339,8 @@ class Tagfile:
         return id
 
     def delete_object(self, object_id: "HkbRecord | str") -> "HkbRecord":
-        """Delete the specified object from the behavior. 
-        
+        """Delete the specified object from the behavior.
+
         Note that this will not update any pointers referring to the object.
 
         Parameters
