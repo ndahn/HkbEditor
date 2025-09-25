@@ -46,6 +46,8 @@ class Tagfile:
         ]
         self._next_object_id = max(objectid_values, default=0) + 1
 
+        self.behavior_root: HkbRecord = self.find_first_by_type_name("hkRootLevelContainer")
+
     def save_to_file(self, file_path: str) -> None:
 
         # Add comments on the copy. We don't want to keep these as they can mess up

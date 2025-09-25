@@ -1,3 +1,4 @@
+from .about import about_dialog
 from .file_dialog import open_file_dialog, save_file_dialog
 from .edit_simple_array import edit_simple_array_dialog
 from .find_object import (

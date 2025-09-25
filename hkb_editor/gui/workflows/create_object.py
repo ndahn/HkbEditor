@@ -59,8 +59,7 @@ def create_object_dialog(
         # Instead we have to go by the type format, which may vary between games. Luckily, every
         # tagfile seems to contain a "hkRootLevelContainer" which we can use to identify the
         # record format.
-        root_type_id = type_registry.find_first_type_by_name("hkRootLevelContainer")
-        record_format = type_registry.get_format(root_type_id)
+        record_format = type_registry.get_format(tagfile.behavior_root.type_id)
         record_types = [
             (type_id, details["name"])
             for type_id, details in type_registry.types.items()

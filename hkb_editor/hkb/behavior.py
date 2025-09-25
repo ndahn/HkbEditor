@@ -4,6 +4,7 @@ import re
 import logging
 import struct
 import ctypes
+import networkx as nx
 
 from .tagfile import Tagfile
 from .hkb_types import HkbRecord, HkbArray, HkbPointer, HkbFloat
@@ -29,6 +30,17 @@ class HkbVariable:
 class HavokBehavior(Tagfile):
     def __init__(self, xml_file: str):
         super().__init__(xml_file)
+
+        # Locate the root statemachine
+        self.root_sm = None
+        root_graph = self.build_graph(self.behavior_root.object_id)
+        for node, _ in nx.bfs_successors(root_graph, self.behavior_root.object_id):
+            obj = self.objects[node]
+            if obj.type_name == "hkbStateMachine":
+                self.root_sm = obj
+                break
+        else:
+            logging.getLogger().warning("Could not locate root statemachine")
 
         # There's some special objects storing the string values referenced from HKS
         strings_type_id = self.type_registry.find_first_type_by_name(

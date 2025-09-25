@@ -54,7 +54,7 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
     behavior = start_obj.tagfile
     start_id = start_obj.object_id
 
-    root = behavior.find_first_by_type_name("hkRootLevelContainer")
+    root = behavior.behavior_root
     root_graph = behavior.build_graph(root.object_id)
     hierarchy_graph = root_graph.subgraph(
         {start_id} | nx.descendants(root_graph, start_id)
@@ -232,7 +232,7 @@ def import_hierarchy(
     logger = logging.getLogger()
 
     def resolve_root_path(root_path: list[str]) -> HkbPointer:
-        target_obj = behavior.find_first_by_type_name("hkRootLevelContainer")
+        target_obj = behavior.behavior_root
         target_ptr: HkbPointer
 
         # Follow the chain

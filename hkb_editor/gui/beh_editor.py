@@ -48,6 +48,7 @@ from hkb_editor.hkb.version_updates import fix_variable_defaults
 from .graph_editor import GraphEditor, Node
 from .attributes_widget import AttributesWidget
 from .dialogs import (
+    about_dialog,
     open_file_dialog,
     edit_simple_array_dialog,
     search_objects_dialog,
@@ -94,6 +95,9 @@ class BehaviorEditor(GraphEditor):
         self.config: Config = load_config()
 
         super().__init__(tag)
+
+        about = about_dialog(no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup")
+        dpg.set_frame_callback(dpg.get_frame_count() + 1, lambda: center_window(about))
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
         if severity < self.min_notification_severity:
@@ -158,6 +162,9 @@ class BehaviorEditor(GraphEditor):
 
             self._regenerate_recent_files_menu()
             return
+
+        if dpg.does_item_exist(f"{self.tag}_about_popup"):
+            dpg.delete_item(f"{self.tag}_about_popup")
 
         self.logger.debug("======================================")
         self.logger.info("Loading file %s", file_path)
@@ -1086,19 +1093,19 @@ class BehaviorEditor(GraphEditor):
         self.logger.info(f"Deleting single node {node.id}")
         with undo_manager.combine():
             self._on_node_delete(node.id)
-            
+
             # Delete the object last so that any code running before can still inspect it
             self.beh.delete_object(record.object_id)
             undo_manager.on_delete_object(self.beh, record)
 
         self.regenerate()
-    
+
     def _delete_node_cascade(self, node: Node) -> None:
         record = self.beh.objects.get(node.id)
         if not record:
             return
 
-        root = self.beh.find_first_by_type_name("hkRootLevelContainer")
+        root = self.beh.behavior_root
         root_graph = self.beh.build_graph(root.object_id)
         node_graph = self.beh.build_graph(node.id)
 
@@ -1113,7 +1120,9 @@ class BehaviorEditor(GraphEditor):
             if in_degree == 0:
                 delete_list.append(child)
 
-        self.logger.info(f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents")
+        self.logger.info(
+            f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents"
+        )
         with undo_manager.guard(self.beh):
             self._on_node_delete(node.id)
 
@@ -1162,7 +1171,7 @@ class BehaviorEditor(GraphEditor):
 
         transition_info = target_sm["wildcardTransitions"].get_target()
         transitions: HkbArray = transition_info["transitions"]
-        
+
         for idx, trans in enumerate(transitions):
             if trans["toStateId"].get_value() == state_id:
                 transitions.pop(idx)
@@ -1256,7 +1265,6 @@ class BehaviorEditor(GraphEditor):
         )
 
     def find_lost_objects(self) -> list[str]:
-        # TODO open a dialog to select the object or SM to search from
         root_sm = next(self.beh.query("name:Root"), None)
         if not root_sm:
             self.logger.error("Could not locate Root SM")

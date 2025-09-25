@@ -105,7 +105,7 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
 def check_graph(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
     logger = root_logger.getChild("attributes")
 
-    root = behavior.find_first_by_type_name("hkRootLevelContainer")
+    root = behavior.behavior_root
     #root_sm: HkbRecord = behavior_graph["rootGenerator"].get_target()
     g = behavior.build_graph(root.object_id)
 
