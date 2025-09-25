@@ -1,6 +1,7 @@
 dearpygui>=2.0.0
 lxml
 networkx
+numpy
 pyperclip
 crossfiledialog
 pywin32; sys_platform == "windows"

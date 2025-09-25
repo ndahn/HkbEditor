@@ -3,7 +3,6 @@ from os import path
 import yaml
 import inspect
 from dataclasses import dataclass, field, asdict
-import logging
 
 
 @dataclass
@@ -68,7 +67,7 @@ def load_config(config_path: str = None) -> Config:
 
         _config = Config(**kw)
     else:
-        logging.getLogger().warning(f"Creating new config in {config_path}")
+        print(f"Creating new config in {config_path}")
         _config = Config()
         _config.save(config_path)
 
