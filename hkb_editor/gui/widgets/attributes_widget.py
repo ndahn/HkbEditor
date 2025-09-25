@@ -30,7 +30,12 @@ from hkb_editor.hkb.index_attributes import (
 from hkb_editor.hkb.xml import get_xml_parser
 from hkb_editor.templates.common import CommonActionsMixin
 
-from ..dialogs import select_object, select_event, select_variable, select_animation
+from hkb_editor.gui.dialogs import (
+    select_object,
+    select_event,
+    select_variable,
+    select_animation,
+)
 from .table_tree import (
     table_tree_leaf,
     add_lazy_table_tree_node,
@@ -38,17 +43,23 @@ from .table_tree import (
     set_foldable_row_status,
     is_row_visible,
 )
-from ..workflows.bind_attribute import (
+from .rotation_knob import RotationKnob
+from hkb_editor.gui.workflows.bind_attribute import (
     bindable_attribute,
     select_variable_to_bind,
     get_bound_attributes,
     set_bindable_attribute_state,
 )
-from ..workflows.aliases import AliasManager
-from ..workflows.undo import undo_manager
-from ..workflows.clone_hierarchy import paste_hierarchy, MergeAction
-from ..helpers import create_flag_checkboxes, add_paragraphs
-from .. import style
+from hkb_editor.gui.workflows.aliases import AliasManager
+from hkb_editor.gui.workflows.undo import undo_manager
+from hkb_editor.gui.workflows.clone_hierarchy import paste_hierarchy, MergeAction
+from hkb_editor.gui.helpers import (
+    create_flag_checkboxes,
+    add_paragraphs,
+    quat_to_euler,
+    euler_to_quat,
+)
+from hkb_editor.gui import style
 
 
 class AttributesWidget:
@@ -232,7 +243,7 @@ class AttributesWidget:
                     before=before,
                 ):
                     widget = self._create_attribute_widget_vector4(attribute, path)
-            
+
             elif type_name in (
                 "hkQuaternion",
                 "hkQuaternionf",
@@ -434,9 +445,32 @@ class AttributesWidget:
         path: str,
     ) -> str:
         label = path.split("/")[-1]
+        axes = ["roll", "pitch", "yaw"]
+        colors = [
+            (255, 0, 0, 255),
+            (0, 255, 0, 255),
+            (0, 0, 255, 255),
+        ]
+        knobs: list[RotationKnob] = []
 
-        def update_values():
-            pass
+        def update_values(*args) -> None:
+            rpy = [knob.radians for knob in knobs]
+            quat = euler_to_quat(*rpy)
+
+            for idx, comp in enumerate("xyzw"):
+                val = quat[idx]
+                array[idx].set_value(val)
+                dpg.set_value(f"{self.tag}_{path}_quat_{comp}", val)
+
+        def on_quaternion_update(*args) -> None:
+            q = []
+            for comp in "xyzw":
+                val = dpg.get_value(f"{self.tag}_{path}_quat_{comp}")
+                q.append(val)
+
+            rpy = quat_to_euler(*q)
+            for idx in range(3):
+                knobs[idx].set_value_rad(rpy[idx])
 
         with dpg.tree_node(
             label=label,
@@ -444,21 +478,38 @@ class AttributesWidget:
             default_open=False,
         ) as tree_node:
             # In some cases the array could still be empty
-            for i in range(0, 4 - len(array)):
-                if i == 3:
+            for idx in range(0, 4 - len(array)):
+                if idx == 3:
                     array.append(1.0)
                 else:
                     array.append(0.0)
 
-            # TODO knobs would be nice, but dpg doesn't have full rotation ones
-            for i, comp in zip(range(4), "xyzw"):
-                value = array[i].get_value()
-                dpg.add_input_double(
-                    label=comp,
-                    default_value=value,
-                    callback=self._on_value_changed,
-                    user_data=array[i],
-                )
+            with dpg.group(horizontal=True) as knob_group:
+                values = [array[i].get_value() for i in range(4)]
+                rpy = quat_to_euler(*values)
+
+                for idx, (label, color) in enumerate(zip(axes, colors)):
+                    knob = RotationKnob(
+                        default_value=rpy[idx],
+                        label=label,
+                        size=40,
+                        ring_thickness=1,
+                        indicator_thickness=2,
+                        indicator_color=color,
+                        callback=update_values,
+                        tag=f"{self.tag}_{path}_euler_{label}",
+                    )
+                    knobs.append(knob)
+
+            with dpg.popup(knob_group):
+                for i, comp in zip(range(4), "xyzw"):
+                    value = array[i].get_value()
+                    dpg.add_input_double(
+                        label=comp,
+                        default_value=value,
+                        callback=on_quaternion_update,
+                        tag=f"{self.tag}_{path}_quat_{comp}",
+                    )
 
         return tree_node
 
@@ -1043,7 +1094,9 @@ class AttributesWidget:
             self.logger.error("Paste value to %s failed: %s", widget, e)
             return
 
-    def _delete_array_item(self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]) -> None:
+    def _delete_array_item(
+        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
+    ) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
@@ -1058,7 +1111,7 @@ class AttributesWidget:
             self.logger.info(f"Removed {self.record.object_id}/{item_path}")
             self._on_value_changed(sender, None, value)
 
-        if index == 0 or index == len(array) -1:
+        if index == 0 or index == len(array) - 1:
             dpg.delete_item(f"{self.tag}_attribute_{item_path}")
         else:
             self.regenerate()
@@ -1075,7 +1128,9 @@ class AttributesWidget:
 
         def on_hierarchy_merged(hierarchy):
             new_objects = [
-                r.result for r in hierarchy.objects.values() if r.action == MergeAction.NEW
+                r.result
+                for r in hierarchy.objects.values()
+                if r.action == MergeAction.NEW
             ]
             self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
 

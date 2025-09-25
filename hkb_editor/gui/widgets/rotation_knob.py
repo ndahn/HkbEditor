@@ -3,120 +3,140 @@ import math
 import dearpygui.dearpygui as dpg
 
 
-def add_rotation_knob(
-    *,
-    size: int = 60,
-    default_value: float = 0.0,  # degrees, 0–360
-    tag: str = None,
-    parent: str = None,
-    source: str = None,
-    show_value: bool = False,
-    ring_color: list = (200, 200, 200, 255),
-    ring_thickness: int = 2,
-    indicator_color: list = (255, 0, 0, 255),
-    indicator_thickness: int = 3,
-    on_change: Callable[[str, float, Any], None] = None,
-    window_on_close_cleanup: bool = True,
-) -> str:
-    """Adds a full-circle rotation knob into an existing window/container.
-    Returns the knob's group tag. The value will be stored in {tag}_rotation.
-    """
-    if not tag:
-        tag = f"rotation_knob_{dpg.generate_uuid()}"
+class RotationKnob:
+    def __init__(
+        self,
+        *,
+        default_value: float = 0.0,  # degrees, 0–360
+        label: str | None = None,
+        size: int = 60,
+        show_value: bool = True,
+        ring_color: list = (200, 200, 200, 255),
+        ring_thickness: int = 2,
+        indicator_color: list = (255, 0, 0, 255),
+        indicator_thickness: int = 3,
+        callback: Callable[[str, float, Any], None] | None = None,
+        tag: str | None = None,
+        parent: str | int = 0,
+        user_data: Any = None,
+    ) -> None:
+        """Create a full-circle rotation knob. Builds immediately."""
+        self.tag = tag or f"rotation_knob_{dpg.generate_uuid()}"
+        self.size = size
+        self.label = label
+        self.ring_color = ring_color
+        self.indicator_color = indicator_color
+        self.indicator_thickness = indicator_thickness
+        self.callback = callback
+        self.user_data = user_data
+        
+        self._value_deg = float(default_value % 360.0)
+        self._drag_active: bool = False
 
-    if not parent:
-        parent = dpg.last_container()
+        # build UI
+        W = H = float(self.size)
+        cx, cy = W * 0.5, H * 0.5
+        radius = W * 0.40
+        indicator_len = radius * 0.84
 
-    W = H = float(size)
-    cx, cy = W * 0.5, H * 0.5
-    radius = W * 0.40
-    indicator_len = radius * 0.84
+        with dpg.group(tag=self.tag, parent=parent):
+            if show_value:
+                with dpg.tooltip(dpg.last_container()):
+                    dpg.add_text(tag=f"{self.tag}_text")
 
-    # state
-    default_value = float(default_value % 360)
-    if not source:
-        source = f"{tag}_rotation"
-        with dpg.value_registry():
-            dpg.add_float_value(tag=source, default_value=default_value)
+            with dpg.drawlist(width=int(W), height=int(H), tag=f"{self.tag}_knob"):
+                dpg.draw_circle((cx, cy), radius, color=self.ring_color, thickness=ring_thickness)
 
-    def angle_from_mouse() -> float:
+                px = cx + indicator_len * math.cos(math.radians(self._value_deg))
+                py = cy + indicator_len * math.sin(math.radians(self._value_deg))
+                with dpg.draw_layer(tag=f"{self.tag}_needle_layer"):
+                    dpg.draw_line(
+                        (cx, cy), (px, py),
+                        color=self.indicator_color,
+                        thickness=self.indicator_thickness,
+                        tag=f"{self.tag}_needle",
+                    )
+
+        self._update_label()
+
+        # handlers
+        self.handler_tag = f"{self.tag}_handlers"
+        with dpg.handler_registry(tag=self.handler_tag):
+            dpg.add_mouse_drag_handler(callback=self._on_mouse_drag)
+            dpg.add_mouse_down_handler(button=dpg.mvMouseButton_Left, callback=self._on_mouse_down)
+            dpg.add_mouse_release_handler(button=dpg.mvMouseButton_Left, callback=self._on_mouse_release)
+
+    @property
+    def degrees(self) -> float:
+        return self._value_deg
+
+    @property
+    def radians(self) -> float:
+        return math.radians(self._value_deg)
+
+    def __del__(self):
+        if dpg.does_item_exist(self.handler_tag):
+            dpg.delete_item(self.handler_tag)
+
+    def set_value_rad(self, new_val: float) -> None:
+        self.set_value_deg(math.degrees(new_val))
+    
+    def set_value_deg(self, new_val: float) -> None:
+        self._value_deg = new_val
+        self._update_label()
+        self._update_needle()
+
+    def _angle_from_mouse(self) -> float:
+        W = H = float(self.size)
+        cx, cy = W * 0.5, H * 0.5
         x, y = dpg.get_drawing_mouse_pos()
-        dx = x - cx
-        dy = y - cy
-        return math.degrees(math.atan2(dy, dx)) % 360.0
+        return math.degrees(math.atan2(y - cy, x - cx)) % 360.0
 
-    def update_needle() -> None:
-        dpg.delete_item(f"{tag}_needle")
-        rotation = dpg.get_value(source)
-        px = cx + indicator_len * math.cos(math.radians(rotation))
-        py = cy + indicator_len * math.sin(math.radians(rotation))
+    def _update_label(self) -> None:
+        tid = f"{self.tag}_text"
+        if dpg.does_item_exist(tid):
+            txt = f"{self.degrees:.1f}°"
+            if self.label:
+                txt = f"{self.label}: {txt}"
+            dpg.set_value(tid, txt)
+
+    def _update_needle(self) -> None:
+        W = H = float(self.size)
+        cx, cy = W * 0.5, H * 0.5
+        radius = W * 0.40
+        indicator_len = radius * 0.84
+
+        dpg.delete_item(f"{self.tag}_needle")
+        ang = self._value_deg
+        px = cx + indicator_len * math.cos(math.radians(ang))
+        py = cy + indicator_len * math.sin(math.radians(ang))
         dpg.draw_line(
-            (cx, cy),
-            (px, py),
-            color=indicator_color,
-            thickness=indicator_thickness,
-            parent=f"{tag}_knob",
-            tag=f"{tag}_needle",
+            (cx, cy), (px, py),
+            color=self.indicator_color,
+            thickness=self.indicator_thickness,
+            parent=f"{self.tag}_needle_layer",
+            tag=f"{self.tag}_needle",
         )
-        if show_value:
-            dpg.configure_item(f"{tag}_text", default_value=f"{int(rotation)%360}°")
 
-    def drag_cb(sender: int, app_data: Any, user_data: Any) -> None:
-        if not dpg.is_item_hovered(f"{tag}_knob"):
+    def _on_mouse_drag(self, sender: int, app_data: Any, user_data: Any) -> None:
+        if not self._drag_active:
             return
 
-        rotation = dpg.get_value(source)
-        new_angle = angle_from_mouse()
-        if new_angle != rotation:
-            dpg.set_value(source, new_angle)
-            update_needle()
+        cur = float(self._value_deg)
+        new_angle = self._angle_from_mouse()
 
-            if on_change:
-                on_change(rotation)
+        if new_angle != cur:
+            self._value_deg = new_angle
+            self._update_label()
+            self._update_needle()
+            
+            if self.callback:
+                self.callback(self.tag, new_angle, self.user_data)
 
-    def click_cb(sender: int, app_data: Any, user_data: Any) -> None:
-        if dpg.is_item_hovered(f"{tag}_knob"):
-            rotation = angle_from_mouse()
-            dpg.set_value(source, rotation)
-            update_needle()
+    def _on_mouse_down(self, sender: int, app_data: Any, user_data: Any) -> None:
+        if dpg.is_item_hovered(f"{self.tag}_knob"):
+            self._drag_active = True
+            self._on_mouse_drag(sender, app_data, user_data)
 
-            if on_change:
-                on_change(rotation)
-
-    with dpg.group(tag=tag, parent=parent):
-        if show_value:
-            dpg.add_text(f"{int(default_value)%360}°", tag=f"{tag}_text")
-
-        with dpg.drawlist(width=int(W), height=int(H), tag=f"{tag}_knob"):
-            dpg.draw_circle(
-                (cx, cy), radius, color=ring_color, thickness=ring_thickness
-            )
-            px = cx + indicator_len * math.cos(math.radians(default_value))
-            py = cy + indicator_len * math.sin(math.radians(default_value))
-            dpg.draw_line(
-                (cx, cy),
-                (px, py),
-                color=indicator_color,
-                thickness=indicator_thickness,
-                tag=f"{tag}_needle",
-            )
-
-    handler_tag = f"{tag}_handlers"
-    with dpg.handler_registry(tag=handler_tag):
-        dpg.add_mouse_drag_handler(callback=drag_cb)
-        dpg.add_mouse_click_handler(callback=click_cb)
-
-    if window_on_close_cleanup:
-
-        def _on_close() -> None:
-            if dpg.does_item_exist(handler_tag):
-                dpg.delete_item(handler_tag)
-
-        win = parent
-        while win and dpg.get_item_type(win) != "mvAppItemType::Window":
-            win = dpg.get_item_parent(win)
-
-        if win:
-            dpg.configure_item(win, on_close=_on_close)
-
-    return tag
+    def _on_mouse_release(self, sender: int, app_data: Any, user_data: Any) -> None:
+        self._drag_active = False

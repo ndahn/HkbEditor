@@ -1,6 +1,5 @@
 dearpygui>=2.0.0
 lxml
-numpy
 networkx
 pyperclip
 crossfiledialog
