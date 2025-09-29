@@ -152,6 +152,7 @@ def apply_template_dialog(
 
             #dpg.delete_item(window)
             show_status("Success!", style.light_green)
+            dpg.configure_item(f"{tag}_button_okay", label="Again?")
         finally:
             dpg.delete_item(loading_indicator)
 

@@ -27,7 +27,7 @@ def run(
     ctx : TemplateContext
         The template context.
     """
-    evasion_sm = ctx.find("name:Evasion_SM")
+    evasion_sm = ctx.find("name=Evasion_SM")
 
     targets = [
         "RollingLightFront",
@@ -46,7 +46,7 @@ def run(
 
     for target in targets:
         normal_cmsg = ctx.find(
-            f"name:'{target}_CMSG*' type_name:CustomManualSelectorGenerator",
+            f"name='{target}_CMSG*' type_name=CustomManualSelectorGenerator",
             start_from=evasion_sm,
         )
 
@@ -54,7 +54,7 @@ def run(
             continue
 
         selftrans_cmsg = ctx.find(
-            f"name:'{target}_Self*' type_name:CustomManualSelectorGenerator",
+            f"name='{target}_Self*' type_name=CustomManualSelectorGenerator",
             start_from=evasion_sm,
         )
 

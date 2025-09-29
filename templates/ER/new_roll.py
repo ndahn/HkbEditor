@@ -49,8 +49,8 @@ def run(
     roll_right_anim : Animation, optional
         Animation to use for rolling right.
     """
-    evasion_sm = ctx.find("name:Evasion_SM")
-    default_transition = ctx.find("name:DefaultTransition")
+    evasion_sm = ctx.find("name=Evasion_SM")
+    default_transition = ctx.find("name=DefaultTransition")
 
     # Create the new roll
     new_roll_cmsgs = []
@@ -82,7 +82,7 @@ def run(
         generatorChangedTransitionEffect=default_transition,
     )
 
-    roll_msg = ctx.find("name:Rolling_Selector", start_from=evasion_sm)
+    roll_msg = ctx.find("name=Rolling_Selector", start_from=evasion_sm)
     ctx.array_add(roll_msg, "generators", new_roll_msg)
 
     # Self transition
@@ -114,5 +114,5 @@ def run(
         generators=new_roll_selftrans_cmsgs,
     )
 
-    roll_selftrans_msg = ctx.find("name:Rolling_Selftrans_Selector", start_from=evasion_sm)
+    roll_selftrans_msg = ctx.find("name=Rolling_Selftrans_Selector", start_from=evasion_sm)
     ctx.array_add(roll_selftrans_msg, "generators", new_roll_selftrans_msg)

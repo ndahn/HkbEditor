@@ -100,7 +100,7 @@ def run(
     jump_right_anim : Animation, optional
         Animation slot to use for jumps to the right. Register clips from default slot if not specified.
     """
-    jump_sm = ctx.find("name:'NewJump StateMachine'")
+    jump_sm = ctx.find("name='NewJump StateMachine'")
 
     # Helper functions
     def isolate_binding_set(record: HkbRecord):
@@ -255,10 +255,10 @@ def run(
         # Jump Attack Layer
 
         # A bit difficult to query, we need the parent layer of the selector we are imitating
-        handcondition_selector_orig = ctx.find(f"name:'{base_jump} HandCondition Selector'", start_from=jump_sm)
+        handcondition_selector_orig = ctx.find(f"name='{base_jump} HandCondition Selector'", start_from=jump_sm)
 
         layer1_jumpattack_add = ctx.make_copy(
-            f"type_name:hkbLayer generator:{handcondition_selector_orig.object_id}",
+            f"type_name=hkbLayer generator={handcondition_selector_orig.object_id}",
             generator=handcondition_selector,
         )
 
@@ -357,10 +357,10 @@ def run(
         # Regular Jump Layer
 
         # A bit difficult to query, we need the parent layer of the selector we are imitating
-        direction_selector_orig = ctx.find(f"name:'{base_jump}_Direction_MSG'", start_from=jump_sm)
+        direction_selector_orig = ctx.find(f"name='{base_jump}_Direction_MSG'", start_from=jump_sm)
 
         layer2_direction = ctx.make_copy(
-            f"type_name:hkbLayer generator:{direction_selector_orig.object_id}",
+            f"type_name=hkbLayer generator={direction_selector_orig.object_id}",
             generator=direction_selector,
         )
 
@@ -383,7 +383,7 @@ def run(
     # Finally generate the new state for the state machine
     state_id = ctx.get_next_state_id(jump_sm)
 
-    default_transition = ctx.find("name:DefaultTransition")
+    default_transition = ctx.find("name=DefaultTransition")
     wildcard_transition = ctx.new_transition_info(
         state_id,
         event,
@@ -401,7 +401,7 @@ def run(
         alignmentBone=-1,
     )
 
-    jump_loop_state = ctx.find("name:Jump_Loop type_name:hkbStateMachine::StateInfo", start_from=jump_sm)
+    jump_loop_state = ctx.find("name=Jump_Loop type_name=hkbStateMachine::StateInfo", start_from=jump_sm)
     jump_loop_transition = ctx.new_transition_info(
         jump_loop_state["stateId"].get_value(),
         "W_RideJump",  # Not sure why, but this is how it is

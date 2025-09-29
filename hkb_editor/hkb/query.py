@@ -14,7 +14,8 @@ lucene_grammar = r"""
     ?start: or_expr
 
     ?or_expr: and_expr (KW_OR and_expr)*        -> or_
-    ?and_expr: not_expr (KW_AND not_expr)*      -> and_
+    ?and_expr: not_expr (KW_AND not_expr)* 
+             | not_expr not_expr+                -> and_
     ?not_expr: KW_NOT not_expr                  -> not_
              | atom
 
@@ -54,7 +55,7 @@ Supports Lucene-style search queries (<field>:<value>).
 - Fields are used verbatim, with the only excception that array indices may be replaced by a * wildcard.
 - Values may be specified using fields, wildcards, fuzzy searches, ranges.
 - Terms may be combined using grouping, OR, NOT. 
-- Termas separated by a space are assumed to be AND.
+- Terms separated by a space are assumed to be AND.
 
 You may run queries over the following fields:
 - id
@@ -84,12 +85,10 @@ class _FieldCondition(_Condition):
 
     def _get_field_values(self, obj: "HkbRecord") -> list[str]:
         if self.field_path in ("id", "objectid", "object_id"):
-            return _match_value(obj.object_id, self.value)
+            return [obj.object_id]
 
         if self.field_path in ("type", "typename", "type_name", "typeid", "type_id"):
-            return any(
-                _match_value(val, self.value) for val in (obj.type_id, obj.type_name)
-            )
+            return [obj.type_id, obj.type_name]
 
         return _get_field_value(obj.element, self.field_path)
 

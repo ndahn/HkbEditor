@@ -122,7 +122,7 @@ def update_name_ids_dialog(
         if stateids_path.is_file():
             statenames = [
                 obj["name"].get_value()
-                for obj in behavior.query("type_name:'hkbStateMachine::StateInfo'")
+                for obj in behavior.query("type_name='hkbStateMachine::StateInfo'")
             ]
             update_name_ids("state", statenames)
         else:

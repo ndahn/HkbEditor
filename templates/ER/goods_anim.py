@@ -59,7 +59,7 @@ def run(
     )
     # Item_SM
     # TODO searches can be accelerated by searching from the appropriate statemachine
-    selftrans_gen = ctx.find("name:ItemOneshot_SelfTrans type_name:hkbBlenderGenerator")
+    selftrans_gen = ctx.find("name=ItemOneshot_SelfTrans type_name=hkbBlenderGenerator")
     ctx.array_add(selftrans_gen, "children", selftrans_blend)
 
     selftrans_upper_blend, selftrans_upper_cmsg = ctx.create_blend_chain(
@@ -72,7 +72,7 @@ def run(
     )
     # Item_Upper_SM
     selftrans_upper_gen = ctx.find(
-        "name:ItemOneshot_SelfTrans type_name:hkbBlenderGenerator"
+        "name=ItemOneshot_SelfTrans type_name=hkbBlenderGenerator"
     )
     ctx.array_add(selftrans_upper_gen, "children", selftrans_upper_blend)
 
@@ -91,7 +91,7 @@ def run(
             enableTae=False,
         )
         # Item_SM
-        oneshot_gen = ctx.find("name:ItemOneshot type_name:hkbBlenderGenerator")
+        oneshot_gen = ctx.find("name=ItemOneshot type_name=hkbBlenderGenerator")
         ctx.array_add(oneshot_gen, "children", oneshot_blend)
 
         oneshot_upper_blend, oneshot_upper_cmsg = ctx.create_blend_chain(
@@ -104,7 +104,7 @@ def run(
         )
         # Item_Upper_SM
         oneshot_upper_gen = ctx.find(
-            "name:ItemOneshot_Upper type_name:hkbBlenderGenerator"
+            "name=ItemOneshot_Upper type_name=hkbBlenderGenerator"
         )
         ctx.array_add(oneshot_upper_gen, "children", oneshot_upper_blend)
 
@@ -122,7 +122,7 @@ def run(
         weapon_type_var = ctx.variable("ItemWeaponType")
         transition_flags = TransitionFlags(3584)
 
-        hand_change_state = ctx.find("name:HandChangeStart")
+        hand_change_state = ctx.find("name=HandChangeStart")
         hand_change_transition_ptr = hand_change_state["transitions"]
         normalitem_transition = ctx.new_transition_info(
             0,
@@ -131,7 +131,7 @@ def run(
             flags=transition_flags,
         )
 
-        normalitem_sm = ctx.find("name:NormalItem_SM")
+        normalitem_sm = ctx.find("name=NormalItem_SM")
         ctx.array_add(
             normalitem_sm, "wildcardTransitions/transitions", normalitem_transition
         )
@@ -188,7 +188,7 @@ def run(
 
         # Upper half-blend
         enchant_upper_event = ctx.event("W_ItemWeaponEnchant_Upper")
-        default_transition = ctx.find("name:DefaultTransition")
+        default_transition = ctx.find("name=DefaultTransition")
 
         normalitem_upper_transition = ctx.new_transition_info(
             0,
@@ -197,7 +197,7 @@ def run(
             flags=transition_flags,
         )
 
-        normalitem_upper_sm = ctx.find("name:NormalItem_Upper_SM")
+        normalitem_upper_sm = ctx.find("name=NormalItem_Upper_SM")
         ctx.array_add(
             normalitem_upper_sm,
             "wildcardTransitions/transitions",

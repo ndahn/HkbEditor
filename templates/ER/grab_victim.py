@@ -45,11 +45,11 @@ def run(
     create_hold_anim : bool, optional
         An additional animation to adjust the grab animation. This animation will be your grab_anim + 4. See SetThrowDefBlendWeight in your hks.
     """
-    throw_sm = ctx.find("name:Throw_SM")
+    throw_sm = ctx.find("name=Throw_SM")
 
-    throw_def = ctx.find("name:ThrowDefBase_Blend", start_from=throw_sm)
-    throw_death = ctx.find("name:ThrowDeath_Blend", start_from=throw_sm)
-    throw_death_idle = ctx.find("name:ThrowDeathIdle_Blend", start_from=throw_sm)
+    throw_def = ctx.find("name=ThrowDefBase_Blend", start_from=throw_sm)
+    throw_death = ctx.find("name=ThrowDeath_Blend", start_from=throw_sm)
+    throw_death_idle = ctx.find("name=ThrowDeathIdle_Blend", start_from=throw_sm)
 
     death_anim = ctx.animation(
         Animation.make_name(grab_anim.category, grab_anim.anim_id + 1)
@@ -105,7 +105,7 @@ def run(
         escape_anim = ctx.animation(
             Animation.make_name(grab_anim.category, grab_anim.anim_id + 3)
         )
-        escape_anim_blend = ctx.find("name:ThrowEscape_Blend", start_from=throw_sm)
+        escape_anim_blend = ctx.find("name=ThrowEscape_Blend", start_from=throw_sm)
         user_data = ctx.get(
             escape_anim_blend, "children:0/generator/userData", default=0
         )
@@ -131,7 +131,7 @@ def run(
         hold_anim = ctx.animation(
             Animation.make_name(grab_anim.category, grab_anim.anim_id + 4)
         )
-        hold_anim_blend = ctx.find("name:ThrowDefHold_Blend", start_from=throw_sm)
+        hold_anim_blend = ctx.find("name=ThrowDefHold_Blend", start_from=throw_sm)
         user_data = ctx.get(hold_anim_blend, "children:0/generator/userData", default=0)
 
         clip = ctx.new_clip(hold_anim)

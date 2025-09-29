@@ -48,10 +48,10 @@ def run(
         raise ValueError("Actions must be within 3000~3109")
 
     # NOTE Yes, Sekiro has a typo here
-    sm = ctx.find("name:DefualtAttack_SM")
+    sm = ctx.find("name=DefualtAttack_SM")
     state_id = ctx.get_next_state_id(sm)
 
-    default_transition = ctx.find("type_name:CustomTransitionEffect name:DefaultTransition")
+    default_transition = ctx.find("type_name=CustomTransitionEffect name=DefaultTransition")
 
     # Register new animations
     for x in range(anim_start, anim_start + num_anims):

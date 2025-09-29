@@ -36,10 +36,10 @@ def run(
     offset_type : CmsgOffsetType, optional
         TODO I think this determines how a clip is selected (e.g. based on the right hand's TAE category).
     """
-    sm = ctx.find("name:AddDamage_SM")
+    sm = ctx.find("name=AddDamage_SM")
     state_id = ctx.get_next_state_id(sm)
 
-    default_transition = ctx.find("name:TaeBlend")
+    default_transition = ctx.find("name=TaeBlend")
     transition = ctx.new_transition_info(
         origin_state["stateId"].get_value(),
         event,
@@ -57,7 +57,7 @@ def run(
     )
 
     autotrans_event = ctx.event(f"{base_name}_to_DefaultDamageAdd")
-    blend_transition = ctx.find("name:StateToStateBlend")
+    blend_transition = ctx.find("name=StateToStateBlend")
     state_transition = ctx.new_transition_info(
         state_id,
         autotrans_event,

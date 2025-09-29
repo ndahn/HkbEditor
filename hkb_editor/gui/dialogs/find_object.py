@@ -169,7 +169,7 @@ def find_dialog(
                             color=style.blue,
                         )
 
-            dpg.add_text(f"", tag=f"{tag}_total")
+            dpg.add_text("", tag=f"{tag}_total")
             dpg.add_loading_indicator(
                 circle_count=1,
                 radius=3,

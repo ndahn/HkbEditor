@@ -38,9 +38,9 @@ def register_clip_dialog(
 
         # Find CMSGs with a matching animation
         anim_id = int(animation_name.split("_")[-1])
-        cmsg_query = f"animId:{anim_id}"
+        cmsg_query = f"animId={anim_id}"
         first_cmsg = next(
-            behavior.query("type_name:CustomManualSelectorGenerator " + cmsg_query),
+            behavior.query("type_name=CustomManualSelectorGenerator " + cmsg_query),
             None,
         )
         if first_cmsg:
@@ -49,7 +49,7 @@ def register_clip_dialog(
         # Find a clip with the same animation ID to copy some other attributes
         model_clip = next(
             behavior.query(
-                f"type_name:hkbClipGenerator animationName:{animation_name}"
+                f"type_name=hkbClipGenerator animationName={animation_name}"
             ),
             None,
         )

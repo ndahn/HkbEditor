@@ -46,7 +46,7 @@ def run(
     gesture_base_name = f"Gesture_{gesture_id:03}"
 
     # TODO use SM to speed up other searches
-    gesture_sm = ctx.find("name:EventGesture_SM")
+    gesture_sm = ctx.find("name=EventGesture_SM")
     state1_id = ctx.get_next_state_id(gesture_sm)
     state2_id = state1_id + 1
 
@@ -79,7 +79,7 @@ def run(
     ####
     # Start to loop
     ####
-    default_transition = ctx.find("name:DefaultTransition")
+    default_transition = ctx.find("name=DefaultTransition")
     transition_info = ctx.new_transition_info(
         toStateId=state2_id,
         eventId=transition_event,
@@ -145,7 +145,7 @@ def run(
         start_blend01_cmsg,
         weight=gesture_id,
     )
-    blend01_gen = ctx.find("name:'GestureLoopStart Blend01'")
+    blend01_gen = ctx.find("name='GestureLoopStart Blend01'")
     ctx.array_add(blend01_gen, "children", start_blend01)
 
 
@@ -161,7 +161,7 @@ def run(
         start_blend00_cmsg,
         weight=gesture_id,
     )
-    start_blend00_gen = ctx.find("name:'GestureLoopStart Blend00'")
+    start_blend00_gen = ctx.find("name='GestureLoopStart Blend00'")
     ctx.array_add(start_blend00_gen, "children", start_blend00)
 
     ####
@@ -200,7 +200,7 @@ def run(
         loop_blend00_cmsg,
         weight=gesture_id,
     )
-    loop_blend00_gen = ctx.find("name:'GestureLoop Blend00'")
+    loop_blend00_gen = ctx.find("name='GestureLoop Blend00'")
     ctx.array_add(loop_blend00_gen, "children", loop_blend00)
 
     loop_blend02_cmsg = ctx.new_cmsg(
@@ -215,7 +215,7 @@ def run(
         loop_blend02_cmsg,
         weight=gesture_id,
     )
-    loop_blend02_gen = ctx.find("name:'GestureLoop Blend02'")
+    loop_blend02_gen = ctx.find("name='GestureLoop Blend02'")
     ctx.array_add(loop_blend02_gen, "children", loop_blend02)
 
     # TODO this seems disconnected from the rest, not even a state or dedicated event?
@@ -237,7 +237,7 @@ def run(
         end_blend01_cmsg,
         weight=gesture_id,
     )
-    end_blend01_gen = ctx.find("name:'GestureLoopEnd Blend01'")
+    end_blend01_gen = ctx.find("name='GestureLoopEnd Blend01'")
     ctx.array_add(end_blend01_gen, "children", end_blend01)
 
     end_blend00_cmsg = ctx.new_cmsg(
@@ -252,5 +252,5 @@ def run(
         end_blend00_cmsg,
         weight=gesture_id,
     )
-    end_blend00_gen = ctx.find("name:'GestureLoopEnd Blend00'")
+    end_blend00_gen = ctx.find("name='GestureLoopEnd Blend00'")
     ctx.array_add(end_blend00_gen, "children", end_blend00)

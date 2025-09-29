@@ -79,7 +79,7 @@ def create_cmsg_dialog(
         # Resolve values
         statemachine_type = types.find_first_type_by_name("hkbStateMachine")
         statemachine_id = next(
-            behavior.query(f"type_id:{statemachine_type} name:{statemachine_val}")
+            behavior.query(f"type_id={statemachine_type} name={statemachine_val}")
         ).object_id
         statemachine = behavior.objects[statemachine_id]
 
@@ -280,13 +280,13 @@ def create_cmsg_dialog(
 
                 default_transition = next(
                     # Default in ER and Nightreign
-                    behavior.query(f"type_id:{transition_effect_type_id} DefaultTransition"),
+                    behavior.query(f"type_id={transition_effect_type_id} DefaultTransition"),
                     None,
                 )
                 if not default_transition:
                     # Default in Sekiro
                     default_transition = next(
-                        behavior.query(f"type_id:{transition_effect_type_id} TaeBlend"),
+                        behavior.query(f"type_id={transition_effect_type_id} TaeBlend"),
                         None,
                     )
 

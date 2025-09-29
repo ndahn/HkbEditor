@@ -54,14 +54,14 @@ def run(
     if not 0 <= category <= 999:
         raise ValueError("Category must be in [0..999]")
 
-    attack_sm: HkbRecord = ctx.find("name:Attack_SM")
+    attack_sm: HkbRecord = ctx.find("name=Attack_SM")
 
     def register_anim(anim_id: int, statemachine=attack_sm):
         anim = ctx.animation(f"{cat}_{anim_id:06d}")
 
         # Find the CMSG the animation should be registered in
         cmsg = ctx.find(
-            f"type_name:CustomManualSelectorGenerator animId:{anim_id}",
+            f"type_name=CustomManualSelectorGenerator animId={anim_id}",
             start_from=statemachine,
         )
         if not cmsg:
@@ -150,7 +150,7 @@ def run(
                 register_anim(anim_id)
 
     if jump:
-        jump_sm = ctx.find("name:'NewJump StateMachine'")
+        jump_sm = ctx.find("name='NewJump StateMachine'")
 
         if right:
             for anim_id in [
@@ -185,7 +185,7 @@ def run(
                 register_anim(anim_id, jump_sm)
 
     if ride:
-        ride_sm = ctx.find("name:Ride_NoThrow_SM")
+        ride_sm = ctx.find("name=Ride_NoThrow_SM")
 
         for anim_id in [
             38000,
