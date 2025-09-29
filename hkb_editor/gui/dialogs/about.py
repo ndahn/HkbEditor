@@ -9,8 +9,8 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
         tag = f"about_dialog_{dpg.generate_uuid()}"
 
     rainbow = style.HighContrastColorGenerator()
-    rainbow.hue = 0.5
-    rainbow.hue_step = -0.11
+    rainbow.hue = 0.0
+    rainbow.hue_step = 0.15
 
     with dpg.window(
         width=410,
