@@ -8,7 +8,8 @@ Behaviors are the glue between player inputs and animations and have been used i
 
 However, once you leave these familiar waters things start to look different. Different stance poses depending on the weapon type? Behavior. Custom idles without creating an entire idle category? Behavior. New throw attacks and reactions? Behavior...
 
-![](media/guide_raster_720.mp4)
+
+https://github.com/user-attachments/assets/a8289e3e-4b70-48a2-9e80-f6744a984025
 > Variations of the "Square Off" ash of war, courtesy of the amazing *Raster*
 
 Of course, even if you don’t plan to do anything like this, it’s nice to have a little more insight into how the game works. If this sounds even mildly interesting to you, read on!
