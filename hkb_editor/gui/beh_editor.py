@@ -591,6 +591,7 @@ class BehaviorEditor(GraphEditor):
                     dpg.add_text("Save current behavior first?")
 
                     dpg.add_separator()
+                    dpg.add_spacer(height=5)
 
                     with dpg.group(horizontal=True):
                         dpg.add_button(label="Save", callback=save_and_load)

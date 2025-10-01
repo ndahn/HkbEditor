@@ -1,3 +1,4 @@
+import os
 from dearpygui import dearpygui as dpg
 import webbrowser
 
@@ -25,7 +26,8 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
 
         with dpg.group(horizontal=True):
             if not dpg.does_item_exist("hkbeditor_icon_large"):
-                w, h, _, data = dpg.load_image("icon_large.png")
+                icon_path = os.path.abspath(os.path.join(".", "icon_large.png"))
+                w, h, _, data = dpg.load_image(icon_path)
                 with dpg.texture_registry():
                     dpg.add_static_texture(w, h, data, tag="hkbeditor_icon_large")
 
