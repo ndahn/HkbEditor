@@ -1,5 +1,5 @@
 # So you want to Behavior?
-An excellent choice, good madam/sir! I highly appreciate your distinguished taste. And dare I say, you’re looking marvelous today. Did you apply *\<insert appropriate cosmetic stuff>* recently? Excuse me, your charm made me digress. Behaviors. Right…
+An excellent choice, good madam/sir! I highly appreciate your distinguished taste. And dare I say, you’re looking marvelous today. Did you apply *<insert appropriate cosmetic stuff>* recently? Excuse me, your charm made me digress. Behaviors. Right…
 
 ***TODO img behaviors are cool***
 
@@ -8,9 +8,8 @@ Behaviors are the glue between player inputs and animations and have been used i
 
 However, once you leave these familiar waters things start to look different. Different stance poses depending on the weapon type? Behavior. Custom idles without creating an entire idle category? Behavior. New throw attacks and reactions? Behavior...
 
-
 https://github.com/user-attachments/assets/a8289e3e-4b70-48a2-9e80-f6744a984025
-> Variations of the "Square Off" ash of war, courtesy of the amazing *Raster*
+> Variations of the "Square Off" ash of war, courtesy of the amazing *@Raster*
 
 Of course, even if you don’t plan to do anything like this, it’s nice to have a little more insight into how the game works. If this sounds even mildly interesting to you, read on!
 
@@ -72,7 +71,7 @@ The type defines which attributes the object has and what their types are. Every
 
 ![](media/guide_attributes-1.png)
 
-In HkbEditor, pointers are used for creating the graph representation, and each node displays at least its ID and type. Most nodes also have a "name" attribute, which will also be shown. 
+In HkbEditor, pointers are used for creating the graph representation, and each node displays at least its ID and type. Most nodes also have a "name" attribute, which will be shown as well. 
 
 > Note that in Havok terms, only these named nodes are proper behavior nodes, but there are very few cases where this matters.
 
@@ -82,7 +81,7 @@ As hinted earlier, Havok behaviors are essentially graphs of state machines. All
 In HkbEditor, all state machines are listed on the left in alphabetical order, regardless of where they appear in the hierarchy. This means that if you start from e.g. the "Attack_SM" state machine, it is possible to navigate to the "AttackRight_SM". 
 
 ## Events
-States are activated via *Events*. If you have edited one of the games' HKS scripts before you will probably be familiar with lines similar to `ExecEvent("W_SwordArtsOneShot")`. This tells the behavior to activate all states (and state machines) that listen to the *W_SwordArtsOneShot* event. The associations between events and states are stored in the state machine's *wildcardTransitions*. This object stores a *transitions* array in which these associations are stored.
+States are activated via *Events*. If you have edited one of the games' HKS scripts before you will probably be familiar with lines similar to `ExecEvent("W_SwordArtsOneShot")`. This tells the behavior to activate all states (and state machines) that listen to the *W_SwordArtsOneShot* event. The associations between events and states are stored in the state machine's *wildcardTransitions*.
 
 ![](media/guide_wildcard-transitions-1.png)
 
@@ -164,7 +163,7 @@ This section will outline how to actually use HkbEditor to edit your behavior. A
 ## Saving changes
 Once you're happy with your changes you'll want to save your behavior. Note however that this will save everything as xml. For your changes to take effect you have to repack the `behbnd.dcx` binder.
 
-For Elden Ring and newer, HKLib supports converting back to .hkx, and you should do this to save both on loading times and file size. Unfortunately though, this is right now not supported for older titles like Sekiro or Dark Souls 3. Luckily for us we can use the .xml without conversion (apparently it's inherently supported by Havok). For this to work, edit the ***TODO*** file WitchyBND created and change the file extension of the file you edited from .hkx to .xml.
+For Elden Ring and newer, HKLib supports converting back to .hkx, and you should do this to save both on loading times and file size. Unfortunately though, this is right now not supported for older titles like Sekiro or Dark Souls 3. Luckily for us we can use the .xml without conversion (apparently it's inherently supported by Havok). For this to work, edit the `_witchy-bnd4.xml` file WitchyBND created inside the unpacked folder and change the file extension of the *Behaviors/<your-file>.hkx* file to .xml.
 
 Next, you'll have to repack the `behbnd.dcx` binder. Simply right click the folder and use WitchyBND to pack it. 
 
@@ -176,7 +175,7 @@ As most parts of modding, editing behaviors is often an iterative process. To sa
 ### Name ID files
 If you have created new events, variables, or animations, they must also be added in 3 additional files which can be found under `action/{event|variable|animation}nameid.txt`. As these contain entries from ALL NPCs, cutscenes, weapons and so on it is not possible to generate them automatically yet. However, HkbEditor can update them with your additional items by selecting *File -> Update name ID files*. If your mod doesn't include them yet, simply copy them from the extracted game files to your mod folder. 
 
-***TODO screenshot name ID files***
+![](media/guide_nameidfiles-1.png)
 
 ## Finding objects
 ![](media/guide_find-dialog-1.png)
@@ -230,7 +229,9 @@ Cloned hierarchies are also the current approach to merging behaviors. After cop
 ## Mirrored animations
 HkbEditor also covers some more obscure corner cases. One of them is mirroring skeletons. This is useful when you have an animation and want to flip it left <-> right without editing it. As Fromsoft never uses this, most characters are not properly setup for this. 
 
-In order to fix a character's mirror definitions, select *Workflows -> Generate Bone Mirror Map*. In the new dialog, first load the `Skeleton.xml` file for your character (***TODO how to***). Then select *Auto Mirror* at the bottom. This will generate a mirrored bone mapping based on the `_L`/`_R` suffixes of the bones. Save the resulting xml to the `Character` folder of your extracted `behbnd.dcx` and convert it back using HKLib.
+> This process requires a `Skeleton.xml` file. To generate it, either use Havok's `FileConvert.exe --xml {Skeleton.hkx} {Skeleton.xml}`, or use *Havok Content Tools*. For the latter, prune all animation data except for the skeleton, then write to platform as XML. If all of this sounds like arcane sorcery, ask around on *?ServerName?* and someone can probably send you the .xml.
+
+In order to fix a character's mirror definitions, select *Workflows -> Generate Bone Mirror Map*. In the new dialog, first load the `Skeleton.xml` file for your character. Then select *Auto Mirror* at the bottom. This will generate a mirrored bone mapping based on the `_L`/`_R` suffixes of the bones. Save the resulting xml to the `Character` folder of your extracted `behbnd.dcx` and convert it back using HKLib. 
 
 In order to mirror an animation, find the corresponding *hkbClipGenerator* and set the *MIRROR* flag.
 
@@ -241,7 +242,7 @@ Sometimes you have a more complex task that is tedious to do by hand. Maybe you 
 
 Templates are small(ish) python scripts that can automate behavior edits. Each template must have a `run()` function which takes a *TemplateContext* object as its first argument. Templates are smart in the way that all additional arguments as well as the docstring are used for generating a dialog. 
 
-The TemplateContext object provides various methods for creating and editing objects, events, variables and animations, create variable bindings, find specific objects, and so on. The API is *mostly* stable, so the best way to learn how to write templates is by looking at the [documentation] ***TODO*** as well as the already included templates and example. 
+The TemplateContext object provides various methods for creating and editing objects, events, variables and animations, create variable bindings, find specific objects, and so on. The API is *mostly* stable, so the best way to learn how to write templates is by looking at the documentation [here](hkb_editor/templates/context.py) and [here](hkb_editor/templates/common.py) as well as the already included templates and example. 
 
 > As the names of state machines and CMSGs tend to change between games, most templates are game specific. There is some overlap between Elden Ring and Nightreign, but as of now this hasn't really been explored.
 
@@ -249,4 +250,4 @@ The TemplateContext object provides various methods for creating and editing obj
 It's possible to screw up your behavior in more or less subtle ways that can lead to game crashes (if you can convert it back at all). Whether it was a bug or your own doing, the first thing you should do is run the *Workflows -> Verify Behavior* function. Carefully check the terminal output for any problems and try to fix them, then save again and retry.
 
 ## Shooting troubles
-If something just doesn't work, always check the terminal for errors. If you think something went wrong that should have worked, either open a Github issue or contact *@Managarm* on *?ServerName?*. Make sure to include as many details as possible - at the very least what you did and what the error was.
+If something just doesn't work, always check the terminal for errors first. If you think something went wrong that should have worked, either open a Github issue or contact *@Managarm* on *?ServerName?*. Make sure to include as many details as possible - at the very least what you did and what the error was.
