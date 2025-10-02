@@ -214,13 +214,22 @@ def _get_field_value(obj_elem: etree._Element, field_path: str) -> list[str]:
     values: list[str] = []
 
     def get_value(elem: etree._Element):
-        if elem.get("value") is not None:
-            return elem.get("value")
+        if elem is None:
+            return ""
+        
+        val = elem.get("value")
+        if val is not None:
+            return val
 
-        if elem.get("id") is not None:
-            return elem.get("id")
+        val = elem.get("dec")
+        if val is not None:
+            return val
 
-        return elem
+        val = elem.get("id")
+        if val is not None:
+            return val
+
+        return elem.text or ""
 
     for elem in elements:
         if elem.tag == "array":
@@ -272,6 +281,8 @@ def query_objects(
         yield from filter(object_filter, candidates)
         return
 
+    condition = None
+
     try:
         condition = _parse_query(query)
         for obj in candidates:
@@ -282,4 +293,5 @@ def query_objects(
                 yield obj
 
     except Exception as e:
-        raise ValueError(f"Query failed: {query}") from e
+        s = str(condition) if condition else query
+        raise ValueError(f"Query {s} failed") from e
