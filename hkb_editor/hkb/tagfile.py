@@ -206,14 +206,14 @@ class Tagfile:
         return target_obj
 
     @cache
-    def get_most_common_object(self, type_id: str) -> HkbRecord:
+    def get_most_common_object(self, type_id: str) -> "HkbRecord":
         max_ref = 0
         winner = None
 
-        objects = self._behavior.query(f"type={type_id}")
+        objects = self.query(f"type={type_id}")
 
         for candidate in objects:
-            ref = len(list(self._behavior.find_references_to(candidate)))
+            ref = len(list(self.find_references_to(candidate)))
             if ref > max_ref:
                 winner = candidate
                 max_ref = ref
