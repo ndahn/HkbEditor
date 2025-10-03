@@ -25,7 +25,7 @@ def run(
     Oneshot items will only use the 'normal_use_anim'. Weapon buff items should also specify the 'backhandblade_anim' and 'duelingshield_ainm'. If not specified, the 'normal_use_anim' will be used instead.
 
     Author: FloppyDonuts
-    
+
     Status: untested
 
     Parameters
@@ -118,23 +118,7 @@ def run(
         if duelingshield_anim is None:
             duelingshield_anim = normal_use_anim
 
-        enchant_event = ctx.event("W_ItemWeaponEnchant")
         weapon_type_var = ctx.variable("ItemWeaponType")
-        transition_flags = TransitionFlags(3584)
-
-        hand_change_state = ctx.find("name=HandChangeStart")
-        hand_change_transition_ptr = hand_change_state["transitions"]
-        normalitem_transition = ctx.new_transition_info(
-            0,
-            enchant_event,
-            transition=hand_change_transition_ptr.get_value(),
-            flags=transition_flags,
-        )
-
-        normalitem_sm = ctx.find("name=NormalItem_SM")
-        ctx.array_add(
-            normalitem_sm, "wildcardTransitions/transitions", normalitem_transition
-        )
 
         normalitem_clip00 = ctx.new_clip(normal_use_anim)
         normalitem_backhandsword_clip00 = ctx.new_clip(backhandsword_anim)
@@ -170,7 +154,7 @@ def run(
 
         normalitem_selector = ctx.new_selector(
             weapon_type_var,
-            name="ItemWeaponEnchant Selector",
+            name=f"Item{name} Selector",
             generators=[
                 normalitem_cmsg00,
                 normalitem_backhandsword_cmsg00,
@@ -179,30 +163,28 @@ def run(
             selectedIndexCanChangeAfterActivate=True,
         )
 
-        normalitem_state = ctx.new_statemachine_state(
-            name="ItemWeaponEnchant",
+        normalitem_sm = ctx.find("name=NormalItem_SM")
+        normal_state_id = ctx.get_next_state_id(normalitem_sm)
+        normalitem_state = ctx.new_stateinfo(
+            normal_state_id,
+            name=f"Item{name}",
             generator=normalitem_selector,
         )
-
         ctx.array_add(normalitem_sm, "states", normalitem_state)
 
+        hand_change_state = ctx.find("name=HandChangeStart")
+        hand_change_transition = hand_change_state.get_field(
+            "transitions/transitions:0/transition", resolve=True
+        )
+        ctx.register_wildcard_transition(
+            normalitem_sm,
+            normal_state_id,
+            "W_ItemWeaponEnchant",
+            transition_effect=hand_change_transition,
+            flags=3584,
+        )
+
         # Upper half-blend
-        enchant_upper_event = ctx.event("W_ItemWeaponEnchant_Upper")
-        default_transition = ctx.find("name=DefaultTransition")
-
-        normalitem_upper_transition = ctx.new_transition_info(
-            0,
-            enchant_upper_event,
-            transition=default_transition,
-            flags=transition_flags,
-        )
-
-        normalitem_upper_sm = ctx.find("name=NormalItem_Upper_SM")
-        ctx.array_add(
-            normalitem_upper_sm,
-            "wildcardTransitions/transitions",
-            normalitem_upper_transition,
-        )
 
         normalitem_upper_cmsg00 = ctx.new_cmsg(
             normal_use_anim.anim_id,
@@ -231,7 +213,7 @@ def run(
 
         normalitem_upper_selector = ctx.new_selector(
             weapon_type_var,
-            name="ItemWeaponEnchant_Upper Selector",
+            name=f"Item{name}_Upper Selector",
             generators=[
                 normalitem_upper_cmsg00,
                 normalitem_upper_backhandsword_cmsg00,
@@ -240,12 +222,17 @@ def run(
             selectedIndexCanChangeAfterActivate=True,
         )
 
-        normalitem_upper_state = ctx.new_record(
-            "hkbStateMachine::StateInfo",
-            name="ItemWeaponEnchant_Upper",
+        normalitem_upper_sm = ctx.find("name=NormalItem_Upper_SM")
+        normalitem_upper_state_id = ctx.get_next_state_id(normalitem_upper_sm)
+        normalitem_upper_state = ctx.new_stateinfo(
+            normalitem_upper_state_id,
             generator=normalitem_upper_selector,
-            probability=1,
-            enable=True,
         )
-
         ctx.array_add(normalitem_upper_sm, "states", normalitem_upper_state)
+
+        ctx.register_wildcard_transition(
+            "NormalItem_Upper_SM",
+            normalitem_upper_state_id,
+            "W_ItemWeaponEnchant_Upper",
+            flags=3584,
+        )

@@ -98,7 +98,7 @@ def run(
 
         # Find the CMSG the animation should be registered in
         cmsg = ctx.find(
-            f"type_name=CustomManualSelectorGenerator animId:{anim_id}",
+            f"type_name=CustomManualSelectorGenerator animId={anim_id}",
             start_from=statemachine,
         )
         if not cmsg:

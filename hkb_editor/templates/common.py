@@ -648,7 +648,7 @@ class CommonActionsMixin:
             **kwargs,
         )
 
-    def new_statemachine_state(
+    def new_stateinfo(
         self,
         stateId: int,
         *,
@@ -698,14 +698,10 @@ class CommonActionsMixin:
     ) -> HkbRecord:
         eventId = self.event(eventId)
 
-        if transition is None:
-            transition = next(
-                self._behavior.query(
-                    "DefaultTransition type_name:CustomTransitionEffect"
-                ),
-                None,
-            )
-        transition = self.resolve_object(transition)
+        if not transition:
+            transition = self.get_default_transition_effect()
+        else:
+            transition = self.resolve_object(transition)
 
         kwargs.setdefault("triggerInterval/enterEventId", -1)
         kwargs.setdefault("triggerInterval/exitEventId", -1)
@@ -753,7 +749,7 @@ class CommonActionsMixin:
         **kwargs,
     ) -> HkbRecord:
         if layers:
-            layers = [self.resolve_object(l).object_id for l in layers]
+            layers = [self.resolve_object(x).object_id for x in layers]
         else:
             layers = []
 
@@ -808,7 +804,63 @@ class CommonActionsMixin:
             **kwargs,
         )
 
-    # Some typical chains
+    ###
+    # Some typical tasks
+    ###
+
+    def register_wildcard_transition(
+        self,
+        statemachine: HkbRecord | str,
+        toStateId: int, 
+        eventId: Event | int,
+        *,
+        transition_effect: HkbRecord | str = None,
+        flags: TransitionInfoFlags = 3584, 
+        # ALLOW_SELF_TRANSITION_BY_TRANSITION_FROM_ANY_STATE,
+        # IS_LOCAL_WILDCARD 
+        # IS_GLOBAL_WILDCARD 
+        **kwargs,
+    ) -> HkbRecord:
+        statemachine = self.resolve_object(statemachine)
+        eventId = self.event(eventId)
+
+        if not transition_effect:
+            transition_effect = self.get_default_transition_effect()
+        else:
+            transition_effect = self.resolve_object(transition_effect)
+
+        kwargs.setdefault("triggerInterval/enterEventId", -1)
+        kwargs.setdefault("triggerInterval/exitEventId", -1)
+        kwargs.setdefault("initiateInterval/enterEventId", -1)
+        kwargs.setdefault("initiateInterval/exitEventId", -1)
+
+        wildcards_ptr: HkbPointer = statemachine["wildcardTransitions"]
+        if wildcards_ptr.is_set():
+            wildcards = wildcards_ptr.get_target()
+        else:
+            wildcards = self.new_record(
+                "hkbStateMachine::TransitionInfoArray",
+                "<new>",
+                transitions=[],
+            )
+            wildcards_ptr.set_value(wildcards)
+
+        transitions: HkbArray = wildcards["transitions"]
+        transitions.append(
+            self.new_record(
+                "hkbStateMachine::TransitionInfo",
+                None,  # Not a top-level object
+                toStateId=toStateId,
+                eventId=eventId.index,
+                transition=transition_effect,
+                flags=flags,
+                **kwargs,
+            )
+        )
+
+    def get_default_transition_effect(self) -> HkbRecord:
+        return self._behavior.get_most_common_object("CustomTransitionEffect")
+
     def create_state_chain(
         self,
         state_id: int,
@@ -839,7 +891,7 @@ class CommonActionsMixin:
             checkAnimEndSlotNo=checkAnimEndSlotNo,
             **cmsg_kwargs,
         )
-        state = self.new_statemachine_state(
+        state = self.new_stateinfo(
             stateId=state_id,
             name=name,
             generator=cmsg,

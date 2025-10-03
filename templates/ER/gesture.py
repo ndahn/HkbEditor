@@ -79,14 +79,13 @@ def run(
     ####
     # Start to loop
     ####
-    default_transition = ctx.find("name=DefaultTransition")
+    default_transition = ctx.get_default_transition_effect()
     transition_info = ctx.new_transition_info(
         toStateId=state2_id,
         eventId=transition_event,
         transition=default_transition,
     )
     transitions = ctx.new_transition_info_array(
-        "hkbStateMachine::TransitionInfoArray",
         transitions=[transition_info]
     )
 
@@ -108,7 +107,7 @@ def run(
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
     )
-    state1 = ctx.new_statemachine_state(
+    state1 = ctx.new_stateinfo(
         stateId=state1_id,
         name=event1.name,
         generator=state1_cmsg,
@@ -175,7 +174,7 @@ def run(
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
     )
-    state2 = ctx.new_statemachine_state(
+    state2 = ctx.new_stateinfo(
         stateId=state2_id,
         name=event2.name,
         generator=state2_cmsg,

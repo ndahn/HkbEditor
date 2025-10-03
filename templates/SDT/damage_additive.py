@@ -36,17 +36,11 @@ def run(
     offset_type : CmsgOffsetType, optional
         TODO I think this determines how a clip is selected (e.g. based on the right hand's TAE category).
     """
+    if not origin_state.type_name == "hkbStateMachine::StateInfo":
+        raise ValueError("origin_state must be a StateInfo object")
+
     sm = ctx.find("name=AddDamage_SM")
     state_id = ctx.get_next_state_id(sm)
-
-    default_transition = ctx.find("name=TaeBlend")
-    transition = ctx.new_transition_info(
-        origin_state["stateId"].get_value(),
-        event,
-        transition=default_transition,
-        flags=TransitionInfoFlags(3584),
-    )
-    ctx.array_add(sm, "wildcardTransitions/transitions", transition)
 
     clip = ctx.new_clip(animation)
     cmsg = ctx.new_cmsg(
@@ -65,10 +59,11 @@ def run(
     )
     transitioninfo_array = ctx.new_transition_info_array(transitions=[state_transition])
 
-    state = ctx.new_statemachine_state(
+    state = ctx.new_stateinfo(
         state_id,  # TODO Igor has toStateId here?
         name=base_name,
         generator=cmsg,
         transitions=transitioninfo_array,
     )
     ctx.array_add(sm, "states", state)
+    ctx.register_wildcard_transition(sm, origin_state["stateId"].get_value(), event, flags=3584)

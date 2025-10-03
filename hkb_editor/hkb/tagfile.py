@@ -2,6 +2,7 @@ from typing import Callable, Generator, TYPE_CHECKING, Any
 import logging
 from collections import deque
 from copy import deepcopy
+from functools import cache
 
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
@@ -203,6 +204,21 @@ class Tagfile:
             target_obj = new_target_obj
 
         return target_obj
+
+    @cache
+    def get_most_common_object(self, type_id: str) -> HkbRecord:
+        max_ref = 0
+        winner = None
+
+        objects = self._behavior.query(f"type={type_id}")
+
+        for candidate in objects:
+            ref = len(list(self._behavior.find_references_to(candidate)))
+            if ref > max_ref:
+                winner = candidate
+                max_ref = ref
+
+        return winner
 
     def find_object_for(self, item: "XmlValueHandler | ET._Element") -> "HkbRecord":
         from .hkb_types import XmlValueHandler

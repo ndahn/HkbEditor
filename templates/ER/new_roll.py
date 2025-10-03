@@ -14,7 +14,7 @@ def run(
     roll_left_anim: Animation = None,
     roll_right_anim: Animation = None,
 ):
-    """New Roll
+    """Custom Roll
     
     Creates a new rolling/evasion animations for players. After running this script you can enable the new rolling animations by modifying the variable "EvasionWeightIndex". 
     
@@ -50,7 +50,7 @@ def run(
         Animation to use for rolling right.
     """
     evasion_sm = ctx.find("name=Evasion_SM")
-    default_transition = ctx.find("name=DefaultTransition")
+    default_transition = ctx.get_default_transition_effect()
 
     # Create the new roll
     new_roll_cmsgs = []

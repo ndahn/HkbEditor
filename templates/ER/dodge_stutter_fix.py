@@ -9,7 +9,7 @@ from hkb_editor.hkb.hkb_enums import (
 def run(
     ctx: TemplateContext,
 ):
-    """Fix Dodge Stutter
+    """Dodge Stutter Fix
 
     Fixes the dodge stutter issue you get when duplicating dodges using ERClipGenerator.
 

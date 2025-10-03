@@ -14,7 +14,7 @@ def run(
     anim_start: int = 3000,
     num_anims: int = 10,
     create_attack_event: bool = True,
-    create_regular_event: bool = True,
+    create_regular_event: bool = False,
 ):
     """New NPC Animations
 
@@ -51,8 +51,6 @@ def run(
     sm = ctx.find("name=DefualtAttack_SM")
     state_id = ctx.get_next_state_id(sm)
 
-    default_transition = ctx.find("type_name=CustomTransitionEffect name=DefaultTransition")
-
     # Register new animations
     for x in range(anim_start, anim_start + num_anims):
         animation_name = f"a{action_offset}00_{x:06}"
@@ -75,38 +73,18 @@ def run(
             checkAnimEndSlotNo=1,
             changeTypeOfSelectedIndexAfterActivate=ChangeIndexType.SELF_TRANSITION,
         )
-        state = ctx.new_statemachine_state(
+        state = ctx.new_stateinfo(
             state_id,
             name=f"{base_name}{anim.anim_id}",
             generator=cmsg,
         )
         ctx.array_add(sm, "states", state)
 
-        transition_flags = TransitionInfoFlags(3584)
-
         if create_attack_event:
-            attack_event = ctx.event(f"W_Attack{anim.anim_id}")
-            transition = ctx.new_transition_info(
-                state_id,
-                attack_event,
-                transition=default_transition,
-                flags=transition_flags,
-            )
-            ctx.array_add(sm, "wildcardTransitions/transitions", transition)
+            ctx.register_wildcard_transition(sm, state_id, f"W_Attack{anim.anim_id}", flags=3584)
 
         if create_regular_event:
-            attack_event = ctx.event(f"W_Event{anim.anim_id}")
-            transition = ctx.new_transition_info(
-                state_id,
-                attack_event,
-                transition=default_transition,
-                flags=transition_flags,
-            )
-            ctx.array_add(sm, "wildcardTransitions/transitions", transition)
+            ctx.register_wildcard_transition(sm, state_id, f"W_Event{anim.anim_id}", flags=3584)
 
         # One state per animation
         state_id += 1
-
-
-    # TODO tell user about event_names.txt
-    # We could generate the event_names, etc when those arrays are modified?

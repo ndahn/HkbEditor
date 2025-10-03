@@ -25,7 +25,7 @@ def run(
     jump_left_anim: Animation = None,
     jump_right_anim: Animation = None,
 ):
-    """New Jump
+    """Custom Jump
 
     Creates a new TAE slot for jump animations with support for directional jumps and jump attacks.
 
@@ -381,17 +381,6 @@ def run(
     )
 
     # Finally generate the new state for the state machine
-    state_id = ctx.get_next_state_id(jump_sm)
-
-    default_transition = ctx.find("name=DefaultTransition")
-    wildcard_transition = ctx.new_transition_info(
-        state_id,
-        event,
-        transition=default_transition,
-        flags=TransitionInfoFlags(3584),
-    )
-    ctx.array_add(jump_sm, "wildcardTransitions/transitions", wildcard_transition)
-
     # Transition to jump loop
     jump_loop_transition_effect = ctx.new_record(
         "CustomTransitionEffect",
@@ -402,19 +391,26 @@ def run(
     )
 
     jump_loop_state = ctx.find("name=Jump_Loop type_name=hkbStateMachine::StateInfo", start_from=jump_sm)
+
+    # Not sure why we're using W_RideJump, but this is how the template was. Other
+    # jumps are using e.g. Jump_F_to_Jump_Loop
     jump_loop_transition = ctx.new_transition_info(
         jump_loop_state["stateId"].get_value(),
-        "W_RideJump",  # Not sure why, but this is how it is
+        "W_RideJump",
         transition=jump_loop_transition_effect,
     )
+    # Jump states have their own transition info arrays. Typically used for CMSGS that 
+    # have FIRE_NEXT_STATE as their end action
     state_transitions = ctx.new_transition_info_array(
         transitions=[jump_loop_transition]
     )
 
-    state = ctx.new_statemachine_state(
+    state_id = ctx.get_next_state_id(jump_sm)
+    state = ctx.new_stateinfo(
         state_id,
         name=jump_name,
         transitions=state_transitions,
         generator=layer_gen,
     )
     ctx.array_add(jump_sm, "states", state)
+    ctx.register_wildcard_transition(jump_sm, state_id, event, flags=3584)

@@ -33,24 +33,16 @@ def run(
     sm = ctx.find("name=GroundAttack_SM")
     state_id = ctx.get_next_state_id(sm)
 
-    default_transition = ctx.find("name=TaeBlend")
-    transition = ctx.new_transition_info(
-        state_id, 
-        event,
-        transition=default_transition,
-        flags=TransitionInfoFlags(3584),
-    )
-    ctx.array_add(sm, "wildcardTransitions/transitions", transition)
-
     clip = ctx.new_clip(animation)
     cmsg = ctx.new_cmsg(
         animId=animation.anim_id,
         name=f"{base_name}_CMSG",
         generators=[clip],
     )
-    state = ctx.new_statemachine_state(
+    state = ctx.new_stateinfo(
         state_id,
         name=base_name,
         generator=cmsg,
     )
     ctx.array_add(sm, "states", state)
+    ctx.register_wildcard_transition(sm, state_id, event)

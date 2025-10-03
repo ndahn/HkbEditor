@@ -136,7 +136,7 @@ def create_cmsg_dialog(
                 enableTae=True,
                 checkAnimEndSlotNo=-1,
             )
-            stateinfo = util.new_statemachine_state(
+            stateinfo = util.new_stateinfo(
                 name=base_name,
                 generator=cmsg,
                 transitions=stateinfo_transition_effect_id,
@@ -155,6 +155,8 @@ def create_cmsg_dialog(
             undo_manager.on_update_array_item(sm_states, -1, None, stateinfo.object_id)
 
             # Add transition info to statemachine
+            # TODO doesn't mesh well with undo yet
+            #util.register_wildcard_transition(statemachine, new_state_id, event)
             wildcard_transitions = wildcard_transitions_ptr.get_target()["transitions"]
             wildcard_transitions.append(transitioninfo)
             undo_manager.on_update_array_item(
@@ -278,17 +280,7 @@ def create_cmsg_dialog(
                     )
                 )
 
-                default_transition = next(
-                    # Default in ER and Nightreign
-                    behavior.query(f"type_id={transition_effect_type_id} DefaultTransition"),
-                    None,
-                )
-                if not default_transition:
-                    # Default in Sekiro
-                    default_transition = next(
-                        behavior.query(f"type_id={transition_effect_type_id} TaeBlend"),
-                        None,
-                    )
+                default_transition = util.get_default_transition_effect()
 
                 dpg.add_input_text(
                     readonly=True,
