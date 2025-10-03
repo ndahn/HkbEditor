@@ -75,8 +75,9 @@ class GraphEditor:
         self._create_dpg_menu()
 
     def _save_app_layout(self):
-        dpg.save_init_file(get_custom_layout_path())
-        self.logger.info("Saved custom layout")
+        path = get_custom_layout_path()
+        dpg.save_init_file(path)
+        self.logger.info(f"Saved custom layout to {path}")
 
     def _restore_default_app_layout(self):
         default_layout = get_default_layout_path()
@@ -120,7 +121,7 @@ class GraphEditor:
             dpg.add_separator()
 
             dpg.add_menu_item(
-                label="Save layout as default", callback=self._save_app_layout
+                label="Save layout", callback=self._save_app_layout
             )
             dpg.add_menu_item(
                 label="Restore factory layout",

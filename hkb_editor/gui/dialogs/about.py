@@ -12,8 +12,8 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
         tag = f"about_dialog_{dpg.generate_uuid()}"
 
     rainbow = style.HighContrastColorGenerator()
-    rainbow.hue = 0.1
-    rainbow.hue_step = -0.07
+    rainbow.hue = 0.2
+    rainbow.hue_step = -0.05
 
     if not dpg.does_item_exist("hkbeditor_icon_ufo"):
         with dpg.texture_registry():

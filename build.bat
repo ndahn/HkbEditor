@@ -4,7 +4,7 @@ CALL conda activate hkbeditor
 
 REM "=== RUNNING PYINSTALLER ==="
 IF EXIST dist RMDIR /S /Q dist
-pyinstaller main.py --onefile --icon=icon_small.ico
+pyinstaller main.py --onefile --icon=icon.ico
 
 REM "=== COPYING ADDITIONAL FILES ==="
 REN dist\main.exe hkbeditor.exe
