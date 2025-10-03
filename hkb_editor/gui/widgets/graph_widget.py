@@ -417,6 +417,9 @@ class GraphWidget:
             self.set_origin(0.0, 0.0)
 
     def regenerate(self):
+        if not self.graph:
+            return
+        
         dpg.delete_item(f"{self.tag}_edge_layer", children_only=True)
         dpg.delete_item(f"{self.tag}_node_layer", children_only=True)
         self.color_generator.reset()

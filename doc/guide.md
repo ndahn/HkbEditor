@@ -1,7 +1,10 @@
+> For the most recent version, go to https://github.com/ndahn/HkbEditor/blob/main/doc/guide.md. Additional tutorials can be found on the [Souls Modding wiki](https://www.soulsmodding.com/doku.php?id=tutorial:main#animations_and_behaviors).
+
+
 # So you want to Behavior?
 An excellent choice, good madam/sir! I highly appreciate your distinguished taste. And dare I say, you’re looking marvelous today. Did you apply *<insert appropriate cosmetic stuff>* recently? Excuse me, your charm made me digress. Behaviors. Right…
 
-***TODO img behaviors are cool***
+![](icon.png)
 
 # Why should you care about behaviors?
 Behaviors are the glue between player inputs and animations and have been used in most recent Fromsoft titles: *Dark Souls 3, Sekiro, Elden Ring, Nightreign* (Armored Core 6 uses a different system). They control which animation to play, how to transition into other animations, allow to layer animations on top of each other, and more. It’s a fairly complex system that you will most likely get exposed to if you are getting into movesets (although there are also some weapons and other things that have behaviors). Even then you will probably only touch the surface, especially if you stay within the realms of what the game already does (e.g. up to 6 light attacks, 2 heavy attacks, etc.). 
@@ -155,10 +158,14 @@ This means that in order to use a new ash of war you simply need to add a *hkbCl
 > This is essentially what *ERClipGenerator* does: it looks for already known animation IDs and creates clip generator objects in the corresponding CMSGs.
 
 ## Blend Layers & Other Objects
-I currently don't know enough about these to explain (or use) them. Your best bet is to look at existing structures and ask around on *?ServerName?*. 
+I currently don't know enough about these to explain (or use) them. Your best bet is to look at existing structures and ask around on [*?ServerName?*](https://discord.gg/J5msG6Es). 
 
 # Behaving how you want to
 This section will outline how to actually use HkbEditor to edit your behavior. At this point I assume that you somewhat know what you want to achieve and have understood the basics above.
+
+When editing behaviors you should typically rely on making small incremental changes. The most common use cases - registering clips and creating CMSGs - can be found in the *Workflows* menu. To create new hierarchies you would typically start by creating a new target for a pointer (e.g. a new StateInfo for a state machine, or a new entry for a CMSG's generators). 
+
+If you have something more complex in mind, definitely have a look at the [[#Templates]].
 
 ## Saving changes
 Once you're happy with your changes you'll want to save your behavior. Note however that this will save everything as xml. For your changes to take effect you have to repack the `behbnd.dcx` binder.
@@ -229,7 +236,7 @@ Cloned hierarchies are also the current approach to merging behaviors. After cop
 ## Mirrored animations
 HkbEditor also covers some more obscure corner cases. One of them is mirroring skeletons. This is useful when you have an animation and want to flip it left <-> right without editing it. As Fromsoft never uses this, most characters are not properly setup for this. 
 
-> This process requires a `Skeleton.xml` file. To generate it, either use Havok's `FileConvert.exe --xml {Skeleton.hkx} {Skeleton.xml}`, or use *Havok Content Tools*. For the latter, prune all animation data except for the skeleton, then write to platform as XML. If all of this sounds like arcane sorcery, ask around on *?ServerName?* and someone can probably send you the .xml.
+> This process requires a `Skeleton.xml` file. To generate it, either use Havok's `FileConvert.exe --xml {Skeleton.hkx} {Skeleton.xml}`, or use *Havok Content Tools*. For the latter, prune all animation data except for the skeleton, then write to platform as XML. If all of this sounds like arcane sorcery, ask around on [*?ServerName?*](https://discord.gg/J5msG6Es) and someone can probably send you the .xml.
 
 In order to fix a character's mirror definitions, select *Workflows -> Generate Bone Mirror Map*. In the new dialog, first load the `Skeleton.xml` file for your character. Then select *Auto Mirror* at the bottom. This will generate a mirrored bone mapping based on the `_L`/`_R` suffixes of the bones. Save the resulting xml to the `Character` folder of your extracted `behbnd.dcx` and convert it back using HKLib. 
 
@@ -250,4 +257,4 @@ The TemplateContext object provides various methods for creating and editing obj
 It's possible to screw up your behavior in more or less subtle ways that can lead to game crashes (if you can convert it back at all). Whether it was a bug or your own doing, the first thing you should do is run the *Workflows -> Verify Behavior* function. Carefully check the terminal output for any problems and try to fix them, then save again and retry.
 
 ## Shooting troubles
-If something just doesn't work, always check the terminal for errors first. If you think something went wrong that should have worked, either open a Github issue or contact *@Managarm* on *?ServerName?*. Make sure to include as many details as possible - at the very least what you did and what the error was.
+If something just doesn't work, always check the terminal for errors first. If you think something went wrong that should have worked, either open a Github issue or contact *@Managarm* on [*?ServerName?*](https://discord.gg/J5msG6Es). Make sure to include as many details as possible - at the very least what you did and what the error was.

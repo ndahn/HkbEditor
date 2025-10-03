@@ -12,6 +12,6 @@ COPY LICENSE dist\
 COPY README.md dist\
 COPY user_layout.ini dist\default_layout.ini
 COPY attributes.yaml dist\
-COPY icon_small.ico dist\
-COPY icon_large.png dist\
+COPY icon.ico dist\
 ROBOCOPY templates dist\templates /E
+ROBOCOPY doc dist\doc /E

@@ -1,4 +1,4 @@
-dearpygui>=2.0.0
+dearpygui>=2.1.0
 lxml
 networkx
 numpy

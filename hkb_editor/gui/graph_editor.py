@@ -164,6 +164,11 @@ class GraphEditor:
                 )
 
             dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="Guide",
+                callback=self.open_guide,
+            )
             dpg.add_menu_item(
                 label="HkbEditor",
                 callback=self.open_about_dialog,
@@ -455,6 +460,9 @@ class GraphEditor:
             )
 
         dpg.add_text(key)
+
+    def open_guide(self) -> None:
+        print("Not implemented, please override")
 
     def open_about_dialog(self) -> None:
         tag = f"{self.tag}_about_dialog"

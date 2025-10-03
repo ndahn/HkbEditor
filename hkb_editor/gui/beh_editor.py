@@ -1706,6 +1706,12 @@ class BehaviorEditor(GraphEditor):
             tag=tag,
         )
 
+    def open_guide(self) -> None:
+        import webbrowser
+
+        self.logger.info("An offline version of the guide can be found inside the doc/ folder")
+        webbrowser.open("https://github.com/ndahn/HkbEditor/blob/main/doc/guide.md")
+
     def close_all_dialogs(self) -> None:
         dialogs = [
             "_edit_variables_dialog",
