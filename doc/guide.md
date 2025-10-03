@@ -37,7 +37,7 @@ Next, find the `.behbnd.dcx` of the thing you want to edit, e.g. `chr/c0000.behb
 
 Inside said folder you will find a few more files and folders, but the one we are interested in is inside the `Behavior` folder. Open it; you should see a file like `c0000.hkx`. This is the behavior file in binary format. Drop it onto the *HKLib* .exe and it will be converted to a (rather large) .xml file.
 
-> Unfortunately, at the time of writing HKLib only supports Elden Ring and Nightreign. For older games like Sekiro and Dark Souls 3 there are ways to generate an xml using Dropoff's hkxconverter. If you find someone who has extracted these before you can use those as well. More on this in [[#Saving changes]].
+> Unfortunately, at the time of writing HKLib only supports Elden Ring and Nightreign. For older games like Sekiro and Dark Souls 3 there are ways to generate an xml using Dropoff's hkxconverter. If you find someone who has extracted these before you can use those as well. More on this in [Saving changes](#saving-changes).
 
 > Note that .hkx is a fairly common extension within the Havok framework. Not every .hkx file is a behavior!
 
@@ -165,7 +165,7 @@ This section will outline how to actually use HkbEditor to edit your behavior. A
 
 When editing behaviors you should typically rely on making small incremental changes. The most common use cases - registering clips and creating CMSGs - can be found in the *Workflows* menu. To create new hierarchies you would typically start by creating a new target for a pointer (e.g. a new StateInfo for a state machine, or a new entry for a CMSG's generators). 
 
-If you have something more complex in mind, definitely have a look at the [[#Templates]].
+If you have something more complex in mind, definitely have a look at the [Templates](#templates).
 
 ## Saving changes
 Once you're happy with your changes you'll want to save your behavior. Note however that this will save everything as xml. For your changes to take effect you have to repack the `behbnd.dcx` binder.
@@ -209,7 +209,7 @@ To create new objects you have various choices. The most immediate one is to rig
 ### Duplicating objects
 If you instead want to duplicate an object you can do so by right clicking its node in the graph view and selecting *Copy -> XML*. This will copy this object as xml text to your clipboard. To paste the object, find a pointer attribute that will accept it (i.e. you cannot attach a *StateInfo* to a CMSG). Right click the pointer attribute and select *Paste*; or right click the node, navigate to the pointer attribute in the *Attach* menu and select *From XML*. A copy of the object with a new ID will be created and the pointer will be updated to it.
 
-> Note that when copying objects all their pointers will point at the same objects as the original. If this is not what you want see the section on [[#Cloning hierarchies]] below.
+> Note that when copying objects all their pointers will point at the same objects as the original. If this is not what you want see the section on [Cloning hierarchies](#cloning-hierarchies) below.
 
 ### Pinned objects
 For most operations that create new objects, whether they are abandoned or not, the new objects will also be pinned. This means they will appear in the small table below the list of state machines. Pinned objects allow you to quickly switch between objects to e.g. copy values or jump between them. Objects can also be pinned from the graph view's node context menu.
