@@ -70,9 +70,9 @@ class GraphWidget:
 
     def deinit(self):
         # Prevent double deinitialization
-        if getattr(self, '_deinitialized', False):
+        if getattr(self, "_deinitialized", False):
             return
-        
+
         self._deinitialized = True
 
         # Disable mouse callbacks in the brief window until the handlers are removed
@@ -82,11 +82,11 @@ class GraphWidget:
         registry_tag = f"{self.tag}_handler_registry"
         if dpg.does_item_exist(registry_tag):
             dpg.configure_item(registry_tag, show=False)
-        
+
         # Delete the drawable content
         if dpg.does_item_exist(self.tag):
             dpg.delete_item(self.tag)
-        
+
         # Schedule handler registry deletion for later, otherwise this can sometimes lead
         # to silent program crashes. This is the only solution I have found to this.
         def delayed_cleanup():
@@ -94,13 +94,13 @@ class GraphWidget:
                 for listener in dpg.get_item_children(registry_tag, 1):
                     dpg.delete_item(listener)
                 dpg.delete_item(registry_tag)
-        
+
         with dpg.mutex():
-            # Calling delayed_cleanup directly sometimes leads to a silent crash. 
+            # Calling delayed_cleanup directly sometimes leads to a silent crash.
             # Unfortunately, this is not guaranteed to run due to a bug in dearpygui, see
             # https://github.com/hoffstadt/DearPyGui/issues/2269
             dpg.set_frame_callback(dpg.get_frame_count() + 5, delayed_cleanup)
-        
+
     @property
     def zoom_factor(self) -> float:
         return self.layout.zoom_factor**self.zoom_level
@@ -194,33 +194,33 @@ class GraphWidget:
         # Expensive, but reliable
         self.zoom_level = 0
         self.regenerate()
-        
+
         # Get content bounding box at base zoom level
         bbox = self.get_canvas_content_bbox()
         content_w = bbox[2]
         content_h = bbox[3]
         content_center_x = bbox[0] + content_w / 2
         content_center_y = bbox[1] + content_h / 2
-        
+
         canvas_w, canvas_h = dpg.get_item_rect_size(self.tag)
         canvas_center_x = canvas_w / 2
         canvas_center_y = canvas_h / 2
-        
+
         # Calculate zoom level to fit content
         zoom_w = math.log(canvas_w / content_w, self.layout.zoom_factor)
         zoom_h = math.log(canvas_h / content_h, self.layout.zoom_factor)
         zoom_level = min(zoom_w, zoom_h)
-        
+
         if limits:
             zoom_level = min(max(zoom_level, self.zoom_min), self.zoom_max)
-        
+
         # Calculate final zoom factor and centered origin
-        final_zoom = self.layout.zoom_factor ** zoom_level
-        
+        final_zoom = self.layout.zoom_factor**zoom_level
+
         # Calculate where to place origin so scaled content center aligns with canvas center
         new_origin_x = canvas_center_x - content_center_x * final_zoom
         new_origin_y = canvas_center_y - content_center_y * final_zoom
-        
+
         # Apply zoom and centering together
         self.zoom_level = zoom_level
         self.set_origin(new_origin_x, new_origin_y)
@@ -241,15 +241,9 @@ class GraphWidget:
                 dpg.mvMouseButton_Right, callback=self._on_right_click
             )
 
-            dpg.add_mouse_down_handler(
-                dpg.mvMouseButton_Middle, callback=self._on_drag_start
-            )
-            dpg.add_mouse_release_handler(
-                dpg.mvMouseButton_Middle, callback=self._on_drag_release
-            )
-            dpg.add_mouse_drag_handler(
-                dpg.mvMouseButton_Middle, callback=self._on_mouse_drag
-            )
+            dpg.add_mouse_down_handler(-1, callback=self._on_drag_start)
+            dpg.add_mouse_release_handler(-1, callback=self._on_drag_release)
+            dpg.add_mouse_drag_handler(-1, callback=self._on_mouse_drag)
 
             dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
             dpg.add_mouse_move_handler(callback=self._on_mouse_move)
@@ -277,12 +271,15 @@ class GraphWidget:
         if not dpg.is_item_hovered(self.tag):
             return
 
+        if self.dragging:
+            return
+
         mx, my = self._get_graph_mouse_pos()
         node = self.get_node_at_pos(mx, my)
 
         if not node:
             # Folding when clicking the canvas feels bad
-            #self.deselect()
+            # self.deselect()
             pass
         else:
             self.select(node)
@@ -335,8 +332,14 @@ class GraphWidget:
             for item in actions:
                 dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
 
+    def _is_mouse_drag_active(self) -> bool:
+        return dpg.is_mouse_button_down(dpg.mvMouseButton_Middle) or (
+            dpg.is_key_down(dpg.mvKey_ModAlt)
+            and dpg.is_mouse_button_down(dpg.mvMouseButton_Left)
+        )
+
     def _on_drag_start(self) -> None:
-        if dpg.is_item_hovered(self.tag):
+        if self._is_mouse_drag_active() and dpg.is_item_hovered(self.tag):
             self.dragging = True
 
     def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
@@ -362,6 +365,9 @@ class GraphWidget:
     def _on_mouse_wheel(self, sender, wheel_delta: int):
         if not dpg.is_item_hovered(self.tag):
             return
+
+        if dpg.is_key_down(dpg.mvKey_ModCtrl):
+            self.last_drag = self.last_drag[0]
 
         if get_config().invert_zoom:
             wheel_delta = -wheel_delta
@@ -419,7 +425,7 @@ class GraphWidget:
     def regenerate(self):
         if not self.graph:
             return
-        
+
         dpg.delete_item(f"{self.tag}_edge_layer", children_only=True)
         dpg.delete_item(f"{self.tag}_node_layer", children_only=True)
         self.color_generator.reset()
@@ -705,7 +711,7 @@ class GraphWidget:
             # The right side of node_a depends on its width, whereas the left side of all nodes
             # on the same level should be aligned, so this will give a more consistent look.
             mid_x = bx - self.layout.gap_x / 2
-            #mid_x = ax + (bx - ax) / 2
+            # mid_x = ax + (bx - ax) / 2
 
             dpg.draw_polygon(
                 [

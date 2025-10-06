@@ -54,7 +54,7 @@ Once loaded you will be greeted with a list of items on the left side. These are
 
 ![](media/guide_ui-overview-1.png)
 
-Click one of the state machines. This will create a node in the center view. Clicking on this node will show its attributes on the right panel, and "unfold" it to show its child nodes. You can use the center view to navigate deeper into this node network (which is called a (directed) graph). Use the *middle mouse button* to move around, *left click* to select, and *right click* to open a context menu. You can also zoom in and out using the *mouse wheel*. Right click in an empty spot to reset your view.
+Click one of the state machines. This will create a node in the center view. Clicking on this node will show its attributes on the right panel, and "unfold" it to show its child nodes. You can use the center view to navigate deeper into this node network (which is called a (directed) graph). Use the *middle mouse button* or *alt + left mouse button* to move around, *left click* to select, and *right click* to open a context menu. You can also zoom in and out using the *mouse wheel*. Right click in an empty spot to reset your view.
 
 # Anatomy of a behavior
 
