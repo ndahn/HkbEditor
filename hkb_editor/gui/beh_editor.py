@@ -928,31 +928,16 @@ class BehaviorEditor(GraphEditor):
             )
 
         def attach_from_xml(sender: str, app_data: str, target: tuple[HkbRecord, str]):
-            target_obj = target[0]
-            target_type_id = get_target_type_id(target_obj)
+            target_obj = target[0].get_field(target[1])
 
             try:
                 xml = xml_from_str(pyperclip.paste())
+                xml_type_id = xml.get("typeid")
             except Exception:
                 raise ValueError("Clipboard does not contain valid XML data")
 
-            # Check for type compatibility (mainly to get a nicer exception)
-            xml_type_id = xml.get("typeid")
-            valid_types = self.beh.type_registry.get_compatible_types(target_type_id)
-            if xml_type_id not in valid_types:
-                raise ValueError(
-                    f"Copied XML has type ID {xml_type_id}, but target object only accepts the following types: {valid_types}"
-                )
-
             with undo_manager.guard(self.beh):
-                try:
-                    new_obj = HkbRecord.init_from_xml(self.beh, target_type_id, xml)
-                except Exception as e:
-                    raise ValueError(
-                        f"Copied XML seems to be incompatible with target object {target_obj}: {e}"
-                    ) from e
-
-                # Seems to have worked, assign a new ID and add the object
+                new_obj = HkbRecord.init_from_xml(self.beh, xml_type_id, xml)
                 self.beh.add_object(new_obj, self.beh.new_id())
 
                 do_attach(target_obj, new_obj)
@@ -1005,7 +990,7 @@ class BehaviorEditor(GraphEditor):
                     user_data=(record, path),
                 )
                 dpg.add_selectable(
-                    label="From XML",
+                    label="New from XML",
                     callback=attach_from_xml,
                     user_data=(record, path),
                 )

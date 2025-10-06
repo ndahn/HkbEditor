@@ -183,6 +183,9 @@ class HkbPointer(XmlValueHandler):
     def subtype_name(self) -> str:
         return self.tagfile.type_registry.get_name(self.subtype_id)
 
+    def get_compatible_types(self) -> list[str]:
+        return self.tagfile.type_registry.get_compatible_types(self.subtype_id)
+
     def will_accept(
         self, type_id: "HkbRecord | str", check_subtypes: bool = True
     ) -> bool:
@@ -210,11 +213,6 @@ class HkbPointer(XmlValueHandler):
 
     def set_value(self, value: "HkbPointer | HkbRecord | str") -> None:
         if isinstance(value, HkbRecord) and value.object_id:
-            # verify the record is compatible
-            if not self.will_accept(value):
-                raise ValueError(
-                    f"Incompatible record type {value.type_name}, expected {self.subtype_name}"
-                )
             value = value.object_id
         elif isinstance(value, HkbPointer):
             value = value.get_value()
@@ -224,6 +222,17 @@ class HkbPointer(XmlValueHandler):
 
         if not isinstance(value, str):
             raise ValueError(f"Value {value} ({type(value)}) is not a pointer")
+
+        if value != "object0":
+            if value in self.tagfile.objects:
+                # verify the record is compatible
+                obj = self.tagfile.objects[value]
+                if not self.will_accept(obj):
+                    raise ValueError(
+                        f"Record type {obj.type_name} is incompatible with {self.subtype_name}"
+                    )
+            else:
+                raise ValueError("Target reference does not exist")
 
         self.element.set("id", str(value))
 

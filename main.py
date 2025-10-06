@@ -24,6 +24,13 @@ def main():
     )
     _logger = logging.getLogger(__name__)
 
+    # TODO use this and remove redundant logging
+    # def handle_uncaught(exc_type, exc_value, exc_traceback):
+    #     sys.__excepthook__(exc_type, exc_value, exc_traceback)
+    #     _logger.error(str(exc_value))
+
+    # sys.excepthook = handle_uncaught
+
     # Check for clipboard support, will print instructions if it fails
     try:
         pyperclip.paste()

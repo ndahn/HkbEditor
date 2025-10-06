@@ -3,6 +3,7 @@ import sys
 import os
 import yaml
 import logging
+import re
 from enum import IntFlag
 from lxml import etree as ET
 from dearpygui import dearpygui as dpg
@@ -384,7 +385,7 @@ class AttributesWidget:
         label = path.split("/")[-1]
 
         def on_pointer_selected(sender, target: HkbRecord, user_data: Any):
-            self._on_value_changed(
+            self._update_attribute(
                 sender, target.object_id if target else None, pointer
             )
 
@@ -433,7 +434,7 @@ class AttributesWidget:
                 dpg.add_input_double(
                     label=comp,
                     default_value=value,
-                    callback=self._on_value_changed,
+                    callback=self._update_attribute,
                     user_data=array[i],
                 )
 
@@ -593,7 +594,7 @@ class AttributesWidget:
         label = path.split("/")[-1]
 
         def on_flag_changed(sender: str, active_flags: int, user_data):
-            self._on_value_changed(None, int(active_flags), attribute)
+            self._update_attribute(None, int(active_flags), attribute)
 
         flags = flag_type(attribute.get_value())
         with dpg.tree_node(label=label, default_open=True, tag=tag):
@@ -616,7 +617,7 @@ class AttributesWidget:
             if isinstance(attribute, HkbString):
                 dpg.add_input_text(
                     filter_key=label,
-                    callback=self._on_value_changed,
+                    callback=self._update_attribute,
                     user_data=attribute,
                     default_value=attribute.get_value(),
                 )
@@ -638,7 +639,7 @@ class AttributesWidget:
                     def on_enum_change(sender: str, new_value: str, val: HkbInteger):
                         int_value = enum[new_value].value
                         ui_repr = enum[new_value].name
-                        self._on_value_changed(sender, (int_value, ui_repr), val)
+                        self._update_attribute(sender, (int_value, ui_repr), val)
 
                     dpg.add_combo(
                         [e.name for e in enum],
@@ -657,9 +658,9 @@ class AttributesWidget:
                                 sender: str, new_idx: int, user_data: Any
                             ):
                                 if new_idx is None:
-                                    self._on_value_changed(sender, -1, attribute)
+                                    self._update_attribute(sender, -1, attribute)
                                 else:
-                                    self._on_value_changed(sender, new_idx, attribute)
+                                    self._update_attribute(sender, new_idx, attribute)
 
                                 self.regenerate()
 
@@ -680,9 +681,9 @@ class AttributesWidget:
                                 sender: str, new_idx: int, user_data: Any
                             ):
                                 if new_idx is None:
-                                    self._on_value_changed(sender, -1, attribute)
+                                    self._update_attribute(sender, -1, attribute)
                                 else:
-                                    self._on_value_changed(sender, new_idx, attribute)
+                                    self._update_attribute(sender, new_idx, attribute)
 
                                 self.regenerate()
 
@@ -703,9 +704,9 @@ class AttributesWidget:
                                 sender: str, new_idx: int, user_data: Any
                             ):
                                 if new_idx is None:
-                                    self._on_value_changed(sender, -1, attribute)
+                                    self._update_attribute(sender, -1, attribute)
                                 else:
-                                    self._on_value_changed(sender, new_idx, attribute)
+                                    self._update_attribute(sender, new_idx, attribute)
 
                                 self.regenerate()
 
@@ -721,14 +722,14 @@ class AttributesWidget:
                         else:
                             dpg.add_input_int(
                                 filter_key=label,
-                                callback=self._on_value_changed,
+                                callback=self._update_attribute,
                                 user_data=attribute,
                                 default_value=attribute.get_value(),
                             )
                     else:
                         dpg.add_input_int(
                             filter_key=label,
-                            callback=self._on_value_changed,
+                            callback=self._update_attribute,
                             user_data=attribute,
                             default_value=attribute.get_value(),
                         )
@@ -736,7 +737,7 @@ class AttributesWidget:
             elif isinstance(attribute, HkbFloat):
                 dpg.add_input_double(
                     filter_key=label,
-                    callback=self._on_value_changed,
+                    callback=self._update_attribute,
                     user_data=attribute,
                     default_value=attribute.get_value(),
                 )
@@ -744,7 +745,7 @@ class AttributesWidget:
             elif isinstance(attribute, HkbBool):
                 dpg.add_checkbox(
                     filter_key=label,
-                    callback=self._on_value_changed,
+                    callback=self._update_attribute,
                     user_data=attribute,
                     default_value=attribute.get_value(),
                 )
@@ -873,7 +874,7 @@ class AttributesWidget:
                 def on_object_created(
                     sender: str, new_object: HkbRecord, user_data: Any
                 ):
-                    self._on_value_changed(widget, new_object.object_id, attribute)
+                    self._update_attribute(widget, new_object.object_id, attribute)
 
                     if self.on_graph_changed:
                         self.on_graph_changed()
@@ -981,7 +982,7 @@ class AttributesWidget:
                 )
 
     # Internal callbacks
-    def _on_value_changed(
+    def _update_attribute(
         self, sender, new_value: Any | tuple[Any, Any], handler: XmlValueHandler
     ) -> None:
         if isinstance(new_value, tuple):
@@ -1019,7 +1020,7 @@ class AttributesWidget:
             return
 
         default_val = type(val)()
-        self._on_value_changed(widget, default_val, value)
+        self._update_attribute(widget, default_val, value)
 
         self.logger.info("Cut value:\n%s", val)
 
@@ -1058,41 +1059,29 @@ class AttributesWidget:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, value = user_data
+        widget, path, handler = user_data
         data = pyperclip.paste()
 
-        if isinstance(value, HkbPointer):
-            target = self.tagfile.retrieve_object(data)
-            if target is None:
-                self.logger.error(f"'{data}' is not a valid pointer ID")
-                return
+        # Clipboard contains an XML object
+        with undo_manager.guard(self.tagfile):
+            if data.startswith("<object") or data.startswith("<record"):
+                xml = ET.fromstring(data, get_xml_parser())
+                xml_type_id = xml.get("typeid")
+                new_value = HkbRecord.init_from_xml(self.tagfile, xml_type_id, xml)
+                self.tagfile.add_object(new_value, self.tagfile.new_id())
+            
+            # Plain value, let the handler handle it
+            else:
+                new_value = data
 
-            if target == self.record:
-                self.logger.error(
-                    "A record should not reference itself. If this is intended, use the select object dialog."
-                )
-                return
+            # Let the handler handle the rest
+            try:
+                self._update_attribute(widget, new_value, handler)
 
-            if not value.will_accept(target):
-                self.logger.error(
-                    f"'{data}' is of type {target.type_name}, which is incompatible with {value.subtype_name}"
-                )
-                return
-
-        try:
-            xml = ET.fromstring(data, get_xml_parser())
-            new_value = type(value)(xml, value.type_id)
-        except Exception:
-            new_value = data
-
-        try:
-            self._on_value_changed(widget, new_value, value)
-
-            if isinstance(value, HkbPointer) and self.on_graph_changed:
-                self.on_graph_changed()
-        except Exception as e:
-            self.logger.error("Paste value to %s failed: %s", widget, e)
-            return
+                if isinstance(handler, HkbPointer) and self.on_graph_changed:
+                    self.on_graph_changed()
+            except Exception as e:
+                self.logger.error(f"Paste value to {path} failed: {e}")
 
     def _delete_array_item(
         self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
@@ -1109,7 +1098,7 @@ class AttributesWidget:
             old_value = array.pop(index)
             undo_manager.on_update_array_item(array, index, old_value, None)
             self.logger.info(f"Removed {self.record.object_id}/{item_path}")
-            self._on_value_changed(sender, None, value)
+            self._update_attribute(sender, None, value)
 
         if index == 0 or index == len(array) - 1:
             dpg.delete_item(f"{self.tag}_attribute_{item_path}")

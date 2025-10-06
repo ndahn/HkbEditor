@@ -34,7 +34,7 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
         )
 
     def make_cats():
-        num_cats = 3#random.randint(1, 3)
+        num_cats = random.randint(1, 3)
 
         if num_cats == 1:
             cat = random.choice(list(range(1, 4)))
@@ -53,7 +53,7 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
 
     with dpg.window(
         width=410,
-        height=170,
+        height=190,
         label="About",
         no_saved_settings=True,
         on_close=lambda: dpg.delete_item(dialog),
