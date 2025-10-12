@@ -55,8 +55,8 @@ def run(
     # Create the new roll
     new_roll_cmsgs = []
     for anim, direction in zip(
-        [roll_front_anim, roll_left_anim, roll_right_anim, roll_back_anim],
-        ["Front", "Left", "Right", "Back"],
+        [roll_front_anim, roll_back_anim, roll_left_anim, roll_right_anim],
+        ["Front", "Back", "Left", "Right"],
     ):
         if not anim:
             continue
@@ -88,8 +88,8 @@ def run(
     # Self transition
     new_roll_selftrans_cmsgs = []
     for anim, direction in zip(
-        [roll_front_anim, roll_left_anim, roll_right_anim, roll_back_anim],
-        ["Front", "Left", "Right", "Back"],
+        [roll_front_anim, roll_back_anim, roll_left_anim, roll_right_anim],
+        ["Front", "Back", "Left", "Right"],
     ):
         if not anim:
             continue
