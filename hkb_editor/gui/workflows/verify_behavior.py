@@ -49,16 +49,24 @@ def check_statemachines(behavior: HavokBehavior, root_logger: logging.Logger) ->
             continue
 
         transitions: HkbArray = transition_info["transitions"]
+        wildcard_state_ids = {}
 
         for idx, trans in enumerate(transitions):
             sid = trans["toStateId"].get_value()
+            
+            if sid in wildcard_state_ids:
+                wildcard_state_ids.setdefault(sid, []).append(idx)
 
             if sid not in states:
                 logger.error(
                     f"{sm_name}: wildcard transition {idx} has invalid toStateId {sid}"
                 )
 
-        # NOTE it's fine for states to not have a wildcard transition
+        for sid, wcidx in wildcard_state_ids.items():
+            if len(wcidx) > 1:
+                logger.warning(f"{sm_name}: state ID {sid} has multiple wildcard transitions: {wcidx}")
+
+        # NOTE it's fine for states to *not* have a wildcard transition
 
 
 def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
