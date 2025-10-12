@@ -211,30 +211,36 @@ class HkbPointer(XmlValueHandler):
 
         return val
 
-    def set_value(self, value: "HkbPointer | HkbRecord | str") -> None:
-        if isinstance(value, HkbRecord) and value.object_id:
-            value = value.object_id
+    def set_value(
+        self, value: "HkbPointer | HkbRecord | str", *, must_exist: bool = True
+    ) -> None:
+        oid = None
+        if isinstance(value, HkbRecord):
+            if not value.object_id:
+                raise ValueError(f"Passed record {value} does not have an object ID")
+            oid = value.object_id
         elif isinstance(value, HkbPointer):
-            value = value.get_value()
+            oid = value.get_value()
+        elif isinstance(value, str):
+            oid = value
+        else:
+            raise ValueError(f"Cannot apply '{value}' to a pointer")
 
-        if value in ("", None):
-            value = "object0"
+        if not oid:
+            oid = "object0"
 
-        if not isinstance(value, str):
-            raise ValueError(f"Value {value} ({type(value)}) is not a pointer")
-
-        if value != "object0":
-            if value in self.tagfile.objects:
-                # verify the record is compatible
-                obj = self.tagfile.objects[value]
-                if not self.will_accept(obj):
-                    raise ValueError(
-                        f"Record type {obj.type_name} is incompatible with {self.subtype_name}"
-                    )
-            else:
+        if oid != "object0":
+            if must_exist and oid not in self.tagfile.objects:
                 raise ValueError("Target reference does not exist")
 
-        self.element.set("id", str(value))
+            # verify the record is compatible
+            obj = self.tagfile.objects.get(oid, value)
+            if isinstance(obj, HkbRecord) and not self.will_accept(obj):
+                raise ValueError(
+                    f"Record type {obj.type_name} is incompatible with {self.subtype_name}"
+                )
+
+        self.element.set("id", str(oid))
 
     def get_target(self) -> "HkbRecord":
         oid = self.get_value()

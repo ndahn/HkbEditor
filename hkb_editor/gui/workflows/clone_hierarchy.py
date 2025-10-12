@@ -753,7 +753,7 @@ def resolve_conflicts(
         elif resolution.action == MergeAction.REUSE:
             resolution.result = behavior.objects[object_id]
         elif resolution.action == MergeAction.IGNORE:
-            # Will not be added, but giving it a new ID will be prevent other objects from
+            # Will not be added, but giving it a new ID will prevent other objects from
             # accidently referring to existing objects from the behavior
             resolution.result = resolution.original
             resolution.result.object_id = behavior.new_id()
@@ -781,7 +781,8 @@ def resolve_conflicts(
 
             if target_id in results.objects:
                 new_target = results.objects[target_id].result
-                ptr.set_value(new_target)
+                # The objects themselves will be added to the behavior much later
+                ptr.set_value(new_target, must_exist=False)
             else:
                 logging.getLogger().warning(
                     f"Object {object_id} references ID {target_id}, which is not part of the cloned hierarchy"
