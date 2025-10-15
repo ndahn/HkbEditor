@@ -1,5 +1,6 @@
 import os
 import random
+import numpy as np
 from dearpygui import dearpygui as dpg
 import webbrowser
 
@@ -18,8 +19,13 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
     if not dpg.does_item_exist("hkbeditor_icon_ufo"):
         with dpg.texture_registry():
             icon_ufo = os.path.abspath(os.path.join(".", "doc/ufo.png"))
-            w, h, _, data = dpg.load_image(icon_ufo)
-            dpg.add_static_texture(w, h, data, tag="hkbeditor_icon_ufo")
+            w, h, ch, data = dpg.load_image(icon_ufo)
+            
+            # 250ms? worth it!
+            img_data = np.frombuffer(data, dtype=np.float32).reshape((w, h, ch))
+            style.colorshift(img_data, hue_shift=0.8)
+            
+            dpg.add_static_texture(w, h, img_data, tag="hkbeditor_icon_ufo")
 
     def add_cat(cat: int, pos: tuple[int, int], wf: float = 1.0) -> None:
         draw_cat(
