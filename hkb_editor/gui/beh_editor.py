@@ -889,7 +889,7 @@ class BehaviorEditor(GraphEditor):
                             event_id = trans["eventId"].get_value()
                             if event_id >= 0:
                                 event = self.beh.get_event(event_id)
-                                lines.insert(1, (event, style.green))
+                                lines.insert(1, (f"<{event}>", style.green))
 
                             break
 
