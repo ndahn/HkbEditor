@@ -913,7 +913,7 @@ class BehaviorEditor(GraphEditor):
         def attach_new_object(
             sender: str, app_data: str, target: tuple[HkbRecord, str]
         ):
-            target_obj = target[0]
+            target_obj = target[0].get_field(target[1])
             target_type_id = get_target_type_id(target_obj)
 
             create_object_dialog(
