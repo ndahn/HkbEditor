@@ -865,17 +865,30 @@ class BehaviorEditor(GraphEditor):
 
     def get_node_frontpage(self, node: Node) -> list[str]:
         obj = self.beh.objects[node.id]
-        try:
-            return [
-                (obj["name"].get_value(), style.yellow),
-                (obj.type_name, style.white),
-                (node.id, style.blue),
-            ]
-        except AttributeError:
-            return [
-                (obj.type_name, style.white),
-                (node.id, style.blue),
-            ]
+
+        lines = [
+            (obj.type_name, style.white),
+            (node.id, style.blue),
+        ]
+
+        name = obj.get_field("name", None, resolve=True)
+        if name:
+            lines.insert(0, (name, style.yellow))
+
+            if obj.type_name == "hkbStateMachine::StateInfo":
+                state_id = obj["stateId"].get_value()
+                sm = self.beh.objects[self.canvas.root]
+                transitions: HkbArray[HkbRecord] = sm.get_field("wildcardTransitions/transitions", None)
+                if transitions:
+                    for trans in transitions:
+                        if trans["toStateId"].get_value() == state_id:
+                            event_id = trans["eventId"].get_value()
+                            if event_id >= 0:
+                                event = self.beh.get_event(event_id)
+                                lines.insert(1, (event, style.green))
+                            break
+
+        return lines
 
     def get_node_frontpage_short(self, node_id: str) -> str:
         return self.beh.objects[node_id]["name"].get_value()
