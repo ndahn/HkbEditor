@@ -875,17 +875,22 @@ class BehaviorEditor(GraphEditor):
         if name:
             lines.insert(0, (name, style.yellow))
 
+            # Check if there is an event associated with this StateInfo
             if obj.type_name == "hkbStateMachine::StateInfo":
-                state_id = obj["stateId"].get_value()
                 sm = self.beh.objects[self.canvas.root]
-                transitions: HkbArray[HkbRecord] = sm.get_field("wildcardTransitions/transitions", None)
+                transitions: HkbArray[HkbRecord] = sm.get_field(
+                    "wildcardTransitions/transitions", None
+                )
+                # Not all statemachines have wildcard transitions (just root maybe?)
                 if transitions:
+                    state_id = obj["stateId"].get_value()
                     for trans in transitions:
                         if trans["toStateId"].get_value() == state_id:
                             event_id = trans["eventId"].get_value()
                             if event_id >= 0:
                                 event = self.beh.get_event(event_id)
                                 lines.insert(1, (event, style.green))
+
                             break
 
         return lines
@@ -1373,8 +1378,10 @@ class BehaviorEditor(GraphEditor):
         def on_delete(idx: int):
             undo_manager.on_delete_variable(self.beh, idx)
             self.beh.delete_variable(idx)
-            self.logger.warning("Deleting a variable may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!")
-        
+            self.logger.warning(
+                "Deleting a variable may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!"
+            )
+
         edit_simple_array_dialog(
             [
                 (v.name, v.vtype.value, v.vmin, v.vmax, str(v.default))
@@ -1426,7 +1433,9 @@ class BehaviorEditor(GraphEditor):
         def on_delete(idx: int):
             self.beh.delete_event(idx)
             undo_manager.on_delete_event(self.beh, idx)
-            self.logger.warning("Deleting an event may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!")
+            self.logger.warning(
+                "Deleting an event may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!"
+            )
 
         edit_simple_array_dialog(
             [(e,) for e in self.beh.get_events()],
@@ -1476,7 +1485,9 @@ class BehaviorEditor(GraphEditor):
         def on_delete(idx: int):
             self.beh.delete_animation(idx)
             undo_manager.on_delete_animation(self.beh, idx)
-            self.logger.warning("Deleting an animation may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!")
+            self.logger.warning(
+                "Deleting an animation may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!"
+            )
 
         edit_simple_array_dialog(
             [(a,) for a in self.beh.get_animations()],
@@ -1707,7 +1718,9 @@ class BehaviorEditor(GraphEditor):
     def open_guide(self) -> None:
         import webbrowser
 
-        self.logger.info("An offline version of the guide can be found inside the doc/ folder")
+        self.logger.info(
+            "An offline version of the guide can be found inside the doc/ folder"
+        )
         webbrowser.open("https://github.com/ndahn/HkbEditor/blob/main/doc/guide.md")
 
     def close_all_dialogs(self) -> None:
