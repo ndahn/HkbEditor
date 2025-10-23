@@ -23,7 +23,11 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
             
             # 250ms? worth it!
             img_data = np.frombuffer(data, dtype=np.float32).reshape((w, h, ch))
-            style.colorshift(img_data, hue_shift=0.8)
+            style.colorshift(
+                img_data, 
+                hue_shift=random.random(),
+                saturation_scale=random.random(),
+            )
             
             dpg.add_static_texture(w, h, img_data, tag="hkbeditor_icon_ufo")
 
