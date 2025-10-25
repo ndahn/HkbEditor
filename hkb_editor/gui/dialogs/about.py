@@ -13,7 +13,7 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
         tag = f"about_dialog_{dpg.generate_uuid()}"
 
     rainbow = style.HighContrastColorGenerator()
-    rainbow.hue = 0.75
+    rainbow.hue = random.random()
     rainbow.hue_step = 0.05
 
     if not dpg.does_item_exist("hkbeditor_icon_ufo"):
@@ -25,7 +25,7 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
             img_data = np.frombuffer(data, dtype=np.float32).reshape((w, h, ch))
             style.colorshift(
                 img_data, 
-                hue_shift=random.random(),
+                hue_shift=rainbow.hue,
                 saturation_scale=random.random(),
             )
             
