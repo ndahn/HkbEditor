@@ -509,7 +509,11 @@ class HkbRecord(XmlValueHandler):
         self, tagfile: Tagfile, type_id: str, xml: ET.Element, object_id: str = None
     ) -> "HkbRecord":
         obj = HkbRecord.new(tagfile, type_id, None, object_id)
-        tmp = HkbRecord.from_object(tagfile, xml)
+        
+        if xml.tag != "record":
+            xml = xml.find("record")
+
+        tmp = HkbRecord(tagfile, xml, type_id)
         obj.set_value(tmp)
         return obj
 

@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Callable, Generic, TypeVar
 import logging
 from dataclasses import dataclass, field
 import re
@@ -24,6 +24,9 @@ from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.helpers import common_loading_indicator, add_paragraphs
 
 
+T = TypeVar("T")
+
+
 class MergeAction(Enum):
     NEW = 0
     REUSE = 1
@@ -32,21 +35,21 @@ class MergeAction(Enum):
 
 
 @dataclass
-class Resolution:
-    original: Any = None
+class Resolution(Generic[T]):
+    original: T = None
     action: MergeAction = MergeAction.NEW
-    result: Any = None
+    result: T = None
 
 
 @dataclass
 class MergeResult:
     root_id: str = None
-    root_meta: dict[str:Any] = field(default_factory=dict)
-    events: dict[int, Resolution] = field(default_factory=dict)
-    variables: dict[int, Resolution] = field(default_factory=dict)
-    animations: dict[int, Resolution] = field(default_factory=dict)
-    type_map: dict[str, Resolution] = field(default_factory=dict)
-    objects: dict[str, Resolution] = field(default_factory=dict)
+    root_meta: ET._Element = None
+    events: dict[int, Resolution[tuple[int, str]]] = field(default_factory=dict)
+    variables: dict[int, Resolution[tuple[int, str]]] = field(default_factory=dict)
+    animations: dict[int, Resolution[tuple[int, str]]] = field(default_factory=dict)
+    type_map: dict[str, Resolution[tuple[str, str]]] = field(default_factory=dict)
+    objects: dict[str, Resolution[HkbRecord]] = field(default_factory=dict)
     pin_objects: bool = True
 
 
@@ -131,6 +134,8 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
                 trans_event_idx = transition["eventId"].get_value()
                 trans_event_name = behavior.get_event(trans_event_idx, None)
                 events[trans_event_idx] = trans_event_name
+
+                # No break, for the unlikely case that a state has multiple wildcard transitions
 
     # Create using the parser so we can use our guarded xml element class
     xml_root = ET.fromstring(b"<behavior_hierarchy/>", get_xml_parser())
@@ -477,7 +482,8 @@ def find_conflicts(
     behavior: HavokBehavior, xml: ET.Element, target_record: HkbRecord
 ) -> MergeResult:
     results = MergeResult()
-    results.root_id = xml.find("root_meta").get("root_id")
+    results.root_meta = xml.find("root_meta")
+    results.root_id = results.root_meta.get("root_id")
 
     def _find_index_attribute_conflicts(
         behavior: HavokBehavior, xml: ET._Element, results: MergeResult
@@ -494,9 +500,7 @@ def find_conflicts(
             if name:
                 match_idx = behavior.find_event(name, -1)
                 action = MergeAction.NEW if match_idx < 0 else MergeAction.REUSE
-                results.events[idx] = Resolution(
-                    (idx, name), action, (match_idx, name)
-                )
+                results.events[idx] = Resolution((idx, name), action, (match_idx, name))
             else:
                 results.events[idx] = Resolution(
                     (idx, name), MergeAction.SKIP, (-1, None)
@@ -781,7 +785,7 @@ def resolve_conflicts(
 
             if target_id in results.objects:
                 new_target: HkbRecord = results.objects[target_id].result
-                # Avoid all verification here as the ID might already exist but refer to a 
+                # Avoid all verification here as the ID might already exist but refer to a
                 # different object. The objects themselves will be added much later
                 ptr.set_value(new_target.object_id, must_exist=False)
             else:
@@ -821,7 +825,109 @@ def resolve_conflicts(
                     obj.set_field(path, anim_res.result[0])
 
     # Handle additional root metadata
-    # root_res = results.objects[results.root_id]
+    restore_root_meta(behavior, target_record, results)
+
+
+def restore_root_meta(
+    behavior: HavokBehavior,
+    target_record: HkbRecord,
+    results: MergeResult,
+) -> None:
+    root_res = results.objects[results.root_id]
+
+    # StateInfos may come with wildcard transitions that need to be transferred
+    if (
+        root_res.action == MergeAction.NEW
+        and root_res.result.type_name == "hkbStateMachine::StateInfo"
+    ):
+        if not target_record.type_name == "hkbStateMachine":
+            raise ValueError(f"Expected target record to be of type hkbStateMachine, but got {target_record.type_name}")
+
+        wildcards: HkbArray[HkbRecord] = ensure_statemachine_wildcards(target_record)["transitions"]
+
+        root_res = results.objects[results.root_id]
+        old_state_id = root_res.original["stateId"].get_value()
+        new_state_id = root_res.result["stateId"].get_value()
+
+        transition_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine::TransitionInfo")
+        
+        for transition_xml in results.root_meta.xpath(".//wildcard_transitions/record"):
+            transition = HkbRecord.init_from_xml(behavior, transition_type, transition_xml)
+            
+            # Translate event index
+            event = transition["eventId"].get_value()
+            event_res = results.events.get(event)
+            if event_res:
+                if event_res.action in (MergeAction.IGNORE, MergeAction.SKIP):
+                    # Event was not transferred, skip this transition
+                    continue
+
+                event = event_res.result[0]
+                transition["eventId"].set_value(event)
+
+            # Translate state ID
+            state_id = transition["toStateId"].get_value()
+            if state_id == old_state_id:
+                state_id = new_state_id
+            else:
+                # Transition is not for the our roo stateinfo, skip it
+                continue
+
+            transition["toStateId"].set_value(state_id)
+
+            # Translate the transition effect if it was copied rather than reused
+            effect = transition["transition"].get_value()
+            if effect:
+                effect_res = results.objects.get(effect)
+                if effect_res:
+                    if effect_res.action == MergeAction.NEW:
+                        # Update referenced transition effect
+                        effect = effect_res.result.object_id
+                        transition["transition"].set_value(effect)
+                    elif effect_res.action in (MergeAction.IGNORE, MergeAction.SKIP):
+                        # Unset the transition effect
+                        transition["transition"].set_value(None)
+                    elif effect_res.action == MergeAction.REUSE:
+                        # Use transition effect as is
+                        pass
+
+            # Translate the condition object if one was used
+            condition = transition["condition"].get_value()
+            if condition:
+                condition_res = results.objects.get(condition)
+                if condition_res:
+                    if condition_res.action == MergeAction.NEW:
+                        # Update referenced transition condition
+                        condition = condition_res.result.object_id
+                        transition["transition"].set_value(condition)
+                    elif condition_res.action in (MergeAction.IGNORE, MergeAction.SKIP):
+                        # Unset the transition condition
+                        transition["transition"].set_value(None)
+                    elif condition_res.action == MergeAction.REUSE:
+                        # Use transition condition as is
+                        pass
+
+            wildcards.append(transition)
+
+
+def ensure_statemachine_wildcards(statemachine: HkbRecord) -> HkbRecord:
+    wildcards = statemachine["wildcardTransitions"].get_target()
+    if wildcards is None:
+        wildcards = HkbRecord.new(
+            statemachine.tagfile, statemachine.get_field_type("wildcardTransitions")
+        )
+
+        statemachine.tagfile.add_object(wildcards)
+        undo_manager.on_create_object(statemachine.tagfile, wildcards)
+
+        statemachine["wildcardTransitions"].set_value(wildcards)
+        undo_manager.on_update_value(
+            statemachine["wildcardTransitions"],
+            None,
+            wildcards.object_id,
+        )
+
+    return wildcards
 
 
 def transfer_wildcard_transitions(
@@ -849,21 +955,7 @@ def transfer_wildcard_transitions(
 
     # Check if the target statemachine has a TransitionInfoArray object and create it
     # if neccessary
-    target_wildcards = target_sm["wildcardTransitions"].get_target()
-    if target_wildcards is None:
-        target_wildcards = HkbRecord.new(
-            behavior, target_sm.get_field_type("wildcardTransitions")
-        )
-
-        behavior.add_object(target_wildcards)
-        undo_manager.on_create_object(behavior, target_wildcards)
-
-        target_sm["wildcardTransitions"].set_value(target_wildcards)
-        undo_manager.on_update_value(
-            target_sm["wildcardTransitions"],
-            None,
-            target_wildcards.object_id,
-        )
+    target_wildcards = ensure_statemachine_wildcards(target_sm)
 
     # Transfer the transition infos
     target_wildcards_array: HkbArray = target_wildcards["transitions"]
