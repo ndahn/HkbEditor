@@ -53,6 +53,9 @@ def draw_cat(
     if spin:
 
         def spin_cat() -> None:
+            if not dpg.does_item_exist(tag):
+                return
+
             sig = 1 if spin_right else -1
             rot = dpg.get_item_user_data(tag) + spin_rate * sig
             phase = time.time() * wobble_rate + wobble_offset

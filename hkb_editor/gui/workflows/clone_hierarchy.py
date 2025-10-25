@@ -780,9 +780,10 @@ def resolve_conflicts(
                 continue
 
             if target_id in results.objects:
-                new_target = results.objects[target_id].result
-                # The objects themselves will be added to the behavior much later
-                ptr.set_value(new_target, must_exist=False)
+                new_target: HkbRecord = results.objects[target_id].result
+                # Avoid all verification here as the ID might already exist but refer to a 
+                # different object. The objects themselves will be added much later
+                ptr.set_value(new_target.object_id, must_exist=False)
             else:
                 logging.getLogger().warning(
                     f"Object {object_id} references ID {target_id}, which is not part of the cloned hierarchy"

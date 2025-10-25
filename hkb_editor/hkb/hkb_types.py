@@ -187,10 +187,12 @@ class HkbPointer(XmlValueHandler):
         return self.tagfile.type_registry.get_compatible_types(self.subtype_id)
 
     def will_accept(
-        self, type_id: "HkbRecord | str", check_subtypes: bool = True
+        self, type_id: "HkbRecord | HkbPointer | str", check_subtypes: bool = True
     ) -> bool:
         if isinstance(type_id, HkbRecord):
             type_id = type_id.type_id
+        elif isinstance(type_id, HkbPointer):
+            type_id = type_id.subtype_id
 
         if self.subtype_id == type_id:
             return True
@@ -212,9 +214,15 @@ class HkbPointer(XmlValueHandler):
         return val
 
     def set_value(
-        self, value: "HkbPointer | HkbRecord | str", *, must_exist: bool = True
+        self, value: "HkbPointer | HkbRecord | str", *, must_exist: bool = True, verify: bool = True,
     ) -> None:
         oid = None
+        
+        if isinstance(value, (HkbRecord, HkbPointer)) and not self.will_accept(value):
+            raise ValueError(
+                    f"{self.type_name} does not accept value of type {value.type_name}"
+                ) 
+
         if isinstance(value, HkbRecord):
             if not value.object_id:
                 raise ValueError(f"Passed record {value} does not have an object ID")
@@ -228,17 +236,8 @@ class HkbPointer(XmlValueHandler):
 
         if not oid:
             oid = "object0"
-
-        if oid != "object0":
-            if must_exist and oid not in self.tagfile.objects:
-                raise ValueError("Target reference does not exist")
-
-            # verify the record is compatible
-            obj = self.tagfile.objects.get(oid, value)
-            if isinstance(obj, HkbRecord) and not self.will_accept(obj):
-                raise ValueError(
-                    f"Record type {obj.type_name} is incompatible with {self.subtype_name}"
-                )
+        elif must_exist and oid not in self.tagfile.objects:
+            raise ValueError("Target reference does not exist")
 
         self.element.set("id", str(oid))
 
@@ -253,7 +252,7 @@ class HkbPointer(XmlValueHandler):
         return bool(self.get_value())
 
     def __str__(self) -> str:
-        return f"Pointer -> {self.get_value()} ({self.subtype_name})"
+        return f"Pointer(id={self.get_value()}, subtype={self.subtype_name})"
 
 
 class HkbArray(XmlValueHandler, Generic[T]):
