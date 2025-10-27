@@ -603,7 +603,7 @@ class HkbRecord(XmlValueHandler):
                     obj = obj[k][int(idx)]
                 else:
                     obj = obj[k]
-        except (AttributeError, KeyError, IndexError) as e:
+        except Exception as e:
             if default != _undefined:
                 return default
             raise KeyError(f"No field with path '{path}'") from e
