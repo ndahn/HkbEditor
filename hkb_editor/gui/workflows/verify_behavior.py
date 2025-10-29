@@ -85,10 +85,13 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
         array: HkbArray
         for path, array in obj.find_fields_by_type(HkbArray):
             if array.is_pointer_array:
-                for ptr in array:
+                for i, ptr in enumerate(array):
                     if not ptr.is_set():
-                        # Will cause the game to crash if it's a statemachine
-                        logger.warning(f"Pointer array {obj.object_id}/{path} contains null-pointers")
+                        if i < len(array) - 1:
+                            # Will cause the game to crash if accessed
+                            logger.error(f"Pointer array {obj.object_id}/{path} contains non-terminal null-pointers, this is probably bad")
+                        else:
+                            logger.warning(f"Pointer array {obj.object_id}/{path} contains terminal null-pointers, might be okay")
                         break
 
         if obj.type_name in event_attributes:
