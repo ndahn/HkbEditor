@@ -223,7 +223,9 @@ class HkbPointer(XmlValueHandler):
                     f"{self.type_name} does not accept value of type {value.type_name}"
                 ) 
 
-        if isinstance(value, HkbRecord):
+        if value is None:
+            oid = None
+        elif isinstance(value, HkbRecord):
             if not value.object_id:
                 raise ValueError(f"Passed record {value} does not have an object ID")
             oid = value.object_id

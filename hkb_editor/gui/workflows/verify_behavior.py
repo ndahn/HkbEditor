@@ -87,6 +87,7 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
             if array.is_pointer_array:
                 for i, ptr in enumerate(array):
                     if not ptr.is_set():
+                        # TODO only warn if the null pointer creates a gap
                         if i < len(array) - 1:
                             # Will cause the game to crash if accessed
                             logger.error(f"Pointer array {obj.object_id}/{path} contains non-terminal null-pointers, this is probably bad")

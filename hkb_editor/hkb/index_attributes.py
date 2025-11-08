@@ -13,6 +13,10 @@ event_attributes = {
     "hkbStateMachine::TransitionInfoArray": [
         "transitions:*/eventId",
     ],
+    "hkbLayer": [
+        "blendingControlData/onEventId",
+        "blendingControlData/offEventId",
+    ],
 }
 
 
