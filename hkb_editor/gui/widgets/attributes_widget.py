@@ -143,11 +143,33 @@ class AttributesWidget:
                     reveal(f":{idx}")
 
     def get_explanation(self, path: str) -> str:
-        type_expl = self.explanations.get(self.record.type_name)
-        if not type_expl:
-            type_expl = self.explanations.get("common", {})
+        path = re.sub(r":[0-9]+", "", path)
 
-        return type_expl.get(path)
+        for tn in (self.record.type_name, "common"):
+            type_expl = self.explanations.get(tn)
+
+            if not type_expl:
+                continue
+
+            if not path:
+                if type_expl:
+                    return type_expl.get("description")
+                return None
+
+            expl = type_expl
+            for part in path.split("/"):
+                expl = expl.get(part)
+
+                if not expl:
+                    break
+
+            if isinstance(expl, dict):
+                expl = expl.get("description")
+
+            if expl:
+                return expl
+
+        return None
 
     # UI content
     def _setup_content(self) -> None:

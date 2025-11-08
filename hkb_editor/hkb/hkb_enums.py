@@ -9,6 +9,11 @@ from .type_registry import TypeRegistry
 # https://github.com/The12thAvenger/HKLib/tree/main/HKLib/hk2018/Autogen
 
 
+class hkbVariableBindingSet_Binding_BindingType(IntEnum):
+    VARIABLE = 0
+    CHARACTER_PROPERTY = 1
+
+
 class hkbBehaviorGraph_NodeIdRanges(IntEnum):
     FIRST_TRANSITION_EFFECT_ID = 64512
     FIRST_DYNAMIC_NODE_ID = 64511
@@ -46,10 +51,6 @@ class hkbRoleAttribute_Role(IntEnum):
     LOCAL_FRAME = 8
     BONE_ATTACHMENT = 9
     CHARACTER_PROPERTY_SHEET = 10
-
-
-class hkbVariableBindingSet_Binding_BindingType(IntEnum):
-    VARIABLE = 0
 
 
 class hkbStateMachine_StartStateMode(IntEnum):
@@ -216,13 +217,18 @@ class hkbDockingGenerator_BlendType(IntEnum):
 
 @cache
 def get_hkb_enum(
-    type_registry: TypeRegistry, record_type_id: str, field: str
+    type_registry: TypeRegistry, record_type_id: str, path: str
 ) -> Type[IntEnum]:
     # Not all records are objects or have IDs, so going from the record type is better
-    field_type = type_registry.get_field_types(record_type_id).get(field, None)
+    field = path.rsplit("/", maxsplit=1)[-1].split(":", maxsplit=1)[0]
+    record_fields = type_registry.get_field_types(record_type_id)
+    field_type = record_fields.get(field, None)
 
-    if not field_type or type_registry.get_name(field_type) != "hkEnum":
-        # Not robust, but seems consistent so far
+    if not field_type:
+        return None
+
+    # Not robust, but seems consistent between games so far
+    if type_registry.get_name(field_type) != "hkEnum":
         return None
 
     try:

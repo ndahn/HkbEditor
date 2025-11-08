@@ -4,20 +4,119 @@
 
 # common is used as a fallback if the type name or path cannot be found.
 common:
-  name: The name of this object
+  name: The name of this object.
   generator: The animation object that is activated by this.
   generators: Animation objects like CMSG or ClipGenerators that can be activated.
   variableBindingSet: Binds attributes to variables which can then be set from HKS.
   userData: A memory pointer. Don't set this unless you copy it from a similar object.
   flags: If the flag values are known you can right click to set these from a number.
 
+hkbVariableBindingSet:
+  description: Used to bind attributes of a parent object to variables.
+  bindings:
+    memberPath: Path of the parent object's attribute to bind.
+    variableIndex: Index of the variable that should control the bound attribute.
+    bitIndex: Index of the bit to which the variable is bound.
+    bindingType: What to bind the attribute to.
+  indexOfBindingToEnable: 
+
 hkbManualSelectorGenerator:
-  selectedGeneratorIndex: Decides which generator is active. Typically bound to a variable and set via HKS.
-  indexSelector: 
-  selectedIndexCanChangeAfterActivate: 
-  generatorChangedTransitionEffect: 
+  description: Allows to manually select the active generator.
+  selectedGeneratorIndex: Decides which generator is active. Typically bound to a variable and set via HKS by SetVariable.
+  indexSelector: Custom selector to choose the selectedGeneratorIndex.
+  selectedIndexCanChangeAfterActivate: Can the selected generator change after activation?
+  generatorChangedTransitionEffect: Custom transition for when the generator changes.
   sentOnClipEnd: 
-  sentOnClipEnd/id: 
-  sentOnClipEnd/payload: 
+  sentOnClipEnd:
+    id: 
+    payload: 
   generatorPreDeleteIndex: 
   endOfClipEventId: 
+
+CustomManualSelectorGenerator:
+  description: Selects a generator based on e.g. the currently equipped weapon type, sword arts, etc.
+  offsetType: How to choose the active generator.
+  animId: Animation ID of the associated animations (the Y part of aXXX_YYYYYY).
+  animeEndEventType: What to do once the animation ends.
+  enableScript: Whether to call _onActivate, _onUpdate and onDeactivate functions for this CMSG.
+  enableTae: Does this CMSG have actual animations associated?
+  changeTypeOfSelectedIndexAfterActivate: 
+  generatorChangedTransitionEffect: Custom transition for when the generator changes.
+  checkAnimEndSlotNo: 
+  replanningAI: 
+  rideSync: 
+
+hkbClipGenerator:
+  description: A single animation to play back.
+  animationName: The full name of the associated animation (aXXX_YYYYYY).
+  triggers: Events that occur at specific times.
+  userPartitionMask:
+  cropStartAmountLocalTime: How many seconds to crop from the start of the clip.
+  cropEndAmountLocalTime: How many seconds to crop from the end of the clip.
+  startTime: Time at which to start the animation.
+  playbackSpeed: Factor applied to the clip's playback speed.
+  enforcedDuration: Scale the clip's duration to be this long.
+  userControlledTimeFraction: Allows to manually control animation playback.
+  mode: Playback mode.
+  flags: |
+    * NONE: Default, no modifiers.
+    * CONTINUE_MOTION_AT_END:
+    * SYNC_HALF_CYCLE_IN_PING_PONG_MODE: 
+    * MIRROR: Mirror the animation based on the skeleton's mirror bone pairings.
+    * FORCE_DENSE_POSE: 
+    * DONT_CONVERT_ANNOTATIONS_TO_TRIGGERS:
+    * IGNORE_MOTION: 
+  animationInternalId: Index of the associated animation entry. See Edit -> Animations.
+
+hkbLayerGenerator:
+  description: Combines multiple animations.
+  layers: The animation layers to combine.
+  indexOfSyncMasterChild: The child to use for synchronizing durations if SYNC is true.
+  flags: |
+    * NONE: Default, no modifiers.
+    * SYNC: adjust speed of children so their cycles are aligned.
+
+hkbLayer:
+  description: Defines which parts of an animation will be combined.
+  boneWeights: How much each bone of this animation will affect the end result.
+  useMotion: Set to true if this animation's world transform should be used (worldFromModel).
+  blendingControlData:
+    weight: How much this layer affects the end result.
+    fadeInDuration: Time over which this layer gradually becomes activates.
+    fadeOutDuration: Time over which this layer gradually becomes deactivates.
+    onEventId: An event to switch on this layer.
+    offEventId: An event to switch off this layer.
+    onByDefault: Whether this layer should be active when its parent activates.
+    forceFullFadeDurations: Forces fades to play out entirely even if interrupted.
+    fadeInOutCurve: Curve to use when fading this layer in or out.
+
+hkbBoneWeightArray:
+  description: Assigns a weight to each bone e.g. for layering animations.
+  boneWeights: How much weight to assign to each bone. Use Edit -> Aliases to load the bone names.
+
+hkbBlenderGenerator:
+  description: 
+  referencePoseWeightThreshold: 
+  blendParameter:
+  minCyclicBlendParameter:
+  maxCyclicBlendParameter:
+  indexOfSyncMasterChild: 
+  flags: |
+    * NONE: Default, no modifiers.
+    * SYNC: 
+    * SMOOTH_GENERATOR_WEIGHTS: 
+    * DONT_DEACTIVATE_CHILDREN_WITH_ZERO_WEIGHTS: 
+    * PARAMETRIC_BLEND: 
+    * IS_PARAMETRIC_BLEND_CYCLIC: 
+    * FORCE_DENSE_POSE: 
+    * BLEND_MOTION_OF_ADDITIVE_ANIMATIONS: 
+    * USE_VELOCITY_SYNCHRONIZATION: 
+
+  subtractLastChild:
+  children:
+
+hkbBlenderGeneratorChild:
+  description:
+  boneWeights:
+  weight:
+  worldFromModelWeight:
