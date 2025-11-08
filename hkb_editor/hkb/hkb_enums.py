@@ -219,8 +219,9 @@ class hkbDockingGenerator_BlendType(IntEnum):
 def get_hkb_enum(
     type_registry: TypeRegistry, record_type_id: str, path: str
 ) -> Type[IntEnum]:
-    # Not all records are objects or have IDs, so going from the record type is better
     field = path.rsplit("/", maxsplit=1)[-1].split(":", maxsplit=1)[0]
+    
+    # Not all records are objects or have IDs, so going from the record type is better
     record_fields = type_registry.get_field_types(record_type_id)
     field_type = record_fields.get(field, None)
 
