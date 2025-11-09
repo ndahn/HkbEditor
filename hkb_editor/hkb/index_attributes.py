@@ -23,7 +23,10 @@ event_attributes = {
 variable_attributes = {
     "hkbVariableBindingSet": [
         "bindings:*/variableIndex",
-    ]
+    ],
+    "hkbStateMachine": [
+        "syncVariableIndex",
+    ],
 }
 
 

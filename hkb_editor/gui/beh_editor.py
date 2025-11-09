@@ -44,7 +44,7 @@ except (ImportError, AttributeError) as e:
 
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
-from .graph_editor import GraphEditor, Node
+from .base_editor import BaseEditor, Node
 from .widgets.attributes_widget import AttributesWidget
 from .dialogs import (
     about_dialog,
@@ -72,7 +72,7 @@ from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
 
-class BehaviorEditor(GraphEditor):
+class BehaviorEditor(BaseEditor):
     def __init__(self, tag: str | int = 0):
         # Setup the root logger first before calling super, which will instantiate
         # a new logger

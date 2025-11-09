@@ -547,7 +547,6 @@ class GraphWidget:
         if not highlighted:
             color = style.white
         
-        print("### HL", node)
         dpg.configure_item(f"{self.tag}_node_{node}_box", color=color)
 
     def set_hovered(self, node: Node | str, hovered: bool) -> None:

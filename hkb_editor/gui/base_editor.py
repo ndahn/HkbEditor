@@ -21,7 +21,7 @@ def get_custom_layout_path():
     return path.join(path.dirname(sys.argv[0]), "user_layout.ini")
 
 
-class GraphEditor:
+class BaseEditor:
     def __init__(self, tag: str = 0):
         super().__init__()
 
@@ -483,7 +483,7 @@ def main():
     dpg.create_viewport(title="Behditor")
 
     with dpg.window() as main_window:
-        app = GraphEditor("graph_editor")
+        app = BaseEditor("graph_editor")
 
     dpg.set_primary_window(main_window, True)
 
