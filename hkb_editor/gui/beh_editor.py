@@ -596,6 +596,7 @@ class BehaviorEditor(BaseEditor):
                     with dpg.group(horizontal=True):
                         dpg.add_button(label="Save", callback=save_and_load)
                         dpg.add_button(label="Save as", callback=save_as_and_load)
+                        dpg.add_text("|")
                         dpg.add_button(label="Just do it", callback=just_load)
 
                 dpg.split_frame()

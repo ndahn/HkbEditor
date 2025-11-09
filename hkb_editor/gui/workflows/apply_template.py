@@ -1,6 +1,7 @@
 from typing import Any, Callable, Literal, get_args as get_choices, get_origin
 import os
 import logging
+from enum import Enum, Flag
 import webbrowser
 from dearpygui import dearpygui as dpg
 
@@ -49,6 +50,9 @@ def apply_template_dialog(
                 if str(choice) == value:
                     value = choice
                     break
+
+        elif issubclass(arg.type, (Enum, Flag)):
+            value = arg.type[value].value
 
         else:
             # simple types and HkbRecord will just be passed through

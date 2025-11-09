@@ -541,7 +541,7 @@ class CommonActionsMixin:
 
     def new_cmsg(
         self,
-        animId: int,
+        animId: int | Animation,
         *,
         object_id: str = "<new>",
         name: str = "",
@@ -558,6 +558,9 @@ class CommonActionsMixin:
             generators = [self.resolve_object(obj).object_id for obj in generators]
         else:
             generators = []
+
+        if isinstance(animId, Animation):
+            animId = animId.anim_id
 
         return self.new_record(
             "CustomManualSelectorGenerator",

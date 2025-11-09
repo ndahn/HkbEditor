@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import os
 import ast
 import logging
+from enum import Enum, Flag
 from docstring_parser import parse as parse_docstring, DocstringParam
 
 from .common import CommonActionsMixin, Variable, Event, Animation
@@ -50,18 +51,32 @@ class TemplateContext(CommonActionsMixin):
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == "run":
                 self._template_func = node
-                self._parse_template_func(node)
+                self._parse_template_func(node, tree)
                 break
         else:
             raise ValueError("Template does not contain a run() function")
 
         self.logger = logging.getLogger(os.path.basename(template_file))
-
-    def _parse_template_func(self, func: ast.FunctionDef):
+        
+    def _parse_template_func(self, func: ast.FunctionDef, module_ast: ast.Module = None):
         doc = parse_docstring(ast.get_docstring(func))
         self._title = doc.short_description
         self._description = doc.long_description
-
+        
+        # For cases where a class has been imported under an alias (import X as Y)
+        import_map = {}
+        if module_ast:
+            for node in ast.walk(module_ast):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        name = alias.asname or alias.name
+                        import_map[name] = (alias.name, alias.name.split('.')[-1])
+                elif isinstance(node, ast.ImportFrom):
+                    module = node.module or ''
+                    for alias in node.names:
+                        local_name = alias.asname or alias.name
+                        import_map[local_name] = (module, alias.name)
+        
         def type_from_str(type_str: str) -> type:
             if type_str.startswith("Literal["):
                 choices = ast.literal_eval(type_str[7:])
@@ -81,8 +96,23 @@ class TemplateContext(CommonActionsMixin):
                     TemplateContext,
                 )
             }
-            return valid.get(type_str, type(None))
-
+            
+            if type_str in valid:
+                return valid[type_str]
+            
+            # Try to resolve enum/flag from imports
+            if type_str in import_map:
+                module_path, original_name = import_map[type_str]
+                try:
+                    module = __import__(module_path, fromlist=[original_name])
+                    resolved = getattr(module, original_name)
+                    if isinstance(resolved, type) and issubclass(resolved, (Enum, Flag)):
+                        return resolved
+                except (ImportError, AttributeError):
+                    pass
+            
+            return type(None)
+        
         def get_arg_type(arg: ast.arg, arg_doc: DocstringParam, default: Any):
             if arg.annotation:
                 return type_from_str(ast.unparse(arg.annotation))
@@ -91,8 +121,8 @@ class TemplateContext(CommonActionsMixin):
             elif default is not None:
                 return type(default)
             else:
-                raise ValueError(f"Type of argument {name} could not be determined")
-
+                raise ValueError(f"Type of argument {arg.arg} could not be determined")
+        
         def collect_args(args: list[ast.arg], defaults: list[Any]):
             # defaults are specified from the right
             pad = [None] * (len(args) - len(defaults))
@@ -105,7 +135,23 @@ class TemplateContext(CommonActionsMixin):
                     try:
                         default = ast.literal_eval(arg_default)
                     except ValueError:
-                        default = str(arg_default)
+                        default_str = ast.unparse(arg_default)
+
+                        # Might be an Enum or Flag member
+                        if "." in default_str:
+                            type_name, member_name = default_str.rsplit(".", 1)
+                            if type_name in import_map:
+                                module_path, original_name = import_map[type_name]
+                                try:
+                                    module = __import__(module_path, fromlist=[original_name])
+                                    enum_class = getattr(module, original_name)
+                                    default = getattr(enum_class, member_name)
+                                except (ImportError, AttributeError):
+                                    default = default_str
+                            else:
+                                default = default_str
+                        else:
+                            default = default_str
 
                 arg_doc = next((p for p in doc.params if p.arg_name == name), None)
                 arg_type = get_arg_type(arg, arg_doc, default)
