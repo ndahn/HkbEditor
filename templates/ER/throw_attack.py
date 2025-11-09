@@ -10,7 +10,7 @@ def run(
     cmsg_name: str = "Throw40168_CMSG",
     animation: Animation = "a000_040168",
 ):
-    """Throw Attack Behavior
+    """Throw Attacker Behavior
 
     Creates a new throw attack behavior (i.e. grabbing an enemy).
 

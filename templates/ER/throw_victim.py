@@ -13,7 +13,7 @@ def run(
     grab_anim: Animation,
     can_escape: bool = False,
 ):
-    """Grab Victim Behavior
+    """Throw Victim Behavior
 
     Creates a new grab victim behavior (i.e. being grabbed by an enemy).
 

@@ -25,7 +25,7 @@ def run(
     jump_left_anim: Animation = None,
     jump_right_anim: Animation = None,
 ):
-    """Custom Jump
+    """New Jump Type
 
     Creates a new TAE slot for jump animations with support for directional jumps and jump attacks.
 
