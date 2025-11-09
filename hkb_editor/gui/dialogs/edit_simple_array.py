@@ -2,7 +2,7 @@ from typing import Any, Callable, Type
 import logging
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.gui.helpers import center_window, create_simple_value_widget, table_sort, add_paragraphs
+from hkb_editor.gui.helpers import center_window, create_simple_value_widget, table_sort, add_paragraphs, get_paragraph_height
 from hkb_editor.gui import style
 from .make_tuple import new_tuple_dialog
 
@@ -28,7 +28,7 @@ def edit_simple_array_dialog(
         tag = dpg.generate_uuid()
 
     if item_limit is None:
-        item_limit = 2000 / len(columns)
+        item_limit = 1000 / len(columns)
         # round to nearest hundred
         item_limit = max(100, int(round(item_limit / 100)) * 100)
 
@@ -103,10 +103,9 @@ def edit_simple_array_dialog(
         # TODO can use this to show where items are referenced
         print("TODO not implemented yet")
 
-    def fill_table():
+    def fill_table(sender: str, filt: str, user_data: Any):
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
 
-        filt = dpg.get_value(f"{tag}_filter")
         if filt:
             matches = [
                 (idx, item)
@@ -123,6 +122,10 @@ def edit_simple_array_dialog(
             dpg.set_value(f"{tag}_total", f"({len(matches)} matches)")
 
         for item_idx, item in matches:
+            if filt != dpg.get_value(sender):
+                # Crude attempt to return early
+                break
+
             with dpg.table_row(filter_key=f"{item_idx}:{item}", parent=table) as row:
                 dpg.add_text(str(item_idx))
 
@@ -186,15 +189,14 @@ def edit_simple_array_dialog(
             )
             dpg.add_text("", tag=f"{tag}_total")
 
-        dpg.add_separator()
-
         with dpg.table(
             delay_search=True,
             resizable=True,
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
             width=-1,
-            height=300,
+            #height=-help_text_height,  # set later
+            borders_outerH=True,
             sortable=True,
             # sort_tristate=True,
             sort_multi=True,
@@ -221,7 +223,17 @@ def edit_simple_array_dialog(
 
         if help:
             dpg.add_separator()
-            add_paragraphs(help, 90, color=style.light_blue)
+            par = add_paragraphs(help, 90, color=style.light_blue)
             
     dpg.focus_item(f"{tag}_filter")
-    fill_table()
+    fill_table(f"{tag}_filter", "", None)
+
+    # Adjust table height to content below it
+    dpg.split_frame()
+    table_h = 25
+    if help:
+        table_h += get_paragraph_height(par)
+    
+    # Round to nearest 10
+    table_h = max(10, int(round(table_h / 10)) * 10)
+    dpg.configure_item(f"{tag}_table", height=-table_h)

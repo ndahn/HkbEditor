@@ -1,6 +1,7 @@
 from typing import Any, Callable, Iterable, Generator
 import webbrowser
 from dearpygui import dearpygui as dpg
+import time
 
 from hkb_editor.hkb.hkb_types import HkbRecord
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
@@ -44,22 +45,27 @@ def find_dialog(
         dpg.show_item(f"{tag}_loading")
         dpg.set_value(f"{tag}_total", "(Searching...)")
 
-        # TODO find a way to cancel this early
+        # Short delay in case the user is still typing
+        time.sleep(0.3)
+        if filt != dpg.get_value(sender):
+            # No need to continue if the query has changed already
+            return
+
         matches = item_getter(filt)
         idx = -1
 
         def get_matches(matches):
-            # Helper to catch exceptions from invalid queries
+            # Helper to catch exceptions from invalid queries 
+            # and cancel early when the query changes
             try:
-                yield from matches
+                for item in matches:
+                    if filt != dpg.get_value(sender):
+                        break
+                    yield item
             except Exception:
                 return
 
         for idx, item in enumerate(get_matches(matches)):
-            if filt != dpg.get_value(sender):
-                # Crude attempt to return early
-                break
-
             if idx > item_limit:
                 # Item limit reached, indicate that we are done but more matches exist
                 total = idx + sum(1 for _ in matches)
@@ -179,12 +185,16 @@ def find_dialog(
 
         dpg.add_separator()
 
+        table_height = -5
+        if okay_callback:
+            table_height = -30
+
         with dpg.table(
             delay_search=True,
             resizable=True,
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
-            height=310,
+            height=table_height,
             sortable=True,
             # sort_tristate=True,
             sort_multi=True,

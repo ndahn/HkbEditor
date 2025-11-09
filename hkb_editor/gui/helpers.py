@@ -610,6 +610,34 @@ def add_paragraphs(
     return container
 
 
+def estimate_paragraph_height(
+    text: str,
+    line_width: int = 70,
+    *,
+    margin: tuple[int, int] = (3, 3),
+    line_gap: int = 5,
+):
+    # Standard dpg font
+    line_height = 13
+
+    lines = text.split("\n")
+    num_lines = 0
+
+    for line in lines:
+        num_lines += math.ceil(len(line) / line_width)
+
+    return num_lines * (line_height + line_gap) + margin[1] * 2
+
+
+def get_paragraph_height(tag: str) -> int:
+    par_h = dpg.get_item_rect_size(tag)[1]
+
+    for child in dpg.get_item_children(tag, slot=1):
+        par_h += dpg.get_item_rect_size(child)[1]
+
+    return par_h
+
+
 def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
     # See https://dearpygui.readthedocs.io/en/latest/documentation/tables.html#sorting
     # Sort_specs scenarios:
