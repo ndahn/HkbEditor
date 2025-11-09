@@ -20,6 +20,32 @@ hkbVariableBindingSet:
     bindingType: What to bind the attribute to.
   indexOfBindingToEnable: 
 
+hkbStateMachine:
+  eventToSendWhenStateOrTransitionChanges:
+    id:
+    payload:
+  startStateIdSelector: An object to choose the initial state.
+  startStateId: The initial state.
+  returnToPreviousStateEventId: Return to the previous state when receiving this event.
+  randomTransitionEventId: Execute a random transition if this event is received.
+  transitionToNextHigherStateEventId: Transition to the next higher state ID on this event.
+  transitionToNextLowerStateEventId: Transition to the next lower state ID on this event.
+  syncVariableIndex: A variable to read the initial state from. 
+  wrapAroundStateId: Whether to transition from highest to lowest/lowest to highest state when using transition events.
+  maxSimultaneousTransitions: How many transitions can be active at once.
+  startStateMode: How to choose the initial state.
+  selfTransitionMode: How to handle transitions to this statemachine when it's already active.
+  states: The states this statemachine manages.
+  wildcardTransitions: States defined here can be reached from any state.
+
+"hkbStateMachine::StateInfo":
+  enterNotifyEvents: Events to send when this state is entered.
+  exitNotifyEvents: Events to send when this state is exited.
+  transitions: Custom transitions for this state.
+  stateId: The ID of this state. Must be unique within its statemachine.
+  probability: Weight of this state when using a random start state or transition.
+  enable: If false this state cannot be activated.
+
 hkbManualSelectorGenerator:
   description: Allows to manually select the active generator.
   selectedGeneratorIndex: Decides which generator is active. Typically bound to a variable and set via HKS by SetVariable.
