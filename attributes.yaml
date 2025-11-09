@@ -111,7 +111,6 @@ hkbBlenderGenerator:
     * FORCE_DENSE_POSE: 
     * BLEND_MOTION_OF_ADDITIVE_ANIMATIONS: 
     * USE_VELOCITY_SYNCHRONIZATION: 
-
   subtractLastChild:
   children:
 

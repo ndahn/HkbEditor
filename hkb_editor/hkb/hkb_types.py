@@ -44,6 +44,9 @@ class XmlValueHandler:
     def __str__(self) -> str:
         return str(self.get_value())
 
+    def __repr__(self):
+        return self.__str__()
+
 
 T = TypeVar("T", bound=XmlValueHandler)
 
@@ -769,6 +772,9 @@ class HkbRecord(XmlValueHandler):
         name = self.get_field("name", None)
         name = f" '{name}'" if name else ""
         return f"{self.type_name}{name} (id={self.object_id})"
+
+    def __repr__(self):
+        return "HkbRecord<" + self.type_name + "> (" + self.object_id + ")"
 
 
 def get_value_handler(

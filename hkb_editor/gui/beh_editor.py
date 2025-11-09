@@ -1509,10 +1509,16 @@ class BehaviorEditor(GraphEditor):
             dpg.focus_item(tag)
             return
 
+        def on_results(sender: str, matches: list[HkbRecord], user_data: Any) -> None:
+            self.canvas.clear_highlights()
+            for obj in matches:
+                self.canvas.set_highlight(obj.object_id, True, color=style.red)
+
         search_objects_dialog(
             self.beh,
             pin_callback=lambda s, a, u: self.add_pinned_object(a),
             jump_callback=lambda s, a, u: self.jump_to_object(a),
+            result_callback=on_results,
             tag=tag,
         )
 

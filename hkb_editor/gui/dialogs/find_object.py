@@ -24,6 +24,7 @@ def find_dialog(
     title: str = "Find...",
     filter_help: str = None,
     on_filter_help_click: Callable[[], None] = None,
+    on_result_callback: Callable[[list[Any]], None] = None,
     modal: bool = False,
     tag: str = 0,
     user_data: Any = None,
@@ -51,6 +52,8 @@ def find_dialog(
             # No need to continue if the query has changed already
             return
 
+        # matches might be a generator which we only want to exhaust once
+        items = []
         matches = item_getter(filt)
         idx = -1
 
@@ -61,15 +64,18 @@ def find_dialog(
                 for item in matches:
                     if filt != dpg.get_value(sender):
                         break
+
                     yield item
             except Exception:
                 return
 
         for idx, item in enumerate(get_matches(matches)):
+            items.append(item)
+
             if idx > item_limit:
                 # Item limit reached, indicate that we are done but more matches exist
-                total = idx + sum(1 for _ in matches)
-                dpg.set_value(f"{tag}_total", f"(showing {item_limit}/{total})")
+                items.extend(matches)
+                dpg.set_value(f"{tag}_total", f"(showing {item_limit}/{len(items)})")
                 break
 
             cells = item_to_row(item)
@@ -95,6 +101,10 @@ def find_dialog(
         else:
             # Items fit into the search limit
             dpg.set_value(f"{tag}_total", f"({idx + 1} matches)")
+
+        # Don't pass results if no filter was set
+        if filt and on_result_callback:
+            on_result_callback(items)
 
         dpg.hide_item(f"{tag}_loading")
 
@@ -247,6 +257,7 @@ def search_objects_dialog(
     jump_callback: Callable[[str, str, Any], None] = None,
     *,
     initial_filter: str = "",
+    result_callback: Callable[[str, list[HkbRecord], Any], None] = None,
     tag: str = None,
     user_data: Any = None,
 ) -> str:
@@ -280,6 +291,10 @@ def search_objects_dialog(
 
         dpg.set_item_pos(popup, dpg.get_mouse_pos(local=False))
 
+    def on_results(items: list[HkbRecord]):
+        if result_callback:
+            result_callback(tag, items, user_data)
+
     return find_dialog(
         behavior.query,
         ["ID", "Name", "Type"],
@@ -289,6 +304,7 @@ def search_objects_dialog(
         initial_filter=initial_filter,
         filter_help=lucene_help_text,
         on_filter_help_click=lambda: webbrowser.open(lucene_url),
+        on_result_callback=on_results,
         tag=tag,
         user_data=user_data,
     )

@@ -391,19 +391,19 @@ class GraphWidget:
             node = None
 
         if self.hovered_node:
-            self._set_node_hovered(self.hovered_node, False)
+            self.set_hovered(self.hovered_node, False)
             for n in nx.all_neighbors(self.graph, self.hovered_node.id):
                 neighbor = self.nodes[n]
                 if neighbor.visible:
-                    self._set_node_hovered(n, False)
+                    self.set_hovered(n, False)
                     self._set_edge_highlight(self.hovered_node, neighbor, False)
 
         if node:
-            self._set_node_hovered(node, True)
+            self.set_hovered(node, True)
             for n in nx.all_neighbors(self.graph, node.id):
                 neighbor = self.nodes[n]
                 if neighbor.visible:
-                    self._set_node_hovered(n, True)
+                    self.set_hovered(n, True)
                     self._set_edge_highlight(node, neighbor, True)
 
         self.hovered_node = node
@@ -503,7 +503,7 @@ class GraphWidget:
         if get_config().single_branch_mode:
             if node != self.selected_node:
                 if self.selected_node:
-                    self._set_node_highlight(self.selected_node, False)
+                    self.set_highlight(self.selected_node, False)
                 self.reveal(node)
         else:
             if node == self.selected_node:
@@ -511,12 +511,12 @@ class GraphWidget:
                 return
             else:
                 if self.selected_node:
-                    self._set_node_highlight(self.selected_node, False)
+                    self.set_highlight(self.selected_node, False)
                 self._unfold_node(node)
 
         self.selected_node = node
         self._unfold_node(node)
-        self._set_node_highlight(node, True)
+        self.set_highlight(node, True)
 
         if self.on_node_selected:
             self.on_node_selected(node)
@@ -525,19 +525,40 @@ class GraphWidget:
         if self.selected_node is None:
             return
 
-        self._set_node_highlight(self.selected_node, False)
+        self.set_highlight(self.selected_node, False)
         self._fold_node(self.selected_node)
         self.selected_node = None
 
         if self.on_node_selected:
             self.on_node_selected(None)
 
-    def _set_node_highlight(self, node: Node | str, highlighted: bool) -> None:
+    def clear_highlights(self) -> None:
+        for node in self.nodes.values():
+            if node.visible:
+                dpg.configure_item(f"{self.tag}_node_{node.id}_box", color=style.white)
+
+    def set_highlight(self, node: Node | str, highlighted: bool, color: tuple = style.blue) -> None:
         if isinstance(node, Node):
             node = node.id
 
-        color = style.blue if highlighted else style.white
+        if node not in self.nodes or not self.nodes[node].visible:
+            return
+
+        if not highlighted:
+            color = style.white
+        
+        print("### HL", node)
         dpg.configure_item(f"{self.tag}_node_{node}_box", color=color)
+
+    def set_hovered(self, node: Node | str, hovered: bool) -> None:
+        if isinstance(node, Node):
+            node = node.id
+
+        if node not in self.nodes or not self.nodes[node].visible:
+            return
+
+        thickness = 2 if hovered else 1
+        dpg.configure_item(f"{self.tag}_node_{node}_box", thickness=thickness)
 
     def _set_edge_highlight(
         self, node_a: Node | str, node_b: Node | str, highlighted: bool
@@ -570,13 +591,6 @@ class GraphWidget:
                     dpg.configure_item(f"{label}_bg", show=True)
                 else:
                     dpg.configure_item(f"{label}_bg", show=False)
-
-    def _set_node_hovered(self, node: Node | str, hovered: bool) -> None:
-        if isinstance(node, Node):
-            node = node.id
-
-        thickness = 2 if hovered else 1
-        dpg.configure_item(f"{self.tag}_node_{node}_box", thickness=thickness)
 
     def _unfold_node(self, node: Node) -> None:
         self._draw_node(node)
