@@ -53,7 +53,9 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         dpg.configure_item(sender, label=label)
 
     def clear_events():
+        nonlocal plot_t
         events.clear()
+        plot_t = 0.0
 
     def update_port(sender: str, new_port: int, user_data: Any):
         nonlocal port, listener_thread, running
@@ -231,9 +233,10 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
             )
 
     # Plot updates
-    with dpg.item_handler_registry():
-        dpg.add_item_visible_handler(callback=update_plot, tag=f"{tag}_visible_handler")
-    dpg.bind_item_handler_registry(f"{tag}_plot", dpg.last_container())
+    if not dpg.does_item_exist(f"{tag}_handler"):
+        with dpg.item_handler_registry(tag=f"{tag}_handler"):
+            dpg.add_item_visible_handler(callback=update_plot, tag=f"{tag}_visible_handler")
+    dpg.bind_item_handler_registry(f"{tag}_plot", f"{tag}_handler")
 
     # Start listener
     listener_thread = threading.Thread(target=socket_listener, daemon=True)
