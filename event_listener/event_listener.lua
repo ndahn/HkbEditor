@@ -1,10 +1,9 @@
--- Load our minisocket library from this script's directory
-
--- TODO this fails outside c0000.hks for some reason
-local script_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)"):gsub("/", "\\")
+-- Load our minisocket library
 -- TODO This will always see the game's directory and ME3 doesn't intercept loadlib
+local script_dir = debug.getinfo(1, "S").source:sub(2):gsub("/", "\\"):match("(.*\\)") .. "..\\..\\"
 package.cpath = script_dir .. "?.dll;" .. package.cpath
 local minisocket = require("minisocket")
+
 
 -- Change the port if you like
 local port = 27072
