@@ -15,6 +15,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     time_range = 10
     max_events = 100
     num_rows = 10
+    filter_value = ""
     events = deque(maxlen=max_events)
     sock = None
     listener_thread = None
@@ -31,12 +32,28 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
             try:
                 data, _ = sock.recvfrom(1024)
                 evt = data.decode("utf-8").strip()
-                print(f" (evt) {evt}")
+                if filter_value and filter_value not in evt.lower():
+                    continue
+
+                print(f" ✦ {evt}")
                 events.append((plot_t, evt))
             except socket.timeout:
                 continue
             except Exception:
                 break
+
+    def on_filter_update(sender: str, filt: str, user_data: Any):
+        nonlocal filter_value
+        filter_value = filt.strip().lower()
+
+    def toggle_playback(sender: str):
+        nonlocal paused
+        paused = not paused
+        label = "Play" if paused else "Pause"
+        dpg.configure_item(sender, label=label)
+
+    def clear_events():
+        events.clear()
 
     def update_port(sender: str, new_port: int, user_data: Any):
         nonlocal port, listener_thread, running
@@ -57,12 +74,6 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     def update_range(sender: str, new_range: int, user_data: Any):
         nonlocal time_range
         time_range = max(2, new_range)
-
-    def toggle_playback(sender: str):
-        nonlocal paused
-        paused = not paused
-        label = "Play" if paused else "Pause"
-        dpg.configure_item(sender, label=label)
 
     def get_event_color(evt: str) -> tuple[int, int, int, int]:
         h = hash(evt) % 360
@@ -108,7 +119,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
             text_width, text_height = dpg.get_text_size(evt_text)
             dpg.draw_rectangle(
                 (x_pos, y_pos - text_height / 2),
-                (x_pos + text_width + 12, y_pos + text_height / 2),
+                (x_pos + text_width + 16, y_pos + text_height / 2),
                 fill=faded_color,
                 color=faded_color,
             )
@@ -163,32 +174,22 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         on_close=close,
         tag=tag,
     ) as dialog:
-        with dpg.group(horizontal=True):
-            dpg.add_button(label="Pause", callback=toggle_playback)
-            dpg.add_input_int(
-                label="Range (s)",
-                default_value=10,
-                min_value=2,
-                callback=update_range,
-                width=150,
-            )
-            dpg.add_input_int(
-                label="Port",
-                default_value=27072,
-                max_value=65535,
-                callback=update_port,
-                width=150,
-            )
-
-        dpg.add_separator()
+        dpg.add_input_text(
+            default_value="",
+            hint="Filter...",
+            callback=on_filter_update,
+            tag=f"{tag}_filter",
+            no_undo_redo=True,
+            width=-1,
+        )
 
         with dpg.plot(
-            tag=f"{tag}_plot",
-            height=-1,
             width=-1,
+            height=-25,
             no_mouse_pos=True,
             no_menus=True,
             no_box_select=True,
+            tag=f"{tag}_plot",
         ):
             dpg.add_plot_axis(
                 dpg.mvXAxis, label="Time (s)", no_highlight=True, tag=f"{tag}_x_axis"
@@ -208,6 +209,26 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
                     callback=render_events,
                     tag=f"{tag}_series",
                 )
+
+        with dpg.group(horizontal=True):
+            dpg.add_button(label="Pause", callback=toggle_playback)
+            dpg.add_button(label="Clear", callback=clear_events)
+            dpg.add_text("|")
+            dpg.add_input_int(
+                label="Range",
+                default_value=10,
+                min_value=2,
+                callback=update_range,
+                width=100,
+            )
+            dpg.add_spacer(width=0)
+            dpg.add_input_int(
+                label="Port",
+                default_value=27072,
+                max_value=65535,
+                callback=update_port,
+                width=100,
+            )
 
     # Plot updates
     with dpg.item_handler_registry():
