@@ -1,0 +1,27 @@
+[package]
+name = "hkb_event_listener"
+version = "0.1.0"
+edition = "2021"
+
+# This crate produces a DLL which can be loaded into Elden Ring.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Pull in the Elden Ring bindings and utilities from the upstream repository.
+eldenring = { git = "https://github.com/vswarte/fromsoftware-rs", package = "eldenring", default-features = false }
+eldenring-util = { git = "https://github.com/vswarte/fromsoftware-rs", package = "eldenring-util", default-features = false }
+shared = { git = "https://github.com/vswarte/fromsoftware-rs", package = "fromsoftware-shared", default-features = false }
+
+# retour provides the detour (hooking) mechanism used to intercept the game function.
+retour = { version = "0.3", features = ["static-detour"] }
+
+# Windows API bindings.  Only the selected features are required for this mod.
+windows = { version = "0.54", features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemServices",
+    "Win32_System_SystemInformation"
+] }
+
+once_cell = "1"
