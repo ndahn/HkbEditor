@@ -50,6 +50,7 @@ from .dialogs import (
     about_dialog,
     open_file_dialog,
     edit_simple_array_dialog,
+    eventlistener_dialog,
     search_objects_dialog,
     open_state_graph_viewer,
 )
@@ -466,13 +467,6 @@ class BehaviorEditor(BaseEditor):
 
             dpg.add_separator()
 
-            dpg.add_menu_item(
-                label="StateInfo Graph...",
-                callback=lambda: self.open_stategraph_dialog(),
-            )
-
-            dpg.add_separator()
-
             dpg.add_menu_item(label="Pin Lost Objects", callback=self.pin_lost_objects)
 
             dpg.add_menu_item(
@@ -507,6 +501,20 @@ class BehaviorEditor(BaseEditor):
 
             dpg.add_menu_item(
                 label="Import Hierarchy...", callback=self.open_hierarchy_import_dialog
+            )
+
+        # Tools
+        with dpg.menu(
+                label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"
+        ):
+            dpg.add_menu_item(
+                label="Event Listener...",
+                callback=lambda: self.open_eventlistener_dialog(),
+            )
+            
+            dpg.add_menu_item(
+                label="StateInfo Graph...",
+                callback=lambda: self.open_stategraph_dialog(),
             )
 
             dpg.add_menu_item(
@@ -700,6 +708,7 @@ class BehaviorEditor(BaseEditor):
         func(f"{self.tag}_menu_reload_character")
         func(f"{self.tag}_menu_edit")
         func(f"{self.tag}_menu_workflows")
+        func(f"{self.tag}_menu_tools")
         func(f"{self.tag}_menu_templates")
 
         with dpg.handler_registry():
@@ -1522,6 +1531,15 @@ class BehaviorEditor(BaseEditor):
             result_callback=on_results,
             tag=tag,
         )
+
+    def open_eventlistener_dialog(self):
+        tag = f"{self.tag}_state_graph_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        eventlistener_dialog(tag=tag)
 
     def open_stategraph_dialog(self):
         tag = f"{self.tag}_state_graph_dialog"

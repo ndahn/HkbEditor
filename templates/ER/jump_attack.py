@@ -52,7 +52,7 @@ def run(
     cmsg_offset_type : CmsgOffsetType, optional
         How the generated CMSGs will select their clips.
     enable_swings : bool, optional
-        Whether to enable swing variations (controlled by the SwingPose variable). If disabled a single CMSG with jump attack animation will be added instead.
+        Whether to enable swing variations (controlled by the SwingPose variable). If disabled a single CMSG with for anim_fall will be added instead.
     anim_swingend_low : Animation, optional
         Swing variation to use at the end of a low jump. Will use anim_fall if not set. Normal attacks use e.g. 31071 here.
     anim_swingend_high : Animation, optional
