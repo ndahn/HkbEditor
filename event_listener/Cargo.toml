@@ -16,6 +16,10 @@ shared = { git = "https://github.com/vswarte/fromsoftware-rs", package = "fromso
 # retour provides the detour (hooking) mechanism used to intercept the game function.
 retour = { version = "0.3", features = ["static-detour"] }
 
+# For reading the config.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
 # Windows API bindings.  Only the selected features are required for this mod.
 windows = { version = "0.54", features = [
     "Win32_Foundation",

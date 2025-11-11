@@ -14,16 +14,20 @@
 
 use std::ffi::c_void;
 use std::net::UdpSocket;
+use std::path::PathBuf;
 use std::ptr;
 use std::slice;
+use std::str::FromStr;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
 use retour::static_detour;
-use windows::core::PCSTR;
+use serde::Deserialize;
+use windows::core::{PCSTR, PCWSTR};
+use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
+use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
 use windows::Win32::System::LibraryLoader::GetModuleHandleA;
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
-use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
 
 use eldenring::cs::ChrIns;
 use eldenring_util::system::wait_for_system_init;
@@ -35,8 +39,18 @@ use shared::program::Program;
 /// any byte. Once the pattern is found the actual start of the function
 /// resides 0xD bytes before the match.
 const PATTERN: [Option<u8>; 12] = [
-    Some(0x74), None, Some(0x48), Some(0x85), Some(0xD2), Some(0x74), None,
-    Some(0x48), Some(0x8D), Some(0x4C), Some(0x24), Some(0x50),
+    Some(0x74),
+    None,
+    Some(0x48),
+    Some(0x85),
+    Some(0xD2),
+    Some(0x74),
+    None,
+    Some(0x48),
+    Some(0x8D),
+    Some(0x4C),
+    Some(0x24),
+    Some(0x50),
 ];
 
 /// Once initialised this holds the absolute virtual address of the
@@ -52,11 +66,36 @@ static_detour! {
     static HkbFireEventHook: unsafe extern "C" fn(*mut c_void, *const u16);
 }
 
+#[derive(Deserialize, Debug)]
+struct Config {
+    port: u16,
+    chr: String,
+}
+
+fn get_dll_dir_path() -> Option<PathBuf> {
+    let dll_name = "hkb_event_listener.dll\0";
+    let wide_dll_name: Vec<u16> = dll_name.encode_utf16().collect();
+    let module = unsafe { GetModuleHandleW(PCWSTR::from_raw(wide_dll_name.as_ptr())) }.ok()?;
+    let mut buffer = [0u16; 260];
+    let length = unsafe { GetModuleFileNameW(module, &mut buffer) };
+    if length == 0 {
+        return None;
+    }
+
+    let path_str = String::from_utf16_lossy(&buffer[..length as usize]);
+    let path = PathBuf::from(path_str);
+    Some(path.parent()?.to_path_buf())
+}
+
 /// Entry point executed by the Windows loader. The hook is installed
 /// asynchronously when the DLL is attached to the process. Returning
 /// `true` indicates success to the loader.
 #[no_mangle]
-pub unsafe extern "system" fn DllMain(_hinstance: *mut c_void, reason: u32, _reserved: *mut c_void) -> bool {
+pub unsafe extern "system" fn DllMain(
+    _hinstance: *mut c_void,
+    reason: u32,
+    _reserved: *mut c_void,
+) -> bool {
     // DLL_PROCESS_ATTACH == 1 on Windows
     if reason != 1 {
         return true;
@@ -75,10 +114,23 @@ pub unsafe extern "system" fn DllMain(_hinstance: *mut c_void, reason: u32, _res
 
         let _ = send_event_via_udp("[hkb_event_listener] I'm alive!");
 
+        let config: Config = {
+            let config_path = get_dll_dir_path()
+                .map(|p| p.join("hkb_event_listener.json"))
+                .unwrap_or_else(|| PathBuf::from("hkb_event_listener.json"));
+
+            let config_str = std::fs::read_to_string(config_path)
+                .unwrap_or_else(|_| String::from(r#"{"port": 27072}"#));
+            serde_json::from_str(&config_str).unwrap_or(Config {
+                port: 27072,
+                chr: String::from_str("c0000").unwrap(),
+            })
+        };
+
         // Perform the pattern scan. If the function cannot be found
         // simply bail out: the game version is likely unsupported.
-        let Some(addr) = find_hkb_fire_event() else {
-            eprintln!("[hkb_event_listener] hkbFireEvent pattern not found – game version unsupported");
+        let Some(addr) = find_hkb_fire_event(config.chr) else {
+            eprintln!("[hkb_event_listener] hkbFireEvent pattern not found");
             return;
         };
         println!("[hkb_fire_event_hook] found hkbFireEvent at 0x{:X}", addr);
@@ -90,14 +142,15 @@ pub unsafe extern "system" fn DllMain(_hinstance: *mut c_void, reason: u32, _res
 
         // Prepare the detour. We transmute the raw address into a typed
         // function pointer matching the signature defined in the detour.
-        let target_fn: unsafe extern "C" fn(*mut c_void, *const u16) = unsafe { std::mem::transmute(addr) };
+        let target_fn: unsafe extern "C" fn(*mut c_void, *const u16) =
+            unsafe { std::mem::transmute(addr) };
 
         unsafe {
             // Initialise and enable the detour. Errors are ignored for brevity
             // but could be logged or bubbled up in a real mod.
-            if let Err(e) = HkbFireEventHook.initialize(target_fn, |this_, event| {
-                hook_hkb_fire_event(this_, event)
-            }) {
+            if let Err(e) = HkbFireEventHook
+                .initialize(target_fn, |this_, event| hook_hkb_fire_event(this_, event))
+            {
                 eprintln!("[hkb_event_listener] failed to initialise detour: {e}");
                 return;
             }
@@ -106,7 +159,10 @@ pub unsafe extern "system" fn DllMain(_hinstance: *mut c_void, reason: u32, _res
                 return;
             }
 
-            println!("[hkb_event_listener] will publish events to 127.0.0.1:27072");
+            println!(
+                "[hkb_event_listener] will publish events to 127.0.0.1:{}",
+                config.port
+            );
         }
     });
     true
@@ -170,7 +226,9 @@ fn send_event_via_udp(event: &str) -> std::io::Result<()> {
 /// On success returns the absolute address of the beginning of the function.
 /// On failure returns `None`. The search is limited to the size reported in
 /// the PE header to avoid scanning uninitialised pages.
-fn find_hkb_fire_event() -> Option<usize> {
+fn find_hkb_fire_event(chr: String) -> Option<usize> {
+    // TODO allow different characters than c0000
+
     // Acquire the base address of the current module. Passing a null
     // parameter to `GetModuleHandleA` returns a handle to the file used to
     // create the calling process.
@@ -183,11 +241,15 @@ fn find_hkb_fire_event() -> Option<usize> {
         // Read the DOS and NT headers to obtain the image size. These
         // structures live at fixed offsets relative to the module base.
         let dos_header = &*(module_base as *const IMAGE_DOS_HEADER);
-        let nt_header = &*((module_base + dos_header.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
+        let nt_header =
+            &*((module_base + dos_header.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
         let image_size = nt_header.OptionalHeader.SizeOfImage as usize;
         let base_ptr = module_base as *const u8;
 
-        eprintln!("[hkb_fire_event_hook] scanning module at 0x{:X}, size: 0x{:X}", module_base, image_size);
+        eprintln!(
+            "[hkb_fire_event_hook] scanning module at 0x{:X}, size: 0x{:X}",
+            module_base, image_size
+        );
 
         // Iterate over the image looking for the signature. Because of
         // wildcards the inner loop breaks early on mismatches.
@@ -256,16 +318,21 @@ pub unsafe fn get_hkb_character(chr_ins: &ChrIns) -> Option<*mut c_void> {
 pub fn play_behavior_event(chr_ins: &mut ChrIns, event: &str) {
     // Only proceed if the function has been located. Attempting to
     // transmute a null address would result in undefined behaviour.
-    let Some(addr) = HKB_FIRE_EVENT_ADDR.get().copied() else { return; };
+    let Some(addr) = HKB_FIRE_EVENT_ADDR.get().copied() else {
+        return;
+    };
     // Resolve the target pointer
     let hkb_character = unsafe { get_hkb_character(chr_ins) };
-    let Some(hkb_ptr) = hkb_character else { return; };
+    let Some(hkb_ptr) = hkb_character else {
+        return;
+    };
     // Convert the Rust string into a UTF‑16 buffer with a null terminator.
     let mut wide: Vec<u16> = event.encode_utf16().collect();
     wide.push(0);
     // Cast the discovered address into a callable function pointer with the
     // correct signature. Calling a function through a transmuted pointer
     // is unsafe because the compiler cannot verify the ABI at compile time.
-    let fire_event: unsafe extern "C" fn(*mut c_void, *const u16) = unsafe { std::mem::transmute(addr) };
+    let fire_event: unsafe extern "C" fn(*mut c_void, *const u16) =
+        unsafe { std::mem::transmute(addr) };
     unsafe { fire_event(hkb_ptr, wide.as_ptr()) };
 }

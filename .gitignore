@@ -10,5 +10,4 @@ test/
 config.yaml
 hkbeditor_v*
 dpg_demo.py
-cargo.lock
 event_listener/target/
