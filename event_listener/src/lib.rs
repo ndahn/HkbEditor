@@ -38,6 +38,7 @@ use shared::program::Program;
 /// Engine: `74 ?? 48 85 d2 74 ?? 48 8d 4c 24 50`. Wildcards (`None`) match
 /// any byte. Once the pattern is found the actual start of the function
 /// resides 0xD bytes before the match.
+
 const PATTERN: [Option<u8>; 12] = [
     Some(0x74),
     None,
@@ -52,6 +53,8 @@ const PATTERN: [Option<u8>; 12] = [
     Some(0x24),
     Some(0x50),
 ];
+
+const FUNC_START: u8 = 0xD0;
 
 /// Once initialised this holds the absolute virtual address of the
 /// `hkbFireEvent` function. It is discovered via pattern scanning on
@@ -168,24 +171,6 @@ pub unsafe extern "system" fn DllMain(
     true
 }
 
-/// Detour handler for `hkbFireEvent`. This function is invoked each time
-/// the game fires a behaviour event. It forwards the event name via UDP
-/// and then calls into the original function so that the game continues
-/// operating normally.
-unsafe fn hook_hkb_fire_event(this_: *mut c_void, event: *const u16) {
-    // Extract the event name from the wide string pointer. Safety:
-    // `event` is assumed to be a valid, null‑terminated UTF‑16 string.
-    if let Some(event_str) = wide_c_str_to_string(event) {
-        // Attempt to send the event over UDP. Any network errors are
-        // silently ignored as we don't want to disrupt gameplay.
-        println!("[hkb_event_listener] event: {event_str}");
-        let _ = send_event_via_udp(&event_str);
-    }
-    // Invoke the original function. This uses the detour's `call`
-    // method which always forwards to the unhooked implementation.
-    HkbFireEventHook.call(this_, event);
-}
-
 /// Convert a pointer to a null‑terminated UTF‑16 string into a Rust [`String`].
 /// Returns `None` if the pointer is null. See [`slice::from_raw_parts`] for
 /// safety details.
@@ -205,6 +190,24 @@ unsafe fn wide_c_str_to_string(ptr: *const u16) -> Option<String> {
     Some(String::from_utf16_lossy(slice))
 }
 
+/// Detour handler for `hkbFireEvent`. This function is invoked each time
+/// the game fires a behaviour event. It forwards the event name via UDP
+/// and then calls into the original function so that the game continues
+/// operating normally.
+unsafe fn hook_hkb_fire_event(this_: *mut c_void, event: *const u16) {
+    // Extract the event name from the wide string pointer. Safety:
+    // `event` is assumed to be a valid, null‑terminated UTF‑16 string.
+    if let Some(event_str) = wide_c_str_to_string(event) {
+        // Attempt to send the event over UDP. Any network errors are
+        // silently ignored as we don't want to disrupt gameplay.
+        println!("[hkb_event_listener] event: {event_str}");
+        let _ = send_event_via_udp(&event_str);
+    }
+    // Invoke the original function. This uses the detour's `call`
+    // method which always forwards to the unhooked implementation.
+    HkbFireEventHook.call(this_, event);
+}
+
 /// Send the provided event name to a UDP listener. By default the mod
 /// broadcasts to localhost on port `12345`, but this can be adjusted as
 /// required. A fresh socket is bound for each message which avoids the
@@ -217,6 +220,7 @@ fn send_event_via_udp(event: &str) -> std::io::Result<()> {
     let sock = UdpSocket::bind("127.0.0.1:0")?;
     // The receiving port. You can change this to integrate with your
     // visualiser or accessibility tool.
+    // TODO use config.port instead
     let remote = "127.0.0.1:27072";
     sock.send_to(event.as_bytes(), remote)?;
     Ok(())
@@ -266,7 +270,7 @@ fn find_hkb_fire_event(chr: String) -> Option<usize> {
             }
             if matched {
                 // Adjust by -0xD to obtain the start of the function.
-                let addr = base_ptr.add(offset).wrapping_sub(0xD) as usize;
+                let addr = base_ptr.add(offset).wrapping_sub(FUNC_START) as usize;
                 return Some(addr);
             }
         }
