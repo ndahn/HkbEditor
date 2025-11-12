@@ -12,43 +12,40 @@
 => anim_id
 
 
-## Play animation
-```lua
-local aob = AOBScanModuleUnique(process,"74 ?? 48 85 d2 74 ?? 48 8d 4c 24 50")
-local W_Event_addr = aob - 0xD
+## PlayAnimationBehaviorName
+=> Used by cheat engine
+First argument is the character, second the animation event.
+Unfortunately, this is not actually used by the game.
 
-function PlayAnimation(str)
-    if type(str) ~= "string" then
-        error("Input needs to be string type",2)
-    end
-    -- WorldChrMan -> PlayerIns -> ChrModules ->
-    -- CSChrBehaviorModule -> ? -> hkbCharacter
-    local ptr = getAddressSafe("[[[[[WorldChrMan]+1E508]+190]+28]+10]+30")
-    if ptr == nil then
-        error("'hkbCharacter' not found",2)
-    end
-    local mem_addr = allocateMemory(64, getAddress(process))
-    if writeString(mem_addr,str,true) then
-        if executeCodeEx(0, 100, W_Event_addr, ptr, mem_addr) == 0xFFFFFFFF then
-            print("Failed to play: ", str)
-        end
-    end
-    deAlloc(mem_addr)
-end
-```
+74 ?? 48 85 d2 74 ?? 48 8d 4c 24 50
+-0xD
 
-In eldenring-rs this becomes:
+To get the character:
 => (character) <ChrIns>
 => module_container <ChrInsModuleContainer>
 => behavior <CSChrBehaviorModule>
 => unk10 <?>
 => unk30 <hkbCharacter>
 
-The function is then located at the AOB - 0xD.
-This is NOT hkbFireEvent, but seems to be something low-level that the game doesn't use.
 
 
-## Watch memory location
+## hkbFireEvent_C
+=> Called for all animation events. 
+First parameter is the hkbCharacter, second one the event ID, which corresponds with the eventnameids.txt file
+
+48 8b 47 10 48 89 42 10 ff 43 10 ff 43 14
+-0x6D
+
+
+## FUN_14145a960
+=> This is the function lua calls as hkbFireEvent!
+
+
+
+
+
+
+# Watch memory location
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 

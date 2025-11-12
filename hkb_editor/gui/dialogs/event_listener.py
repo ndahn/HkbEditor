@@ -15,6 +15,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     time_range = 10
     max_events = 100
     num_rows = 10
+    current_row = 0
     filter_value = ""
     events = deque(maxlen=max_events)
     sock = None
@@ -23,7 +24,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     paused = False
 
     def socket_listener():
-        nonlocal sock
+        nonlocal sock, current_row
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(0.1)
         sock.bind(("localhost", port))
@@ -36,7 +37,9 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
                     continue
 
                 print(f" ✦ {evt}")
-                events.append((plot_t, evt))
+                row = current_row
+                current_row = (current_row + 1) % num_rows
+                events.append((plot_t, row, evt))
             except socket.timeout:
                 continue
             except Exception:
@@ -94,7 +97,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         dpg.push_container_stack(sender)
 
         # Get visible events
-        visible = [(t, txt) for t, txt in events if t >= plot_t - time_range]
+        visible = [(t, row, txt) for t, row, txt in events if t >= plot_t - time_range]
         if not visible:
             dpg.pop_container_stack()
             return
@@ -102,7 +105,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         visible.sort()
 
         # Draw events
-        for i, (evt_time, evt_text) in enumerate(visible):
+        for i, (evt_time, _, evt_text) in enumerate(visible):
             if i >= len(transformed_x):
                 break
 
@@ -141,17 +144,12 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         dpg.set_axis_limits(f"{tag}_x_axis", plot_t - time_range, plot_t)
 
         # Update series data with visible events
-        visible = [(t, txt) for t, txt in events if t >= plot_t - time_range]
+        visible = [(t, row, txt) for t, row, txt in events if t >= plot_t - time_range]
         visible.sort()
 
-        row_assignments = []
-
-        for i, (evt_time, evt_text) in enumerate(visible):
-            row_assignments.append((evt_time, evt_text, i % num_rows))
-
-        if row_assignments:
-            x_data = [t for t, _, _ in row_assignments]
-            y_data = [r * 0.5 + 0.5 for _, _, r in row_assignments]
+        if visible:
+            x_data = [t for t, _, _ in visible]
+            y_data = [r * 0.5 + 0.5 for _, r, _ in visible]
             dpg.set_value(f"{tag}_series", [x_data, y_data])
         else:
             dpg.set_value(f"{tag}_series", [[0], [0]])

@@ -17,7 +17,6 @@ use std::net::UdpSocket;
 use std::path::PathBuf;
 use std::ptr;
 use std::slice;
-use std::str::FromStr;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
@@ -39,22 +38,24 @@ use shared::program::Program;
 /// any byte. Once the pattern is found the actual start of the function
 /// resides 0xD bytes before the match.
 
-const PATTERN: [Option<u8>; 12] = [
-    Some(0x74),
-    None,
+const PATTERN: [Option<u8>; 14] = [
     Some(0x48),
-    Some(0x85),
-    Some(0xD2),
-    Some(0x74),
-    None,
+    Some(0x8b),
+    Some(0x47),
+    Some(0x10),
     Some(0x48),
-    Some(0x8D),
-    Some(0x4C),
-    Some(0x24),
-    Some(0x50),
+    Some(0x89),
+    Some(0x42),
+    Some(0x10),
+    Some(0xff),
+    Some(0x43),
+    Some(0x10),
+    Some(0xff),
+    Some(0x43),
+    Some(0x14),
 ];
 
-const FUNC_START: u8 = 0xD0;
+const FUNC_START: usize = 0x6D;
 
 /// Once initialised this holds the absolute virtual address of the
 /// `hkbFireEvent` function. It is discovered via pattern scanning on
@@ -74,6 +75,14 @@ struct Config {
     port: u16,
     chr: String,
 }
+
+impl Config {
+    fn chr_id(&self) -> u32 {
+        self.chr.trim_start_matches('c').parse().unwrap_or(0)
+    }
+}
+
+static CONFIG: OnceCell<Config> = OnceCell::new();
 
 fn get_dll_dir_path() -> Option<PathBuf> {
     let dll_name = "hkb_event_listener.dll\0";
@@ -123,16 +132,19 @@ pub unsafe extern "system" fn DllMain(
                 .unwrap_or_else(|| PathBuf::from("hkb_event_listener.json"));
 
             let config_str = std::fs::read_to_string(config_path)
-                .unwrap_or_else(|_| String::from(r#"{"port": 27072}"#));
+                .unwrap_or_else(|_| String::from(r#"{"port": 27072, "chr": "c0000"}"#));
+
             serde_json::from_str(&config_str).unwrap_or(Config {
                 port: 27072,
-                chr: String::from_str("c0000").unwrap(),
+                chr: "c0000".to_string(),
             })
         };
 
+        let _ = CONFIG.set(config);
+
         // Perform the pattern scan. If the function cannot be found
         // simply bail out: the game version is likely unsupported.
-        let Some(addr) = find_hkb_fire_event(config.chr) else {
+        let Some(addr) = find_event_function() else {
             eprintln!("[hkb_event_listener] hkbFireEvent pattern not found");
             return;
         };
@@ -152,7 +164,7 @@ pub unsafe extern "system" fn DllMain(
             // Initialise and enable the detour. Errors are ignored for brevity
             // but could be logged or bubbled up in a real mod.
             if let Err(e) = HkbFireEventHook
-                .initialize(target_fn, |this_, event| hook_hkb_fire_event(this_, event))
+                .initialize(target_fn, |hkb_character: *mut c_void, event: *const u16| hook_play_animation(hkb_character, event))
             {
                 eprintln!("[hkb_event_listener] failed to initialise detour: {e}");
                 return;
@@ -164,7 +176,7 @@ pub unsafe extern "system" fn DllMain(
 
             println!(
                 "[hkb_event_listener] will publish events to 127.0.0.1:{}",
-                config.port
+                CONFIG.get().unwrap().port
             );
         }
     });
@@ -194,18 +206,29 @@ unsafe fn wide_c_str_to_string(ptr: *const u16) -> Option<String> {
 /// the game fires a behaviour event. It forwards the event name via UDP
 /// and then calls into the original function so that the game continues
 /// operating normally.
-unsafe fn hook_hkb_fire_event(this_: *mut c_void, event: *const u16) {
-    // Extract the event name from the wide string pointer. Safety:
-    // `event` is assumed to be a valid, null‑terminated UTF‑16 string.
-    if let Some(event_str) = wide_c_str_to_string(event) {
-        // Attempt to send the event over UDP. Any network errors are
-        // silently ignored as we don't want to disrupt gameplay.
-        println!("[hkb_event_listener] event: {event_str}");
-        let _ = send_event_via_udp(&event_str);
+unsafe extern "C" fn hook_play_animation(hkb_character: *mut c_void, event: *const u16) {
+    let config = CONFIG.get().expect("Config was not initialized");
+    let chr_ins = get_chr_ins_from_hkb(hkb_character);
+
+    if chr_ins.character_id == config.chr_id() {
+        // Read event ID
+        let event_struct = event as *const u32;
+        let event_id = ptr::read(event_struct);
+        
+        let _ = send_event_via_udp(event_id.to_string().as_str());
     }
-    // Invoke the original function. This uses the detour's `call`
-    // method which always forwards to the unhooked implementation.
-    HkbFireEventHook.call(this_, event);
+    
+    // Call the original function
+    HkbFireEventHook.call(hkb_character, event);
+}
+
+/// Get the ChrIns instance from an hkbCharacter pointer
+unsafe fn get_chr_ins_from_hkb(hkb_character: *mut c_void) -> &'static mut ChrIns {
+    // TODO crashes
+    let hkb_ptr = hkb_character as *const u8;
+    let chr_ins_ptr_ptr = hkb_ptr.add(0x28) as *const *mut ChrIns;
+    let chr_ins_ptr = ptr::read(chr_ins_ptr_ptr);
+    &mut *chr_ins_ptr
 }
 
 /// Send the provided event name to a UDP listener. By default the mod
@@ -230,7 +253,7 @@ fn send_event_via_udp(event: &str) -> std::io::Result<()> {
 /// On success returns the absolute address of the beginning of the function.
 /// On failure returns `None`. The search is limited to the size reported in
 /// the PE header to avoid scanning uninitialised pages.
-fn find_hkb_fire_event(chr: String) -> Option<usize> {
+fn find_event_function() -> Option<usize> {
     // TODO allow different characters than c0000
 
     // Acquire the base address of the current module. Passing a null
@@ -276,67 +299,4 @@ fn find_hkb_fire_event(chr: String) -> Option<usize> {
         }
         None
     }
-}
-
-/// Retrieve the `hkbCharacter` pointer from a [`ChrIns`] instance. The
-/// character's behavioural module contains an internal pointer at offset
-/// `unk10` which itself holds a pointer at offset `0x30` to the Havok
-/// behaviour character instance. The returned pointer can be passed to
-/// `hkbFireEvent` to trigger events manually.
-///
-/// # Safety
-///
-/// This function performs raw pointer arithmetic on memory owned by the
-/// game. It is the caller's responsibility to ensure that the provided
-/// [`ChrIns`] is valid and that the game is not concurrently freeing the
-/// underlying structures.
-pub unsafe fn get_hkb_character(chr_ins: &ChrIns) -> Option<*mut c_void> {
-    // Navigate through the module container into the behaviour module.
-    let container = chr_ins.module_container.as_ref();
-    let behavior = container.behavior.as_ref();
-    // The behaviour module's `unk10` field stores a pointer to an
-    // unspecified structure. We access it via raw pointer arithmetic
-    // since the field is private. At offset 0x8 lies unk10, and within
-    // that structure at offset 0x30 lies the pointer to `hkbCharacter`.
-    let behavior_ptr = behavior as *const _ as *const u8;
-    let unk10_ptr = behavior_ptr.add(0x8) as *const usize;
-    let unk10 = ptr::read(unk10_ptr) as *const u8;
-    if unk10.is_null() {
-        return None;
-    }
-    // Read the pointer located at unk10 + 0x30. Cast the result back to
-    // a mutable `c_void` pointer for consumption by `hkbFireEvent`.
-    let hkb_ptr_ptr = unk10.add(0x30) as *const *mut c_void;
-    let hkb_ptr: *mut c_void = ptr::read(hkb_ptr_ptr);
-    if hkb_ptr.is_null() {
-        None
-    } else {
-        Some(hkb_ptr)
-    }
-}
-
-/// Fire a behaviour event manually on the supplied [`ChrIns`]. This is
-/// analogous to the `PlayAnimation` function in the Cheat Engine example.
-/// If the `hkbFireEvent` address has not yet been discovered, or the
-/// character pointer cannot be resolved, the function quietly returns.
-pub fn play_behavior_event(chr_ins: &mut ChrIns, event: &str) {
-    // Only proceed if the function has been located. Attempting to
-    // transmute a null address would result in undefined behaviour.
-    let Some(addr) = HKB_FIRE_EVENT_ADDR.get().copied() else {
-        return;
-    };
-    // Resolve the target pointer
-    let hkb_character = unsafe { get_hkb_character(chr_ins) };
-    let Some(hkb_ptr) = hkb_character else {
-        return;
-    };
-    // Convert the Rust string into a UTF‑16 buffer with a null terminator.
-    let mut wide: Vec<u16> = event.encode_utf16().collect();
-    wide.push(0);
-    // Cast the discovered address into a callable function pointer with the
-    // correct signature. Calling a function through a transmuted pointer
-    // is unsafe because the compiler cannot verify the ABI at compile time.
-    let fire_event: unsafe extern "C" fn(*mut c_void, *const u16) =
-        unsafe { std::mem::transmute(addr) };
-    unsafe { fire_event(hkb_ptr, wide.as_ptr()) };
 }
