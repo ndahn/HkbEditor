@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from typing import Generator
 import os
 import io
@@ -39,7 +40,7 @@ def bone_mirror_dialog(
 
         if mirror_info and len(mirror_info["bonePairMap"]) != len(bones):
             dpg.set_value(
-                f"{tag}_notification", f"Skeleton does not match loaded Character!"
+                f"{tag}_notification", "Skeleton does not match loaded Character!"
             )
             dpg.show_item(f"{tag}_notification")
             bones = None
@@ -62,7 +63,7 @@ def bone_mirror_dialog(
 
         if bones and len(mirror_info["bonePairMap"]) != len(bones):
             dpg.set_value(
-                f"{tag}_notification", f"Character does not match loaded Skeleton!"
+                f"{tag}_notification", "Character does not match loaded Skeleton!"
             )
             dpg.show_item(f"{tag}_notification")
             mirror_info = None
@@ -75,7 +76,7 @@ def bone_mirror_dialog(
         dpg.hide_item(f"{tag}_notification")
 
         if not bones:
-            dpg.set_value(f"{tag}_notification", f"No skeleton loaded!")
+            dpg.set_value(f"{tag}_notification", "No skeleton loaded!")
             dpg.show_item(f"{tag}_notification")
             return False
 
@@ -85,7 +86,7 @@ def bone_mirror_dialog(
         dpg.hide_item(f"{tag}_notification")
 
         if not mirror_info:
-            dpg.set_value(f"{tag}_notification", f"No character loaded!")
+            dpg.set_value(f"{tag}_notification", "No character loaded!")
             dpg.show_item(f"{tag}_notification")
             return False
 
@@ -300,3 +301,16 @@ Note that the object ID and type IDs may differ between characters and games.\
         fill_table()
 
     return window
+
+
+if __name__ == "__main__":
+    dpg.create_context()
+    dpg.create_viewport(title="Mirror Skeleton", width=600, height=600)
+
+    dialog = bone_mirror_dialog()
+    dpg.set_primary_window(dialog, True)
+
+    dpg.setup_dearpygui()
+    dpg.show_viewport()
+    dpg.start_dearpygui()
+    dpg.destroy_context()

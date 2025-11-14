@@ -50,15 +50,17 @@ from .dialogs import (
     about_dialog,
     open_file_dialog,
     edit_simple_array_dialog,
-    eventlistener_dialog,
     search_objects_dialog,
+)
+from .tools import (
+    bone_mirror_dialog,
+    eventlistener_dialog,
     open_state_graph_viewer,
 )
 from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager, AliasMap
 from .workflows.create_cmsg import create_cmsg_dialog
 from .workflows.register_clip import register_clip_dialog
-from .workflows.bone_mirror import bone_mirror_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog

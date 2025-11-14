@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from typing import Any
 import socket
 import threading
@@ -243,45 +244,12 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     return tag
 
 
-# Just for testing
 if __name__ == "__main__":
-    import random
-    import time
-
     dpg.create_context()
-    dpg.create_viewport(title="Test Event Listener", width=600, height=600)
+    dpg.create_viewport(title="Hkb Event Listener", width=600, height=600)
 
-    def generate_events():
-        event_types = [
-            "sensor.temperature",
-            "sensor.pressure",
-            "alarm.high_temp",
-            "alarm.low_pressure",
-            "system.startup",
-            "system.shutdown",
-            "data.received",
-            "data.error",
-            "network.connected",
-            "network.timeout",
-        ]
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        print(f"Sending test events to localhost:{27072}")
-
-        try:
-            while True:
-                event = random.choice(event_types)
-                sock.sendto(event.encode("utf-8"), ("localhost", 27072))
-                time.sleep(random.uniform(0.5, 3.0))
-        except KeyboardInterrupt:
-            print("\nStopped")
-        finally:
-            sock.close()
-
-    test_thread = threading.Thread(target=generate_events, daemon=True)
-    test_thread.start()
-
-    eventlistener_dialog()
+    dialog = eventlistener_dialog()
+    dpg.set_primary_window(dialog, True)
 
     dpg.setup_dearpygui()
     dpg.show_viewport()
