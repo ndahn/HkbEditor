@@ -12,77 +12,36 @@
 
 #![allow(non_snake_case)]
 
-use std::ffi::c_void;
-use std::net::UdpSocket;
-use std::path::PathBuf;
-use std::ptr;
-use std::slice;
-use std::time::Duration;
-
-use once_cell::sync::OnceCell;
+use pelite::pe64::Pe;
 use retour::static_detour;
 use serde::Deserialize;
-use windows::core::{PCSTR, PCWSTR};
+use std::ffi::c_void;
+use std::ffi::CStr;
+use std::net::UdpSocket;
+use std::path::PathBuf;
+use std::time::Duration;
+use windows::core::PCWSTR;
 use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
-use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
-use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 
-use eldenring::cs::ChrIns;
 use eldenring_util::system::wait_for_system_init;
 use shared::program::Program;
 
-/// Signature used to locate the beginning of `hkbFireEvent` within the
-/// executable. The bytes come from observing the game binary in Cheat
-/// Engine: `74 ?? 48 85 d2 74 ?? 48 8d 4c 24 50`. Wildcards (`None`) match
-/// any byte. Once the pattern is found the actual start of the function
-/// resides 0xD bytes before the match.
+// RVAs for 1.16.1
+const HKBFIREEVENTHKS_RVA: u32 = 0x145a960;
+const LUA_GETSTRING_RVA: u32 = 0x14e26c0;
+const LUA_GETHKBSELF_RVA: u32 = 0x14522e0;
+const LUA_GETHAVOKSTRUCT_RVA: u32 = 0x1451760;
 
-const PATTERN: [Option<u8>; 14] = [
-    Some(0x48),
-    Some(0x8b),
-    Some(0x47),
-    Some(0x10),
-    Some(0x48),
-    Some(0x89),
-    Some(0x42),
-    Some(0x10),
-    Some(0xff),
-    Some(0x43),
-    Some(0x10),
-    Some(0xff),
-    Some(0x43),
-    Some(0x14),
-];
-
-const FUNC_START: usize = 0x6D;
-
-/// Once initialised this holds the absolute virtual address of the
-/// `hkbFireEvent` function. It is discovered via pattern scanning on
-/// module load. Other helper functions (e.g. to manually fire an event)
-/// can retrieve the value from here.
-static HKB_FIRE_EVENT_ADDR: OnceCell<usize> = OnceCell::new();
-
-// Define a static detour for the target function. The calling convention
-// specified here must match the original function: on 64‑bit Windows all
-// calling conventions share the same ABI so `extern "C"` is sufficient.
 static_detour! {
-    static HkbFireEventHook: unsafe extern "C" fn(*mut c_void, *const u16);
+    static HkbFireEventHook: unsafe extern "C" fn(usize) -> usize;
 }
 
 #[derive(Deserialize, Debug)]
 struct Config {
     port: u16,
     chr: String,
+    print: bool,
 }
-
-impl Config {
-    fn chr_id(&self) -> u32 {
-        self.chr.trim_start_matches('c').parse().unwrap_or(0)
-    }
-}
-
-static CONFIG: OnceCell<Config> = OnceCell::new();
 
 fn get_dll_dir_path() -> Option<PathBuf> {
     let dll_name = "hkb_event_listener.dll\0";
@@ -124,47 +83,93 @@ pub unsafe extern "system" fn DllMain(
             return;
         }
 
-        let _ = send_event_via_udp("[hkb_event_listener] I'm alive!");
-
         let config: Config = {
             let config_path = get_dll_dir_path()
-                .map(|p| p.join("hkb_event_listener.json"))
-                .unwrap_or_else(|| PathBuf::from("hkb_event_listener.json"));
+                .map(|p| p.join("hkb_event_listener.yaml"))
+                .unwrap_or_else(|| PathBuf::from("hkb_event_listener.yaml"));
 
             let config_str = std::fs::read_to_string(config_path)
-                .unwrap_or_else(|_| String::from(r#"{"port": 27072, "chr": "c0000"}"#));
+                .unwrap_or_else(|_| String::from(r#"{"port": 27072, "chr": "c0000", "print": false}"#));
 
-            serde_json::from_str(&config_str).unwrap_or(Config {
+            serde_yaml::from_str(&config_str).unwrap_or(Config {
                 port: 27072,
                 chr: "c0000".to_string(),
+                print: false,
             })
         };
 
-        let _ = CONFIG.set(config);
+        let sock = UdpSocket::bind("127.0.0.1:0").expect("Failed to open socket");
+        let remote = format!("127.0.0.1:{}", config.port);
 
-        // Perform the pattern scan. If the function cannot be found
-        // simply bail out: the game version is likely unsupported.
-        let Some(addr) = find_event_function() else {
-            eprintln!("[hkb_event_listener] hkbFireEvent pattern not found");
-            return;
-        };
-        println!("[hkb_fire_event_hook] found hkbFireEvent at 0x{:X}", addr);
+        let _ = sock.send_to("[hkb_event_listener] I'm alive!".as_bytes(), &remote);
 
-        // Store the function pointer for later. Note: `OnceCell::set` will
-        // silently fail if the cell is already initialised; this helps
-        // prevent accidental re‑initialisation.
-        let _ = HKB_FIRE_EVENT_ADDR.set(addr);
-
-        // Prepare the detour. We transmute the raw address into a typed
-        // function pointer matching the signature defined in the detour.
-        let target_fn: unsafe extern "C" fn(*mut c_void, *const u16) =
-            unsafe { std::mem::transmute(addr) };
+        println!(
+            "[hkb_event_listener] will publish events to 127.0.0.1:{}",
+            config.port
+        );
 
         unsafe {
-            // Initialise and enable the detour. Errors are ignored for brevity
-            // but could be logged or bubbled up in a real mod.
-            if let Err(e) = HkbFireEventHook
-                .initialize(target_fn, |hkb_character: *mut c_void, event: *const u16| hook_play_animation(hkb_character, event))
+            let program = Program::current();
+
+            let va = program.rva_to_va(HKBFIREEVENTHKS_RVA).unwrap();
+            let hkb_fire_event_fn =
+                std::mem::transmute::<u64, unsafe extern "C" fn(usize) -> usize>(va);
+
+            let va = program.rva_to_va(LUA_GETSTRING_RVA).unwrap();
+            let lua_getstring_fn = std::mem::transmute::<
+                u64,
+                unsafe extern "C" fn(usize, i32, usize) -> *const i8,
+            >(va);
+
+            let va = program.rva_to_va(LUA_GETHKBSELF_RVA).unwrap();
+            let lua_gethkbself_fn =
+                std::mem::transmute::<u64, unsafe extern "C" fn(usize) -> usize>(va);
+
+            let va = program.rva_to_va(LUA_GETHAVOKSTRUCT_RVA).unwrap();
+            let get_hkbcontext_fn =
+                std::mem::transmute::<u64, unsafe extern "C" fn(usize, usize) -> usize>(va);
+
+            if let Err(e) =
+                HkbFireEventHook.initialize(hkb_fire_event_fn, move |lua_state: usize| {
+                    // TODO find a way to get the current character ID
+                    let hkbself_ptr = lua_gethkbself_fn(lua_state);
+                    let behavior_context = get_hkbcontext_fn(lua_state, hkbself_ptr);
+
+                    // FUN_141451730 just dereferences behavior_context
+                    let hkbcharacter_ptr = *(behavior_context as *const usize);
+
+                    if hkbcharacter_ptr != 0 {
+                        // Name is an attribute of hkbCharacter at 0x40
+                        let string_and_flag = *((hkbcharacter_ptr + 0x40) as *const usize);
+
+                        // Make sure the pointer is in userspace
+                        if string_and_flag > 0x10000000000 {
+                            // The stored string is a hkStringPtr, which stores a flag in the
+                            // first byte. Usually 0, but just in case.
+                            let actual_string_ptr = (string_and_flag & !1) as *const i8;
+                            let character_id = CStr::from_ptr(actual_string_ptr).to_str();
+
+                            // Enemies are usually named something like c4080_1234, where 1234
+                            // is probably their model variation
+                            if character_id.is_ok()
+                                && (config.chr.is_empty()
+                                    || character_id.unwrap().starts_with(config.chr.as_str()))
+                            {
+                                let lua_str_ptr = lua_getstring_fn(lua_state, 1, 0);
+                                let event_str =
+                                    CStr::from_ptr(lua_str_ptr as *const i8).to_str().unwrap();
+
+                                if config.print {
+                                    println!("{}: {}", character_id.unwrap(), event_str);
+                                }
+
+                                let _ = sock.send_to(event_str.as_bytes(), &remote);
+                            }
+                        }
+                    }
+
+                    return HkbFireEventHook.call(lua_state);
+                })
             {
                 eprintln!("[hkb_event_listener] failed to initialise detour: {e}");
                 return;
@@ -173,130 +178,7 @@ pub unsafe extern "system" fn DllMain(
                 eprintln!("[hkb_event_listener] failed to enable detour: {e}");
                 return;
             }
-
-            println!(
-                "[hkb_event_listener] will publish events to 127.0.0.1:{}",
-                CONFIG.get().unwrap().port
-            );
         }
     });
     true
-}
-
-/// Convert a pointer to a null‑terminated UTF‑16 string into a Rust [`String`].
-/// Returns `None` if the pointer is null. See [`slice::from_raw_parts`] for
-/// safety details.
-unsafe fn wide_c_str_to_string(ptr: *const u16) -> Option<String> {
-    if ptr.is_null() {
-        return None;
-    }
-    // Compute the length by walking until a 0 terminator is encountered.
-    let mut len = 0usize;
-    loop {
-        if *ptr.add(len) == 0 {
-            break;
-        }
-        len += 1;
-    }
-    let slice = slice::from_raw_parts(ptr, len);
-    Some(String::from_utf16_lossy(slice))
-}
-
-/// Detour handler for `hkbFireEvent`. This function is invoked each time
-/// the game fires a behaviour event. It forwards the event name via UDP
-/// and then calls into the original function so that the game continues
-/// operating normally.
-unsafe extern "C" fn hook_play_animation(hkb_character: *mut c_void, event: *const u16) {
-    let config = CONFIG.get().expect("Config was not initialized");
-    let chr_ins = get_chr_ins_from_hkb(hkb_character);
-
-    if chr_ins.character_id == config.chr_id() {
-        // Read event ID
-        let event_struct = event as *const u32;
-        let event_id = ptr::read(event_struct);
-        
-        let _ = send_event_via_udp(event_id.to_string().as_str());
-    }
-    
-    // Call the original function
-    HkbFireEventHook.call(hkb_character, event);
-}
-
-/// Get the ChrIns instance from an hkbCharacter pointer
-unsafe fn get_chr_ins_from_hkb(hkb_character: *mut c_void) -> &'static mut ChrIns {
-    // TODO crashes
-    let hkb_ptr = hkb_character as *const u8;
-    let chr_ins_ptr_ptr = hkb_ptr.add(0x28) as *const *mut ChrIns;
-    let chr_ins_ptr = ptr::read(chr_ins_ptr_ptr);
-    &mut *chr_ins_ptr
-}
-
-/// Send the provided event name to a UDP listener. By default the mod
-/// broadcasts to localhost on port `12345`, but this can be adjusted as
-/// required. A fresh socket is bound for each message which avoids the
-/// overhead of maintaining a persistent connection and simplifies error
-/// handling. Should the socket fail to bind or send, the error is
-/// returned to the caller.
-fn send_event_via_udp(event: &str) -> std::io::Result<()> {
-    // Bind to an OS‑assigned port on localhost. Using port 0 allows
-    // the operating system to choose an available port for us.
-    let sock = UdpSocket::bind("127.0.0.1:0")?;
-    // The receiving port. You can change this to integrate with your
-    // visualiser or accessibility tool.
-    // TODO use config.port instead
-    let remote = "127.0.0.1:27072";
-    sock.send_to(event.as_bytes(), remote)?;
-    Ok(())
-}
-
-/// Walk the current module's memory looking for the `hkbFireEvent` signature.
-/// On success returns the absolute address of the beginning of the function.
-/// On failure returns `None`. The search is limited to the size reported in
-/// the PE header to avoid scanning uninitialised pages.
-fn find_event_function() -> Option<usize> {
-    // TODO allow different characters than c0000
-
-    // Acquire the base address of the current module. Passing a null
-    // parameter to `GetModuleHandleA` returns a handle to the file used to
-    // create the calling process.
-    let base_handle = unsafe { GetModuleHandleA(PCSTR(ptr::null())).ok()? };
-    let module_base = base_handle.0 as usize;
-    if module_base == 0 {
-        return None;
-    }
-    unsafe {
-        // Read the DOS and NT headers to obtain the image size. These
-        // structures live at fixed offsets relative to the module base.
-        let dos_header = &*(module_base as *const IMAGE_DOS_HEADER);
-        let nt_header =
-            &*((module_base + dos_header.e_lfanew as usize) as *const IMAGE_NT_HEADERS64);
-        let image_size = nt_header.OptionalHeader.SizeOfImage as usize;
-        let base_ptr = module_base as *const u8;
-
-        eprintln!(
-            "[hkb_fire_event_hook] scanning module at 0x{:X}, size: 0x{:X}",
-            module_base, image_size
-        );
-
-        // Iterate over the image looking for the signature. Because of
-        // wildcards the inner loop breaks early on mismatches.
-        let pat_len = PATTERN.len();
-        for offset in 0..(image_size.saturating_sub(pat_len)) {
-            let mut matched = true;
-            for (i, pat_byte) in PATTERN.iter().enumerate() {
-                if let Some(b) = pat_byte {
-                    if *base_ptr.add(offset + i) != *b {
-                        matched = false;
-                        break;
-                    }
-                }
-            }
-            if matched {
-                // Adjust by -0xD to obtain the start of the function.
-                let addr = base_ptr.add(offset).wrapping_sub(FUNC_START) as usize;
-                return Some(addr);
-            }
-        }
-        None
-    }
 }

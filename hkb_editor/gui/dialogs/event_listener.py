@@ -118,7 +118,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
 
             color = get_event_color(evt_text)
             faded_color = (color[0], color[1], color[2], alpha)
-
+            "".encode
             # Draw event marker and text
             # Draw rectangle
             text_width, text_height = dpg.get_text_size(evt_text)

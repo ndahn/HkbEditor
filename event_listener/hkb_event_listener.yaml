@@ -1,0 +1,10 @@
+# Where you find shelter for the storm. 
+# Also used for communication with HkbEditor.
+port: 27072
+
+# Track all characters starting with this string. 
+# Set to empty to track everything that dares to move.
+chr: c0000
+
+# Whether to pollute your shiny mod engine terminal with events
+print: false
