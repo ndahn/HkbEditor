@@ -16,7 +16,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     time_range = 10
     max_events = 100
     num_rows = 10
-    current_row = 0
+    row_assignments = {}
     filter_value = ""
     events = deque(maxlen=max_events)
     sock = None
@@ -25,7 +25,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     paused = False
 
     def socket_listener():
-        nonlocal sock, current_row
+        nonlocal sock
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(0.1)
         sock.bind(("localhost", port))
@@ -38,8 +38,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
                     continue
 
                 print(f" ✦ {evt}")
-                row = current_row
-                current_row = (current_row + 1) % num_rows
+                row = row_assignments.setdefault(evt, (len(row_assignments) + 1) % num_rows)
                 events.append((plot_t, row, evt))
             except socket.timeout:
                 continue
@@ -59,6 +58,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     def clear_events():
         nonlocal plot_t
         events.clear()
+        row_assignments.clear()
         plot_t = 0.0
 
     def update_port(sender: str, new_port: int, user_data: Any):

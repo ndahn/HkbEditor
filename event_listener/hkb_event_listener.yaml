@@ -7,4 +7,4 @@ port: 27072
 chr: c0000
 
 # Whether to pollute your shiny mod engine terminal with events
-print: false
+print: true

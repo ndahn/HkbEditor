@@ -169,20 +169,22 @@ class TemplateContext(CommonActionsMixin):
         collect_args(func.args.args, func.args.defaults)
         collect_args(func.args.kwonlyargs, func.args.kw_defaults)
 
-    def find_all(self, query: str) -> list[HkbRecord]:
+    def find_all(self, query: str, start_from: HkbRecord | str = None) -> list[HkbRecord]:
         """Returns all objects matching the specified query.
 
         Parameters
         ----------
         query : str
             The query string. See :py:meth:`hkb.Tagfile.query` for details.
+        start_from : HkbRecord | str
+            Only search part of the hierarchy starting at this node.
 
         Returns
         -------
         list[HkbRecord]
             A list of matching :py:class:`HkbRecord` objects.
         """
-        return list(self._behavior.query(query))
+        return list(self._behavior.query(query, search_root=start_from))
 
     def find(self, query: str, default: Any = _undefined, start_from: HkbRecord | str = None) -> HkbRecord:
         """Returns the first object matching the specified query.

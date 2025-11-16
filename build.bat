@@ -15,3 +15,4 @@ COPY attributes.yaml dist\
 COPY icon.ico dist\
 ROBOCOPY templates dist\templates /E
 ROBOCOPY doc dist\doc /E
+ROBOCOPY event_listener dist\event_listener hkb_event_listener.dll hkb_event_listener.yaml
