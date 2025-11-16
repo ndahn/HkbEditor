@@ -29,47 +29,33 @@ def run(
     """
     evasion_sm = ctx.find("name=Evasion_SM")
 
-    targets = [
-        "RollingLightFront",
-        "RollingLightBack",
-        "RollingLightLeft",
-        "RollingLightRight",
-        "RollingMediumFront",
-        "RollingMediumBack",
-        "RollingMediumLeft",
-        "RollingMediumRight",
-        "RollingHeavyFront",
-        "RollingHeavyBack",
-        "RollingHeavyLeft",
-        "RollingHeavyRight",
-    ]
+    normal_state = ctx.find("name=Rolling", start_from=evasion_sm)
+    selftrans_state = ctx.find("name=Rolling_Selftrans", start_from=evasion_sm)
 
-    for target in targets:
-        normal_cmsg = ctx.find(
-            f"name='{target}_CMSG*' type_name=CustomManualSelectorGenerator",
-            start_from=evasion_sm,
-        )
+    all_normal_cmsgs = ctx.find_all("type_name=CustomManualSelectorGenerator", start_from=normal_state)
+    all_selftrans_cmsgs = ctx.find_all("type_name=CustomManualSelectorGenerator", start_from=selftrans_state)
 
-        if len(normal_cmsg["generators"]) < 2:
-            continue
-
-        selftrans_cmsg = ctx.find(
-            f"name='{target}_Self*' type_name=CustomManualSelectorGenerator",
-            start_from=evasion_sm,
-        )
-
-        for orig_ptr in normal_cmsg["generators"]:
-            # Create a copy of the original clip so the selftrans CMSG can run it in parallel
-            orig_clip = orig_ptr.get_target()
+    for normal_cmsg in all_normal_cmsgs:
+        for normal_ptr in normal_cmsg["generators"]:
+            # If the selftrans uses the same clip instance create a copy, otherwise
+            # the clip will already be active and not do anything
+            normal_clip = normal_ptr.get_target()
             copy = None
 
-            for self_ptr in selftrans_cmsg["generators"]:
-                # Replace any references to the original clip with our copy
-                if self_ptr == orig_ptr:
-                    if copy is None:
-                        # Only make a copy when necessary
-                        copy = ctx.make_copy(orig_clip)
-                    
-                    # Pointers can be set from records
-                    self_ptr.set_value(copy)
-                    break
+            # For ER we could just go by the name, i.e. RollingMediumFront_CMSG becomes
+            # RollingMediumFront_Selftrans_CMSG, but iteration is fast and other games
+            # or DLCs might contain spelling mistakes, etc.
+            for self_cmsg in all_selftrans_cmsgs:
+                for self_ptr in self_cmsg ["generators"]:
+                    # Check if the pointers are referring to the same object
+                    if self_ptr == normal_ptr:
+                        if copy is None:
+                            # Only make a copy when necessary, otherwise we create 
+                            # detached objects
+                            copy = ctx.make_copy(normal_clip)
+                        
+                        # Pointers can be set from records
+                        self_ptr.set_value(copy)
+                        break
+                
+                # We could break here if self_ptr was updated, but who knows what we'll find

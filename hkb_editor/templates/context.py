@@ -169,7 +169,7 @@ class TemplateContext(CommonActionsMixin):
         collect_args(func.args.args, func.args.defaults)
         collect_args(func.args.kwonlyargs, func.args.kw_defaults)
 
-    def find_all(self, query: str, start_from: HkbRecord | str = None) -> list[HkbRecord]:
+    def find_all(self, *query: str, start_from: HkbRecord | str = None) -> list[HkbRecord]:
         """Returns all objects matching the specified query.
 
         Parameters
@@ -184,9 +184,9 @@ class TemplateContext(CommonActionsMixin):
         list[HkbRecord]
             A list of matching :py:class:`HkbRecord` objects.
         """
-        return list(self._behavior.query(query, search_root=start_from))
+        return list(self._behavior.query(" ".join(query), search_root=start_from))
 
-    def find(self, query: str, default: Any = _undefined, start_from: HkbRecord | str = None) -> HkbRecord:
+    def find(self, *query: str, default: Any = _undefined, start_from: HkbRecord | str = None) -> HkbRecord:
         """Returns the first object matching the specified query.
 
         Parameters
@@ -209,7 +209,7 @@ class TemplateContext(CommonActionsMixin):
             A matching :py:class:`HkbRecord` object.
         """
         try:
-            return next(self._behavior.query(query, search_root=start_from))
+            return next(self._behavior.query(" ".join(query), search_root=start_from))
         except StopIteration:
             if default != _undefined:
                 return default
