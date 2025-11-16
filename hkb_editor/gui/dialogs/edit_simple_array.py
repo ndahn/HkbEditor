@@ -103,7 +103,13 @@ def edit_simple_array_dialog(
         # TODO can use this to show where items are referenced
         print("TODO not implemented yet")
 
-    def fill_table(sender: str, filt: str, user_data: Any):
+    def fill_table(sender: str = None, filt: str = None, user_data: Any = None):
+        if sender is None:
+            sender = f"{tag}_filter"
+
+        if filt is None:
+            filt = dpg.get_value(f"{tag}_filter")
+
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
 
         if filt:
