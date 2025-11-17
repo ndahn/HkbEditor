@@ -93,6 +93,9 @@ class AttributesWidget:
         self.logger = logging.getLogger()
         self.attributes_table = None
 
+        self.widget_to_attribute: dict[str, tuple[str, tuple[XmlValueHandler, str, bool]]] = {}
+        self.selected_attribute = None
+
         # Hover explanations for attributes
         expl_file = os.path.join(os.path.dirname(sys.argv[0]), "attributes.yaml")
         if os.path.isfile(expl_file):
@@ -171,6 +174,13 @@ class AttributesWidget:
 
         return None
 
+    def _copy_value_to_clipboard(self, data: str):
+        try:
+            pyperclip.copy(data)
+            self.logger.info("Copied to clipboard")
+        except Exception as e:
+            self.logger.warning(f"Copying value failed: {e}", exc_info=e)
+
     # UI content
     def _setup_content(self) -> None:
         with dpg.group(tag=self.tag):
@@ -186,6 +196,19 @@ class AttributesWidget:
             ) as self.attributes_table:
                 dpg.add_table_column(label="Value", width_stretch=True)
                 dpg.add_table_column(label="Key", width_fixed=True)
+
+        def on_click(sender, app_data):
+            # app_data contains (slot, item_id)
+            widget = dpg.get_item_alias(app_data[1])
+            self._open_attribute_menu(widget)
+
+        with dpg.item_handler_registry(tag=self.tag + "_item_handler_registry"):
+            dpg.add_item_clicked_handler(
+                button=dpg.mvMouseButton_Right,
+                callback=on_click
+            )
+
+        self._create_attribute_menu()
 
     def _update_attributes(self) -> None:
         self.set_title(f"{self.record.object_id} ({self.record.type_name})")
@@ -224,7 +247,7 @@ class AttributesWidget:
 
         label = self.alias_manager.get_attribute_alias(self.record, path)
         if label is None:
-            label = path.split("/")[-1]
+            label = path.split("/", maxsplit=1)[-1]
             label_color = style.white
         else:
             label_color = style.green
@@ -315,7 +338,7 @@ class AttributesWidget:
             FieldFlags = get_hkb_flags(
                 self.tagfile.type_registry,
                 self.record.type_id,
-                path.split("/")[-1],
+                path.split("/", maxsplit=1)[-1],
             )
 
             if FieldFlags:
@@ -336,7 +359,8 @@ class AttributesWidget:
                     self._create_attribute_widget_simple(attribute, path, tag)
                     create_label()
 
-        self._create_attribute_menu(widget, attribute, path, is_simple)
+        self.widget_to_attribute[widget] = (attribute, path, is_simple)
+        dpg.bind_item_handler_registry(widget, self.tag + "_item_handler_registry")
 
     def _add_reference_attribute_text(
         self,
@@ -404,7 +428,7 @@ class AttributesWidget:
         pointer: HkbPointer,
         path: str,
     ) -> str:
-        label = path.split("/")[-1]
+        label = path.split("/", maxsplit=1)[-1]
 
         def on_pointer_selected(sender, target: HkbRecord, user_data: Any):
             self._update_attribute(
@@ -440,7 +464,7 @@ class AttributesWidget:
         array: HkbArray,
         path: str,
     ) -> str:
-        label = path.split("/")[-1]
+        label = path.split("/", maxsplit=1)[-1]
 
         with dpg.tree_node(
             label=label,
@@ -467,7 +491,7 @@ class AttributesWidget:
         array: HkbArray,
         path: str,
     ) -> str:
-        label = path.split("/")[-1]
+        label = path.split("/", maxsplit=1)[-1]
         axes = ["roll", "pitch", "yaw"]
         colors = [
             (255, 0, 0, 255),
@@ -613,7 +637,7 @@ class AttributesWidget:
         path: str,
         tag: str = 0,
     ) -> str:
-        label = path.split("/")[-1]
+        label = path.split("/", maxsplit=1)[-1]
 
         def on_flag_changed(sender: str, active_flags: int, user_data):
             self._update_attribute(None, int(active_flags), attribute)
@@ -633,7 +657,7 @@ class AttributesWidget:
         path: str,
         tag: str = 0,
     ) -> str:
-        label = path.split("/")[-1]
+        label = path.split("/", maxsplit=1)[-1]
 
         with bindable_attribute(filter_key=label, tag=tag, width=-1) as bindable:
             if isinstance(attribute, HkbString):
@@ -784,92 +808,38 @@ class AttributesWidget:
 
         return bindable
 
-    def _create_attribute_menu(
-        self,
-        widget: str,
-        attribute: XmlValueHandler,
-        path: str,
-        is_simple: bool,
-    ):
-        if not widget:
-            self.logger.error(
-                "Can't create attribute menu for %s (%s) as no widget was passed",
-                path,
-                type(attribute).__name__,
+    def _create_attribute_menu(self):
+        with dpg.window(
+            popup=True,
+            show=False,
+            tag=self.tag + "_attribute_menu",
+        ):
+            dpg.add_text(
+                "", color=style.light_grey, tag=self.tag + "_attribute_menu_label",
             )
-            return
-
-        # Should never happen, but development is funny ~
-        if attribute is None:
-            self.logger.error(
-                "%s->%s is None, this should never happen",
-                self.record.object_id,
-                path,
+            dpg.add_text(
+                "", color=style.light_grey, tag=self.tag + "_attribute_menu_type",
             )
-            return
+            dpg.add_text("", tag=self.tag + "_attribute_menu_extra",)
 
-        if is_simple:
-            bound_attributes = get_bound_attributes(self.tagfile, self.record)
-            bound_var_idx = bound_attributes.get(path, -1)
-
-        # Create a context menu for the widget
-        with dpg.popup(widget):
-            dpg.add_text(path.split("/")[-1], color=style.light_grey)
-            type_name = self.tagfile.type_registry.get_name(attribute.type_id)
-            dpg.add_text(f"<{type_name}>", color=style.light_grey)
-
-            if is_simple:
-                if bound_var_idx >= 0:
-                    bound_var_name = self.tagfile.get_variable_name(bound_var_idx)
-                    dpg.add_text(f"bound: {bound_var_name}", color=style.pink)
-
-                elif isinstance(self.tagfile, HavokBehavior):
-                    if is_event_attribute(self.record, path):
-                        idx = attribute.get_value()
-                        name = (
-                            self.tagfile.get_event(idx, "<invalid>")
-                            if idx >= 0
-                            else "<none>"
-                        )
-                        dpg.add_text(f"event: {name}", color=style.green)
-
-                    elif is_variable_attribute(self.record, path):
-                        idx = attribute.get_value()
-                        name = (
-                            self.tagfile.get_variable_name(idx, "<invalid>")
-                            if idx >= 0
-                            else "<none>"
-                        )
-                        dpg.add_text(f"variable: {name}", color=style.green)
-
-                    elif is_animation_attribute(self.record, path):
-                        idx = attribute.get_value()
-                        name = (
-                            self.tagfile.get_animation(idx, "<invalid>")
-                            if idx >= 0
-                            else "<none>"
-                        )
-                        dpg.add_text(f"animation: {name}", color=style.green)
+            dpg.add_separator()
 
             # Copy & paste
-            dpg.add_separator()
-            if is_simple:
-                # Not clear how cut should work on records and lists
-                dpg.add_selectable(
-                    label="Cut",
-                    callback=self._cut_value,
-                    user_data=(widget, path, attribute),
-                )
+            dpg.add_selectable(
+                label="Cut",
+                callback=self._cut_value,
+                tag=self.tag + "_attribute_menu_cut",
+            )
 
             dpg.add_selectable(
                 label="Copy",
                 callback=self._copy_value,
-                user_data=(widget, path, attribute),
+                tag=self.tag + "_attribute_menu_copy",
             )
             dpg.add_selectable(
                 label="Copy Path",
                 callback=self._copy_value_path,
-                user_data=(widget, path, attribute),
+                tag=self.tag + "_attribute_menu_copy_path",
             )
             # dpg.add_selectable(
             #     label="Copy XML",
@@ -879,133 +849,155 @@ class AttributesWidget:
             dpg.add_selectable(
                 label="Paste",
                 callback=self._paste_value,
-                user_data=(widget, path, attribute),
+                tag=self.tag + "_attribute_menu_paste",
             )
 
-            # Array items can be deleted
-            if ":" in path.rsplit("/", maxsplit=1)[-1]:
-                dpg.add_separator()
-                dpg.add_selectable(
-                    label="Delete Item",
-                    callback=self._delete_array_item,
-                    user_data=(widget, path, attribute),
-                )
+            dpg.add_selectable(
+                label="Delete",
+                callback=self._delete_array_item,
+                tag=self.tag + "_attribute_menu_delete",
+            )
 
-            if isinstance(attribute, HkbPointer):
+            # HkbPointers
+            dpg.add_separator()
 
-                def on_object_created(
-                    sender: str, new_object: HkbRecord, user_data: Any
-                ):
-                    self._update_attribute(widget, new_object.object_id, attribute)
+            dpg.add_selectable(
+                label="New object",
+                callback=self._create_object_for_pointer,
+                tag=self.tag + "_attribute_menu_new_object",
+            )
 
-                    if self.on_graph_changed:
-                        self.on_graph_changed()
+            # TODO we could provide a menu listing pinned items here
 
-                def create_object_for_pointer():
-                    # Late import to avoid cyclic import
-                    from ..workflows.create_object import create_object_dialog
+            dpg.add_selectable(
+                label="Clone Hierarchy",
+                callback=self._paste_hierarchy,
+                tag=self.tag + "_attribute_menu_clone_hierarchy",
+            )
 
-                    current = attribute.get_target()
-                    selected_type = None
-                    if current:
-                        selected_type = current.type_id
+            dpg.add_selectable(
+                label="Jump to", 
+                callback=self._jump,
+                tag=self.tag + "_attribute_menu_jump",
+            )
 
-                    create_object_dialog(
-                        self.tagfile,
-                        self.alias_manager,
-                        on_object_created,
-                        allowed_types=[attribute.subtype_id],
-                        include_derived_types=True,
-                        id_required=True,
-                        selected_type_id=selected_type,
-                        title=f"Create object for '{path}'",
-                        tag=f"{self.tag}_{path}_create_object_dialog",
+            # Bindable attributes
+            dpg.add_separator()
+
+            dpg.add_selectable(
+                label="Bind Variable",
+                callback=self._bind_variable,
+                tag=self.tag + "_attribute_menu_create_binding",
+            )
+
+            dpg.add_selectable(
+                label="Clear binding",
+                callback=self._unbind_variable,
+                tag=self.tag + "_attribute_menu_clear_binding",
+            )
+
+    def _open_attribute_menu(
+        self,
+        widget: str,
+    ):
+        attribute, path, is_simple = self.widget_to_attribute[widget]
+
+        label = path.split("/", maxsplit=1)[-1]
+        type_name = self.tagfile.type_registry.get_name(attribute.type_id)
+
+        dpg.set_value(self.tag + "_attribute_menu_label", label)
+        dpg.set_value(self.tag + "_attribute_menu_type", f"<{type_name}>")
+
+        if is_simple:
+            bound_attributes = get_bound_attributes(self.tagfile, self.record)
+            bound_var_idx = bound_attributes.get(path, -1)
+
+            extra_label = None
+            extra_color = None
+
+            if bound_var_idx >= 0:
+                bound_var_name = self.tagfile.get_variable_name(bound_var_idx)
+                extra_label = f"bound: {bound_var_name}"
+                extra_color = style.pink
+
+            elif isinstance(self.tagfile, HavokBehavior):
+                if is_event_attribute(self.record, path):
+                    idx = attribute.get_value()
+                    name = (
+                        self.tagfile.get_event(idx, "<invalid>")
+                        if idx >= 0
+                        else "<none>"
                     )
+                    extra_label = f"event: {name}"
+                    extra_color = style.green
 
-                def jump():
-                    oid = attribute.get_value()
-                    if not oid or oid == "object0":
-                        return
+                elif is_variable_attribute(self.record, path):
+                    idx = attribute.get_value()
+                    name = (
+                        self.tagfile.get_variable_name(idx, "<invalid>")
+                        if idx >= 0
+                        else "<none>"
+                    )
+                    extra_label = f"variable: {name}"
+                    extra_color = style.green
 
-                    self.jump_callback(oid)
+                elif is_animation_attribute(self.record, path):
+                    idx = attribute.get_value()
+                    name = (
+                        self.tagfile.get_animation(idx, "<invalid>")
+                        if idx >= 0
+                        else "<none>"
+                    )
+                    extra_label = f"animation: {name}"
+                    extra_color = style.green
 
-                dpg.add_separator()
-
-                dpg.add_selectable(
-                    label="New object",
-                    callback=create_object_for_pointer,
+            if extra_label:
+                dpg.configure_item(
+                    self.tag + "_attribute_menu_extra",
+                    default_value=extra_label,
+                    color=extra_color,
+                    show=True,
                 )
+            else:
+                dpg.hide_item(self.tag + "_attribute_menu_extra")
 
-                # TODO we could provide a menu listing pinned items here
+            set_bindable_attribute_state(self.tagfile, widget, bound_var_idx)
 
-                dpg.add_selectable(
-                    label="Clone Hierarchy",
-                    callback=self._paste_hierarchy,
-                    user_data=path,
-                )
+            dpg.show_item(self.tag + "_attribute_menu_cut")
+            dpg.show_item(self.tag + "_attribute_menu_create_binding")
+            dpg.show_item(self.tag + "_attribute_menu_clear_binding")
 
-                if self.jump_callback:
-                    dpg.add_selectable(label="Jump to", callback=jump)
+        else:
+            dpg.hide_item(self.tag + "_attribute_menu_extra")
+            dpg.hide_item(self.tag + "_attribute_menu_cut")
+            dpg.hide_item(self.tag + "_attribute_menu_create_binding")
+            dpg.hide_item(self.tag + "_attribute_menu_clear_binding")
 
-            if is_simple:
-                set_bindable_attribute_state(self.tagfile, widget, bound_var_idx)
+        if ":" in label:
+            dpg.show_item(self.tag + "_attribute_menu_delete")
 
-                def _bind_variable(sender, app_data, user_data):
-                    # deselect the selectable
-                    dpg.set_value(sender, False)
-                    select_variable_to_bind(*user_data)
+        if isinstance(attribute, HkbPointer):
+            dpg.show_item(self.tag + "_attribute_menu_new_object")
+            dpg.show_item(self.tag + "_attribute_menu_clone_hierarchy")
 
-                def _unbind_variable(
-                    sender, app_data, data: tuple[HkbRecord, str, str]
-                ):
-                    # deselect the selectable
-                    dpg.set_value(sender, False)
+            if self.jump_callback:
+                dpg.show_item(self.tag + "_attribute_menu_jump")
+        else:
+            dpg.hide_item(self.tag + "_attribute_menu_new_object")
+            dpg.hide_item(self.tag + "_attribute_menu_clone_hierarchy")
+            dpg.hide_item(self.tag + "_attribute_menu_jump")
 
-                    record, path, bindable_attribute = data
-                    util = CommonActionsMixin(self.tagfile)
-                    util.clear_variable_binding(record, path)
-
-                    set_bindable_attribute_state(self.tagfile, bindable_attribute, -1)
-
-                def _on_binding_established(
-                    sender, data: tuple[int, HkbRecord], user_data: Any
-                ):
-                    if data is None:
-                        return
-
-                    # No need to call set_bindable_attribute_state since we'll rebuild the
-                    # attribute widgets anyways
-
-                    # If a new binding set was created the graph will change
-                    if self.on_graph_changed:
-                        self.on_graph_changed()
-
-                    self.clear()
-                    self._update_attributes()
-                    self.reveal_attribute(path)
-
-                dpg.add_separator()
-                dpg.add_selectable(
-                    label="Bind Variable",
-                    callback=lambda s, a, u: _bind_variable(s, a, u),
-                    user_data=(
-                        self.tagfile,
-                        self.record,
-                        widget,
-                        path,
-                        _on_binding_established,
-                    ),
-                )
-
-                dpg.add_selectable(
-                    label="Clear binding",
-                    callback=lambda s, a, u: _unbind_variable(s, a, u),
-                    user_data=(self.record, path, widget),
-                )
+        # Fix position first time the window is opened
+        if tuple(dpg.get_item_pos(self.tag + "_attribute_menu")) == (0, 0):
+            mouse_pos = dpg.get_mouse_pos()
+            dpg.set_item_pos(self.tag + "_attribute_menu", mouse_pos)
+        
+        self.selected_attribute = (widget, path, attribute)
+        dpg.show_item(self.tag + "_attribute_menu")
 
     # Internal callbacks
     def _update_attribute(
-        self, sender, new_value: Any | tuple[Any, Any], handler: XmlValueHandler
+        self, sender: str, new_value: Any | tuple[Any, Any], handler: XmlValueHandler
     ) -> None:
         if isinstance(new_value, tuple):
             new_value, ui_repr = new_value
@@ -1025,13 +1017,11 @@ class AttributesWidget:
             except Exception:
                 print("###", ui_repr)
 
-    def _cut_value(
-        self, sender, app_data, user_data: tuple[str, XmlValueHandler]
-    ) -> None:
+    def _cut_value(self, sender: str, app_data: Any, user_data: Any) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, value = user_data
+        widget, _, attribute = self.selected_attribute
         val = dpg.get_value(widget)
 
         try:
@@ -1042,46 +1032,38 @@ class AttributesWidget:
             return
 
         default_val = type(val)()
-        self._update_attribute(widget, default_val, value)
+        self._update_attribute(widget, default_val, attribute)
 
         self.logger.info("Cut value:\n%s", val)
 
-    def _copy_value(
-        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
-    ) -> None:
+    def _copy_value(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, value = user_data
+        widget = self.selected_attribute[0]
         val = dpg.get_value(widget)
-        self._copy_to_clipboard(val)
+        self._copy_value_to_clipboard(val)
 
-    def _copy_value_xml(
-        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
-    ) -> None:
+    def _copy_value_xml(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, value = user_data
-        val = value.xml().strip().strip("\n")
-        self._copy_to_clipboard(val)
+        attribute = self.selected_attribute[2]
+        val = attribute.xml().strip().strip("\n")
+        self._copy_value_to_clipboard(val)
 
-    def _copy_value_path(
-        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
-    ) -> None:
+    def _copy_value_path(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, value = user_data
-        self._copy_to_clipboard(path)
+        path = self.selected_attribute[1]
+        self._copy_value_to_clipboard(path)
 
-    def _paste_value(
-        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
-    ) -> None:
+    def _paste_value(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, handler = user_data
+        widget, path, attribute = self.selected_attribute
         data = pyperclip.paste()
 
         # Clipboard contains an XML object
@@ -1091,46 +1073,133 @@ class AttributesWidget:
                 xml_type_id = xml.get("typeid")
                 new_value = HkbRecord.init_from_xml(self.tagfile, xml_type_id, xml)
                 self.tagfile.add_object(new_value, self.tagfile.new_id())
-            
+
             # Plain value, let the handler handle it
             else:
                 new_value = data
 
             # Let the handler handle the rest
             try:
-                self._update_attribute(widget, new_value, handler)
+                self._update_attribute(widget, new_value, attribute)
 
-                if isinstance(handler, HkbPointer) and self.on_graph_changed:
+                if isinstance(attribute, HkbPointer) and self.on_graph_changed:
                     self.on_graph_changed()
             except Exception as e:
                 self.logger.error(f"Paste value to {path} failed: {e}")
 
-    def _delete_array_item(
-        self, sender, app_data, user_data: tuple[str, str, XmlValueHandler]
-    ) -> None:
+    def _delete_array_item(self, sender) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, item_path, value = user_data
-        array_path, index = item_path.rsplit(":", maxsplit=1)
+        _, path, attribute = self.selected_attribute
+        array_path, index = path.rsplit(":", maxsplit=1)
         index = int(index)
         array: HkbArray = self.record.get_field(array_path)
 
         with undo_manager.combine():
             old_value = array.pop(index)
             undo_manager.on_update_array_item(array, index, old_value, None)
-            self.logger.info(f"Removed {self.record.object_id}/{item_path}")
-            self._update_attribute(sender, None, value)
+            self.logger.info(f"Removed {self.record.object_id}/{path}")
+            self._update_attribute(sender, None, attribute)
 
         if index == 0 or index == len(array) - 1:
-            dpg.delete_item(f"{self.tag}_attribute_{item_path}")
+            dpg.delete_item(f"{self.tag}_attribute_{path}")
         else:
             self.regenerate()
 
-        if self.on_graph_changed and isinstance(value, HkbPointer):
+        if self.on_graph_changed and isinstance(attribute, HkbPointer):
             self.on_graph_changed()
 
-    def _paste_hierarchy(self, sender, app_data, path: str) -> None:
+    # Menu callbacks
+    def _create_object_for_pointer(self, sender: str) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        def on_object_created(sender: str, new_object: HkbRecord, user_data: Any):
+            widget, _, attribute = self.selected_attribute
+            self._update_attribute(widget, new_object.object_id, attribute)
+
+            if self.on_graph_changed:
+                self.on_graph_changed()
+
+        # Late import to avoid cyclic import
+        from ..workflows.create_object import create_object_dialog
+
+        _, path, attribute = self.selected_attribute
+        current = attribute.get_target()
+        selected_type = None
+        if current:
+            selected_type = current.type_id
+
+        create_object_dialog(
+            self.tagfile,
+            self.alias_manager,
+            on_object_created,
+            allowed_types=[attribute.subtype_id],
+            include_derived_types=True,
+            id_required=True,
+            selected_type_id=selected_type,
+            title=f"Create object for '{path}'",
+            tag=f"{self.tag}_{path}_create_object_dialog",
+        )
+
+    def _jump(self, sender: str) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        attribute = self.selected_attribute[2]
+        oid = attribute.get_value()
+        if not oid or oid == "object0":
+            return
+
+        self.jump_callback(oid)
+
+    def _bind_variable(self, sender: str):
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        def on_binding_established(
+            sender, data: tuple[int, HkbRecord], user_data: Any
+        ) -> None:
+            if data is None:
+                return
+
+            path = self.selected_attribute[1]
+
+            # No need to call set_bindable_attribute_state since we'll rebuild the
+            # attribute widgets anyways
+
+            # If a new binding set was created the graph will change
+            if self.on_graph_changed:
+                self.on_graph_changed()
+
+            self.clear()
+            self._update_attributes()
+            self.reveal_attribute(path)
+
+        widget, path, _ = self.selected_attribute
+        select_variable_to_bind(
+            self.tagfile,
+            self.record,
+            widget,
+            path,
+            on_binding_established,
+        )
+
+    def _unbind_variable(self, sender: str) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        path = self.selected_attribute[1]
+        util = CommonActionsMixin(self.tagfile)
+        util.clear_variable_binding(self.record, path)
+
+        set_bindable_attribute_state(self.tagfile, bindable_attribute, -1)
+
+    def _paste_hierarchy(self, sender: str) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
         xml = pyperclip.paste()
 
         if not xml.startswith("<behavior_hierarchy"):
@@ -1152,11 +1221,5 @@ class AttributesWidget:
             if self.on_graph_changed:
                 self.on_graph_changed()
 
+        path = self.selected_attribute[1]
         paste_hierarchy(self.tagfile, xml, self.record, path, on_hierarchy_merged)
-
-    def _copy_to_clipboard(self, data: str):
-        try:
-            pyperclip.copy(data)
-            self.logger.info("Copied to clipboard")
-        except Exception as e:
-            self.logger.warning(f"Copying value failed: {e}", exc_info=e)
