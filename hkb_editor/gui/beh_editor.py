@@ -363,7 +363,7 @@ class BehaviorEditor(BaseEditor):
         self.logger.info(f"Undo: {undo_manager.top()}")
         undo_manager.undo()
 
-        for oid in self.pinned_objects:
+        for oid in self.get_pinned_objects():
             if oid not in self.beh.objects:
                 self.remove_pinned_object(oid)
 
@@ -729,6 +729,7 @@ class BehaviorEditor(BaseEditor):
                 on_graph_changed=self.regenerate,
                 on_value_changed=self._on_value_modified,
                 pin_object_callback=self.add_pinned_object,
+                get_pinned_objects_callback=self.get_pinned_objects,
                 tag=f"{self.tag}_attributes_widget",
             )
 
@@ -767,8 +768,7 @@ class BehaviorEditor(BaseEditor):
                 button=dpg.mvMouseButton_Right, callback=self.open_pin_menu
             )
 
-    @property
-    def pinned_objects(self) -> list[str]:
+    def get_pinned_objects(self) -> list[str]:
         ret = []
 
         for row in dpg.get_item_children(f"{self.tag}_pinned_objects_table", slot=1):

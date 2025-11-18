@@ -29,9 +29,9 @@ class RotationKnob:
         self.indicator_thickness = indicator_thickness
         self.callback = callback
         self.user_data = user_data
-        
-        self._value_deg = float(default_value % 360.0)
+
         self._drag_active: bool = False
+        self._value_deg = float(default_value % 360.0)
 
         # build UI
         W = H = float(self.size)
@@ -45,13 +45,16 @@ class RotationKnob:
                     dpg.add_text(tag=f"{self.tag}_text")
 
             with dpg.drawlist(width=int(W), height=int(H), tag=f"{self.tag}_knob"):
-                dpg.draw_circle((cx, cy), radius, color=self.ring_color, thickness=ring_thickness)
+                dpg.draw_circle(
+                    (cx, cy), radius, color=self.ring_color, thickness=ring_thickness
+                )
 
                 px = cx + indicator_len * math.cos(math.radians(self._value_deg))
                 py = cy + indicator_len * math.sin(math.radians(self._value_deg))
                 with dpg.draw_layer(tag=f"{self.tag}_needle_layer"):
                     dpg.draw_line(
-                        (cx, cy), (px, py),
+                        (cx, cy),
+                        (px, py),
                         color=self.indicator_color,
                         thickness=self.indicator_thickness,
                         tag=f"{self.tag}_needle",
@@ -61,10 +64,23 @@ class RotationKnob:
 
         # handlers
         self.handler_tag = f"{self.tag}_handlers"
-        with dpg.handler_registry(tag=self.handler_tag):
-            dpg.add_mouse_drag_handler(callback=self._on_mouse_drag)
-            dpg.add_mouse_down_handler(button=dpg.mvMouseButton_Left, callback=self._on_mouse_down)
-            dpg.add_mouse_release_handler(button=dpg.mvMouseButton_Left, callback=self._on_mouse_release)
+
+        if not dpg.does_item_exist(self.handler_tag):
+            dpg.add_handler_registry(tag=self.handler_tag)
+
+        dpg.add_mouse_drag_handler(
+            callback=self._on_mouse_drag, parent=self.handler_tag
+        )
+        dpg.add_mouse_down_handler(
+            button=dpg.mvMouseButton_Left,
+            callback=self._on_mouse_down,
+            parent=self.handler_tag,
+        )
+        dpg.add_mouse_release_handler(
+            button=dpg.mvMouseButton_Left,
+            callback=self._on_mouse_release,
+            parent=self.handler_tag,
+        )
 
     @property
     def degrees(self) -> float:
@@ -72,19 +88,19 @@ class RotationKnob:
 
     @property
     def radians(self) -> float:
-        return math.radians(self._value_deg)
+        return math.radians(self.degrees)
 
     def __del__(self):
         if dpg.does_item_exist(self.handler_tag):
             dpg.delete_item(self.handler_tag)
 
-    def set_value_rad(self, new_val: float) -> None:
-        self.set_value_deg(math.degrees(new_val))
-    
     def set_value_deg(self, new_val: float) -> None:
         self._value_deg = new_val
         self._update_label()
         self._update_needle()
+
+    def set_value_rad(self, new_val: float) -> None:
+        self.set_value_deg(math.degrees(new_val))
 
     def _angle_from_mouse(self) -> float:
         W = H = float(self.size)
@@ -107,11 +123,12 @@ class RotationKnob:
         indicator_len = radius * 0.84
 
         dpg.delete_item(f"{self.tag}_needle")
-        ang = self._value_deg
+        ang = self.degrees
         px = cx + indicator_len * math.cos(math.radians(ang))
         py = cy + indicator_len * math.sin(math.radians(ang))
         dpg.draw_line(
-            (cx, cy), (px, py),
+            (cx, cy),
+            (px, py),
             color=self.indicator_color,
             thickness=self.indicator_thickness,
             parent=f"{self.tag}_needle_layer",
@@ -122,18 +139,23 @@ class RotationKnob:
         if not self._drag_active:
             return
 
-        cur = float(self._value_deg)
+        cur = float(self.degrees)
         new_angle = self._angle_from_mouse()
 
         if new_angle != cur:
             self._value_deg = new_angle
             self._update_label()
             self._update_needle()
-            
+
             if self.callback:
                 self.callback(self.tag, new_angle, self.user_data)
 
     def _on_mouse_down(self, sender: int, app_data: Any, user_data: Any) -> None:
+        if not dpg.does_item_exist(f"{self.tag}_knob"):
+            dpg.hide_item(self.handler_tag)
+            print("### KNOB SILENT")
+            return
+
         if dpg.is_item_hovered(f"{self.tag}_knob"):
             self._drag_active = True
             self._on_mouse_drag(sender, app_data, user_data)

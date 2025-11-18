@@ -420,6 +420,8 @@ def create_flag_checkboxes(
             else:
                 dpg.set_value(f"{base_tag}_{zero_name}", False)
 
+        dpg.set_value(f"{base_tag}_numeric", active_flags)
+
         if callback:
             callback(base_tag, active_flags, user_data)
 
@@ -444,6 +446,14 @@ def create_flag_checkboxes(
             active_flags = 0
 
     with dpg.group():
+        dpg.add_input_text
+        dpg.add_input_int(
+            label="numeric",
+            default_value=active_flags,
+            callback=set_from_int,
+            tag=f"{base_tag}_numeric",
+        )
+
         for flag in flag_type:
             if flag == 0:
                 # 0 is in every flag
@@ -458,14 +468,6 @@ def create_flag_checkboxes(
                 tag=f"{base_tag}_{flag.name}",
                 user_data=flag,
             )
-
-    with dpg.popup(dpg.last_container(), min_size=(50, 20)):
-        dpg.add_input_int(
-            label="from int",
-            default_value=active_flags,
-            on_enter=True,
-            callback=set_from_int,
-        )
 
 
 def add_paragraphs(

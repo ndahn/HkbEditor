@@ -1,4 +1,4 @@
-from typing import Any, Type, Callable
+from typing import Any, Type, Callable, Iterable
 import sys
 import os
 import yaml
@@ -68,12 +68,13 @@ class AttributesWidget:
         self,
         alias_manager: AliasManager,
         *,
-        jump_callback: Callable[[str], None] = None,
         on_graph_changed: Callable[[], None] = None,
         on_value_changed: Callable[
             [str, XmlValueHandler, tuple[Any, Any]], None
         ] = None,
+        jump_callback: Callable[[str], None] = None,
         pin_object_callback: Callable[[HkbRecord | str], None] = None,
+        get_pinned_objects_callback: Callable[[], Iterable[str]] = None,
         hide_title: bool = False,
         tag: str = None,
     ):
@@ -83,12 +84,13 @@ class AttributesWidget:
         self.alias_manager = alias_manager
         self.tagfile: Tagfile = None
         self.record: HkbRecord = None
-        self.jump_callback = jump_callback
         self.on_graph_changed = on_graph_changed
         self.on_value_changed = on_value_changed
+        self.jump_callback = jump_callback
         self.pin_object_callback = pin_object_callback
+        self.get_pinned_objects_callback = get_pinned_objects_callback
         self.hide_title = hide_title
-        self.tag = tag
+        self.tag = str(tag)
 
         self.logger = logging.getLogger()
         self.attributes_table = None
@@ -507,9 +509,8 @@ class AttributesWidget:
             for idx, comp in enumerate("xyzw"):
                 val = quat[idx]
                 array[idx].set_value(val)
-                dpg.set_value(f"{self.tag}_{path}_quat_{comp}", val)
 
-        def on_quaternion_update(*args) -> None:
+        def refresh_quaternion(*args) -> None:
             q = []
             for comp in "xyzw":
                 val = dpg.get_value(f"{self.tag}_{path}_quat_{comp}")
@@ -523,6 +524,7 @@ class AttributesWidget:
             label=label,
             filter_key=label,
             default_open=False,
+            tag=f"{self.tag}_{path}_quaternion",
         ) as tree_node:
             # In some cases the array could still be empty
             for idx in range(0, 4 - len(array)):
@@ -548,13 +550,16 @@ class AttributesWidget:
                     )
                     knobs.append(knob)
 
-            with dpg.popup(knob_group):
+            if dpg.does_item_exist(f"{self.tag}_{path}_quaternion_popup"):
+                dpg.delete_item(f"{self.tag}_{path}_quaternion_popup")
+
+            with dpg.popup(knob_group, tag=f"{self.tag}_{path}_quaternion_popup"):
                 for i, comp in zip(range(4), "xyzw"):
                     value = array[i].get_value()
                     dpg.add_input_double(
                         label=comp,
                         default_value=value,
-                        callback=on_quaternion_update,
+                        callback=refresh_quaternion,
                         tag=f"{self.tag}_{path}_quat_{comp}",
                     )
 
@@ -862,12 +867,15 @@ class AttributesWidget:
             dpg.add_separator()
 
             dpg.add_selectable(
-                label="New object",
+                label="New Object",
                 callback=self._create_object_for_pointer,
                 tag=self.tag + "_attribute_menu_new_object",
             )
 
-            # TODO we could provide a menu listing pinned items here
+            dpg.add_menu(
+                label="Pinned Object",
+                tag=self.tag + "_attribute_menu_pinned_objects",
+            )
 
             dpg.add_selectable(
                 label="Clone Hierarchy",
@@ -980,10 +988,29 @@ class AttributesWidget:
             dpg.show_item(self.tag + "_attribute_menu_new_object")
             dpg.show_item(self.tag + "_attribute_menu_clone_hierarchy")
 
+            if self.get_pinned_objects_callback:
+                dpg.delete_item(self.tag + "_attribute_menu_pinned_objects", children_only=True)
+
+                def set_target(sender: str, app_data: bool, oid: str):
+                    self._set_pointer_target(sender, oid, None)
+                
+                pinned = self.get_pinned_objects_callback()
+                for item in pinned:
+                    dpg.add_menu_item(
+                        label=item,
+                        callback=set_target,
+                        user_data=item,
+                        tag=self.tag + "_attribute_menu_pinned_objects_" + item,
+                        parent=self.tag + "_attribute_menu_pinned_objects",
+                    )
+
+                dpg.show_item(self.tag + "_attribute_menu_pinned_objects")
+
             if self.jump_callback:
                 dpg.show_item(self.tag + "_attribute_menu_jump")
         else:
             dpg.hide_item(self.tag + "_attribute_menu_new_object")
+            dpg.hide_item(self.tag + "_attribute_menu_pinned_objects")
             dpg.hide_item(self.tag + "_attribute_menu_clone_hierarchy")
             dpg.hide_item(self.tag + "_attribute_menu_jump")
 
@@ -1111,16 +1138,20 @@ class AttributesWidget:
             self.on_graph_changed()
 
     # Menu callbacks
+    def _set_pointer_target(self, sender: str, new_object: HkbRecord | str, user_data: Any):
+        if isinstance(new_object, HkbRecord):
+            new_object = new_object.object_id
+
+        widget, _, attribute = self.selected_attribute
+        self._update_attribute(widget, new_object, attribute)
+
+        if self.on_graph_changed:
+            self.on_graph_changed()
+
+
     def _create_object_for_pointer(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
-
-        def on_object_created(sender: str, new_object: HkbRecord, user_data: Any):
-            widget, _, attribute = self.selected_attribute
-            self._update_attribute(widget, new_object.object_id, attribute)
-
-            if self.on_graph_changed:
-                self.on_graph_changed()
 
         # Late import to avoid cyclic import
         from ..workflows.create_object import create_object_dialog
@@ -1134,7 +1165,7 @@ class AttributesWidget:
         create_object_dialog(
             self.tagfile,
             self.alias_manager,
-            on_object_created,
+            self._set_pointer_target,
             allowed_types=[attribute.subtype_id],
             include_derived_types=True,
             id_required=True,
