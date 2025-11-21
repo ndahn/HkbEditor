@@ -17,6 +17,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     time_range = 10
     max_events = 100
     num_rows = 10
+    event_idx = 0
     row_assignments = {}
     events = deque(maxlen=max_events)
     sock = None
@@ -25,7 +26,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     paused = False
 
     def socket_listener():
-        nonlocal sock
+        nonlocal sock, event_idx
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(0.1)
         sock.bind(("localhost", port))
@@ -35,20 +36,23 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
                 data, _ = sock.recvfrom(1024)
                 event = data.decode("utf-8").strip()
                 filter_value = dpg.get_value(f"{tag}_filter").strip()
-                
+
                 if not filter_value or (
                     filter_value in event
                     or re.match(filter_value, event, flags=re.IGNORECASE)
                 ):
                     print(f" ✦ {event}")
+
+                    if not dpg.get_value(f"{tag}_show_chr"):
+                        event = event.split(":", maxsplit=1)[-1]
+
                     row = row_assignments.setdefault(
                         event, (len(row_assignments) + 1) % num_rows
                     )
 
-                    if not dpg.get_value(f"{tag}_show_chr"):
-                        evt = event.split(":", maxsplit=1)[-1]
-
-                    events.append((plot_t, row, evt))
+                    eid = event_idx
+                    event_idx += 1
+                    events.append((eid, plot_t, row, event))
             except socket.timeout:
                 continue
             except Exception:
@@ -91,6 +95,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         r, g, b = colorsys.hsv_to_rgb(h / 360, 0.8, 0.9)
         return (int(r * 255), int(g * 255), int(b * 255), 255)
 
+    # TODO there is an occasional annoying flicker that I couldn't track down so far
     def render_events(sender: str, app_data: list):
         if paused:
             return
@@ -98,47 +103,68 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         transformed_x = app_data[1]
         transformed_y = app_data[2]
 
-        # Clear previous drawings
-        dpg.delete_item(sender, children_only=True, slot=2)
-        dpg.push_container_stack(sender)
+        # Draw visible events
+        visible = [
+            (eid, t, row, txt)
+            for eid, t, row, txt in events
+            if t >= plot_t - time_range * 2
+        ]
 
-        # Get visible events
-        visible = [(t, row, txt) for t, row, txt in events if t >= plot_t - time_range]
-        if not visible:
-            dpg.pop_container_stack()
-            return
+        for visible_idx, (eid, evt_time, _, evt_text) in enumerate(visible):
+            age = plot_t - evt_time
 
-        visible.sort()
+            if age > time_range * 2:
+                if dpg.does_item_exist(f"{tag}_{eid}_rect"):
+                    dpg.delete_item(f"{tag}_{eid}_rect")
+                    dpg.delete_item(f"{tag}_{eid}_text")
+                continue
 
-        # Draw events
-        for i, (evt_time, _, evt_text) in enumerate(visible):
-            if i >= len(transformed_x):
+            if visible_idx >= len(transformed_x):
                 break
 
-            x_pos = transformed_x[i]
-            y_pos = transformed_y[i]
+            x_pos = transformed_x[visible_idx]
+            y_pos = transformed_y[visible_idx]
 
             # Calculate fade based on age
-            age = plot_t - evt_time
-            alpha = max(0, min(255, int(255 * (1 - age / time_range))))
+            alpha = max(0, min(255, int(255 * (1 - age / (time_range * 2)))))
 
             color = get_event_color(evt_text)
             faded_color = (color[0], color[1], color[2], alpha)
-            "".encode
+
             # Draw event marker and text
             # Draw rectangle
             text_width, text_height = dpg.get_text_size(evt_text)
-            dpg.draw_rectangle(
-                (x_pos, y_pos - text_height / 2),
-                (x_pos + text_width + 16, y_pos + text_height / 2),
-                fill=faded_color,
-                color=faded_color,
-            )
-            text_color = (255, 255, 255, 255)
-            # text_color = (255, 255, 255, alpha)
-            dpg.draw_text((x_pos + 4, y_pos - 7), evt_text, size=14, color=text_color)
 
-        dpg.pop_container_stack()
+            if dpg.does_item_exist(f"{tag}_{eid}_rect"):
+                dpg.configure_item(
+                    f"{tag}_{eid}_rect",
+                    pmin=(x_pos, y_pos - text_height / 2 - 4),
+                    pmax=(x_pos + text_width + 20, y_pos + text_height / 2 + 4),
+                    fill=faded_color,
+                )
+                dpg.configure_item(
+                    f"{tag}_{eid}_text",
+                    pos=(x_pos + 4, y_pos - 7),
+                )
+            else:
+                dpg.push_container_stack(sender)
+                dpg.draw_rectangle(
+                    (x_pos, y_pos - text_height / 2 - 4),
+                    (x_pos + text_width + 20, y_pos + text_height / 2 + 4),
+                    fill=faded_color,
+                    color=faded_color,
+                    tag=f"{tag}_{eid}_rect",
+                )
+                text_color = (255, 255, 255, 255)
+                # text_color = (255, 255, 255, alpha)
+                dpg.draw_text(
+                    (x_pos + 4, y_pos - 7),
+                    evt_text,
+                    size=14,
+                    color=text_color,
+                    tag=f"{tag}_{eid}_text",
+                )
+                dpg.pop_container_stack()
 
     def update_plot():
         nonlocal plot_t
@@ -150,12 +176,15 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         dpg.set_axis_limits(f"{tag}_x_axis", plot_t - time_range, plot_t)
 
         # Update series data with visible events
-        visible = [(t, row, txt) for t, row, txt in events if t >= plot_t - time_range]
-        visible.sort()
+        visible = [
+            (eid, t, row, txt)
+            for eid, t, row, txt in events
+            if t >= plot_t - time_range * 2
+        ]
 
         if visible:
-            x_data = [t for t, _, _ in visible]
-            y_data = [r * 0.5 + 0.5 for _, r, _ in visible]
+            x_data = [t for _, t, _, _ in visible]
+            y_data = [r * 0.5 + 0.5 for _, _, r, _ in visible]
             dpg.set_value(f"{tag}_series", [x_data, y_data])
         else:
             dpg.set_value(f"{tag}_series", [[0], [0]])
@@ -224,7 +253,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
             dpg.add_checkbox(
                 label="Show chr",
                 default_value=False,
-                tag=f"{tag}_show_chr"
+                tag=f"{tag}_show_chr",
             )
             dpg.add_spacer(width=0)
             dpg.add_input_int(
