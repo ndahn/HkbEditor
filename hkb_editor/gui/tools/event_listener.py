@@ -3,6 +3,7 @@ from typing import Any
 import socket
 import threading
 import colorsys
+import re
 from dearpygui import dearpygui as dpg
 from collections import deque
 
@@ -17,7 +18,6 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     max_events = 100
     num_rows = 10
     row_assignments = {}
-    filter_value = ""
     events = deque(maxlen=max_events)
     sock = None
     listener_thread = None
@@ -33,26 +33,31 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         while running:
             try:
                 data, _ = sock.recvfrom(1024)
-                evt = data.decode("utf-8").strip()
-                if filter_value and filter_value not in evt.lower():
-                    continue
+                event = data.decode("utf-8").strip()
+                filter_value = dpg.get_value(f"{tag}_filter").strip()
+                
+                if not filter_value or (
+                    filter_value in event
+                    or re.match(filter_value, event, flags=re.IGNORECASE)
+                ):
+                    print(f" ✦ {event}")
+                    row = row_assignments.setdefault(
+                        event, (len(row_assignments) + 1) % num_rows
+                    )
 
-                print(f" ✦ {evt}")
-                row = row_assignments.setdefault(evt, (len(row_assignments) + 1) % num_rows)
-                events.append((plot_t, row, evt))
+                    if not dpg.get_value(f"{tag}_show_chr"):
+                        evt = event.split(":", maxsplit=1)[-1]
+
+                    events.append((plot_t, row, evt))
             except socket.timeout:
                 continue
             except Exception:
                 break
 
-    def on_filter_update(sender: str, filt: str, user_data: Any):
-        nonlocal filter_value
-        filter_value = filt.strip().lower()
-
     def toggle_playback(sender: str):
         nonlocal paused
         paused = not paused
-        label = "Play" if paused else "Pause"
+        label = "Play " if paused else "Pause"
         dpg.configure_item(sender, label=label)
 
     def clear_events():
@@ -166,7 +171,9 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
 
         # Workaround for https://github.com/hoffstadt/DearPyGui/issues/2427
         dpg.hide_item(dialog)
-        dpg.set_frame_callback(dpg.get_frame_count() + 1, lambda: dpg.delete_item(dialog))
+        dpg.set_frame_callback(
+            dpg.get_frame_count() + 1, lambda: dpg.delete_item(dialog)
+        )
 
     with dpg.window(
         min_size=(600, 400),
@@ -177,8 +184,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     ) as dialog:
         dpg.add_input_text(
             default_value="",
-            hint="Filter...",
-            callback=on_filter_update,
+            hint="Filter (regex)...",
             tag=f"{tag}_filter",
             no_undo_redo=True,
             width=-1,
@@ -215,6 +221,12 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
             dpg.add_button(label="Pause", callback=toggle_playback)
             dpg.add_button(label="Clear", callback=clear_events)
             dpg.add_text("|")
+            dpg.add_checkbox(
+                label="Show chr",
+                default_value=False,
+                tag=f"{tag}_show_chr"
+            )
+            dpg.add_spacer(width=0)
             dpg.add_input_int(
                 label="Range",
                 default_value=10,
@@ -234,7 +246,9 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
     # Plot updates
     if not dpg.does_item_exist(f"{tag}_handler"):
         with dpg.item_handler_registry(tag=f"{tag}_handler"):
-            dpg.add_item_visible_handler(callback=update_plot, tag=f"{tag}_visible_handler")
+            dpg.add_item_visible_handler(
+                callback=update_plot, tag=f"{tag}_visible_handler"
+            )
     dpg.bind_item_handler_registry(f"{tag}_plot", f"{tag}_handler")
 
     # Start listener

@@ -158,12 +158,13 @@ pub unsafe extern "system" fn DllMain(
                                 let lua_str_ptr = lua_getstring_fn(lua_state, 1, 0);
                                 let event_str =
                                     CStr::from_ptr(lua_str_ptr as *const i8).to_str().unwrap();
+                                let data_str = format!("{}:{}", character_id.unwrap(), event_str);
 
                                 if config.print {
-                                    println!("{}: {}", character_id.unwrap(), event_str);
+                                    println!("{}", data_str);
                                 }
 
-                                let _ = sock.send_to(event_str.as_bytes(), &remote);
+                                let _ = sock.send_to(data_str.as_bytes(), &remote);
                             }
                         }
                     }
