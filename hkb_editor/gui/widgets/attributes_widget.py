@@ -364,6 +364,11 @@ class AttributesWidget:
         self.widget_to_attribute[widget] = (attribute, path, is_simple)
         dpg.bind_item_handler_registry(widget, self.tag + "_item_handler_registry")
 
+        if is_simple:
+            bound_attributes = get_bound_attributes(self.tagfile, self.record)
+            bound_var_idx = bound_attributes.get(path, -1)
+            set_bindable_attribute_state(self.tagfile, widget, bound_var_idx)
+
     def _add_reference_attribute_text(
         self,
         label: str,
@@ -969,12 +974,9 @@ class AttributesWidget:
             else:
                 dpg.hide_item(self.tag + "_attribute_menu_extra")
 
-            set_bindable_attribute_state(self.tagfile, widget, bound_var_idx)
-
             dpg.show_item(self.tag + "_attribute_menu_cut")
             dpg.show_item(self.tag + "_attribute_menu_create_binding")
             dpg.show_item(self.tag + "_attribute_menu_clear_binding")
-
         else:
             dpg.hide_item(self.tag + "_attribute_menu_extra")
             dpg.hide_item(self.tag + "_attribute_menu_cut")
@@ -1015,6 +1017,7 @@ class AttributesWidget:
             dpg.hide_item(self.tag + "_attribute_menu_jump")
 
         # Fix position first time the window is opened
+        # TODO still off, but better than without
         if tuple(dpg.get_item_pos(self.tag + "_attribute_menu")) == (0, 0):
             mouse_pos = dpg.get_mouse_pos()
             dpg.set_item_pos(self.tag + "_attribute_menu", mouse_pos)
