@@ -31,32 +31,35 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         sock.settimeout(0.1)
         sock.bind(("localhost", port))
 
-        while running:
-            try:
-                data, _ = sock.recvfrom(1024)
-                event = data.decode("utf-8").strip()
-                filter_value = dpg.get_value(f"{tag}_filter").strip()
+        try:
+            while running:
+                try:
+                    data, _ = sock.recvfrom(1024)
+                    event = data.decode("utf-8").strip()
+                    filter_value = dpg.get_value(f"{tag}_filter").strip()
 
-                if not filter_value or (
-                    filter_value in event
-                    or re.match(filter_value, event, flags=re.IGNORECASE)
-                ):
-                    print(f" ✦ {event}")
+                    if not filter_value or (
+                        filter_value in event
+                        or re.match(filter_value, event, flags=re.IGNORECASE)
+                    ):
+                        print(f" ✦ {event}")
 
-                    if not dpg.get_value(f"{tag}_show_chr"):
-                        event = event.split(":", maxsplit=1)[-1]
+                        if not dpg.get_value(f"{tag}_show_chr"):
+                            event = event.split(":", maxsplit=1)[-1]
 
-                    row = row_assignments.setdefault(
-                        event, (len(row_assignments) + 1) % num_rows
-                    )
+                        row = row_assignments.setdefault(
+                            event, (len(row_assignments) + 1) % num_rows
+                        )
 
-                    eid = event_idx
-                    event_idx += 1
-                    events.append((eid, plot_t, row, event))
-            except socket.timeout:
-                continue
-            except Exception:
-                break
+                        eid = event_idx
+                        event_idx += 1
+                        events.append((eid, plot_t, row, event))
+                except socket.timeout:
+                    continue
+                except Exception:
+                    break
+        finally:
+            sock.close()
 
     def toggle_playback(sender: str):
         nonlocal paused
@@ -69,6 +72,8 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         events.clear()
         row_assignments.clear()
         plot_t = 0.0
+
+        dpg.delete_item(f"{tag}_series", children_only=True, slot=2)
 
     def update_port(sender: str, new_port: int, user_data: Any):
         nonlocal port, listener_thread, running
@@ -97,8 +102,28 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
 
     # TODO there is an occasional annoying flicker that I couldn't track down so far
     def render_events(sender: str, app_data: list):
+        nonlocal plot_t
+        plot_t += dpg.get_delta_time()
+
         if paused:
             return
+
+        # Scroll the plot
+        dpg.set_axis_limits(f"{tag}_x_axis", plot_t - time_range, plot_t)
+
+        # Update series data with visible events
+        visible = [
+            (eid, t, row, txt)
+            for eid, t, row, txt in events
+            if t >= plot_t - time_range * 2
+        ]
+
+        if visible:
+            x_data = [t for _, t, _, _ in visible]
+            y_data = [r * 0.5 + 0.5 for _, _, r, _ in visible]
+            dpg.set_value(f"{tag}_series", [x_data, y_data])
+        else:
+            dpg.set_value(f"{tag}_series", [[0], [0]])
 
         transformed_x = app_data[1]
         transformed_y = app_data[2]
@@ -166,29 +191,6 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
                 )
                 dpg.pop_container_stack()
 
-    def update_plot():
-        nonlocal plot_t
-        plot_t += dpg.get_delta_time()
-
-        if paused:
-            return
-
-        dpg.set_axis_limits(f"{tag}_x_axis", plot_t - time_range, plot_t)
-
-        # Update series data with visible events
-        visible = [
-            (eid, t, row, txt)
-            for eid, t, row, txt in events
-            if t >= plot_t - time_range * 2
-        ]
-
-        if visible:
-            x_data = [t for _, t, _, _ in visible]
-            y_data = [r * 0.5 + 0.5 for _, _, r, _ in visible]
-            dpg.set_value(f"{tag}_series", [x_data, y_data])
-        else:
-            dpg.set_value(f"{tag}_series", [[0], [0]])
-
     def close():
         nonlocal running
         running = False
@@ -199,9 +201,9 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
             sock.close()
 
         # Workaround for https://github.com/hoffstadt/DearPyGui/issues/2427
-        dpg.hide_item(dialog)
+        dpg.hide_item(tag)
         dpg.set_frame_callback(
-            dpg.get_frame_count() + 1, lambda: dpg.delete_item(dialog)
+            dpg.get_frame_count() + 1, lambda: dpg.delete_item(tag)
         )
 
     with dpg.window(
@@ -210,7 +212,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         no_saved_settings=True,
         on_close=close,
         tag=tag,
-    ) as dialog:
+    ):
         dpg.add_input_text(
             default_value="",
             hint="Filter (regex)...",
@@ -271,14 +273,6 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
                 callback=update_port,
                 width=100,
             )
-
-    # Plot updates
-    if not dpg.does_item_exist(f"{tag}_handler"):
-        with dpg.item_handler_registry(tag=f"{tag}_handler"):
-            dpg.add_item_visible_handler(
-                callback=update_plot, tag=f"{tag}_visible_handler"
-            )
-    dpg.bind_item_handler_registry(f"{tag}_plot", f"{tag}_handler")
 
     # Start listener
     listener_thread = threading.Thread(target=socket_listener, daemon=True)

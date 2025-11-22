@@ -26,6 +26,7 @@ def find_dialog(
     on_filter_help_click: Callable[[], None] = None,
     on_result_callback: Callable[[list[Any]], None] = None,
     modal: bool = False,
+    hide_on_close: bool = True,
     tag: str = 0,
     user_data: Any = None,
 ) -> str:
@@ -126,11 +127,11 @@ def find_dialog(
             return
 
         okay_callback(dialog, selected_item, user_data)
-        dpg.delete_item(dialog)
+        on_window_close()
 
     def on_clear():
         okay_callback(dialog, None, user_data)
-        dpg.delete_item(dialog)
+        on_window_close()
 
     if context_menu_func:
 
@@ -149,9 +150,12 @@ def find_dialog(
             )
 
     def on_window_close():
-        dpg.delete_item(dialog)
-        if context_menu_func:
-            dpg.delete_item(right_click_handler)
+        if hide_on_close:
+            dpg.hide_item(dialog)
+        else:
+            dpg.delete_item(dialog)
+            if context_menu_func:
+                dpg.delete_item(right_click_handler)
 
     # Window content
     with dpg.window(

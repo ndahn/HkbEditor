@@ -113,10 +113,11 @@ def edit_simple_array_dialog(
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
 
         if filt:
+            filt = filt.lower()
             matches = [
                 (idx, item)
                 for idx, item in enumerate(items)
-                if filt in str(idx) or filt in str(item)
+                if filt in str(idx) or filt in str(item).lower()
             ]
         else:
             matches = [(idx, item) for idx, item in enumerate(items)]

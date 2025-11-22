@@ -1535,7 +1535,7 @@ class BehaviorEditor(BaseEditor):
         )
 
     def open_eventlistener_dialog(self):
-        tag = f"{self.tag}_state_graph_dialog"
+        tag = f"{self.tag}_event_listener_dialog"
         if dpg.does_item_exist(tag):
             dpg.show_item(tag)
             dpg.focus_item(tag)
