@@ -1122,7 +1122,7 @@ class BehaviorEditor(BaseEditor):
         if not record:
             return
 
-        root_graph = self.beh.root_graph
+        root_graph = self.beh.root_graph()
         node_graph = self.beh.build_graph(node.id)
 
         delete_list: list[str] = []

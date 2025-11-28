@@ -52,9 +52,6 @@ class Tagfile:
         self.behavior_root: HkbRecord = self.find_first_by_type_name(
             "hkRootLevelContainer"
         )
-        # For the ER behavior this takes about 300ms to construct and increases our
-        # memory footprint by 22kB, so the tradeoff seems worth it
-        self.root_graph = self.build_graph(self.behavior_root.object_id)
 
     def save_to_file(self, file_path: str) -> None:
         # Add comments on the copy. We don't want to keep these as they can mess up
@@ -65,6 +62,11 @@ class Tagfile:
         tmp.write(file_path)
 
         self.file = file_path
+
+    def root_graph(self):
+        # Caching this would be nice, but then we'd have to update it anytime there are 
+        # changes to the graph
+        return self.build_graph(self.behavior_root.object_id)
 
     def build_graph(self, root_id: str):
         g = nx.DiGraph()
@@ -150,7 +152,7 @@ class Tagfile:
         from .hkb_types import HkbPointer
 
         root_paths = nx.all_shortest_paths(
-            self.root_graph, self.behavior_root.object_id, target_id
+            self.root_graph(), self.behavior_root.object_id, target_id
         )
 
         for path in root_paths:
