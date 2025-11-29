@@ -118,6 +118,11 @@ unsafe extern "C" fn send_string_lua(lua_state: usize) -> i32 {
             if let Ok(message) = CStr::from_ptr(lua_str_ptr).to_str() {
                 let remote = format!("127.0.0.1:{}", context.config.port);
                 let text = format!("debug:{}", message);
+
+                if context.config.print {
+                    println!("debug:{}", text);
+                }
+
                 let _ = context.sock.send_to(text.as_bytes(), &remote);
             }
         }
