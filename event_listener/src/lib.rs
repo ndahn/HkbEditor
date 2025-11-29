@@ -120,7 +120,7 @@ unsafe extern "C" fn send_string_lua(lua_state: usize) -> i32 {
                 let text = format!("debug:{}", message);
 
                 if context.config.print {
-                    println!("debug:{}", text);
+                    println!("{}", text);
                 }
 
                 let _ = context.sock.send_to(text.as_bytes(), &remote);
