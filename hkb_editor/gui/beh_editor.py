@@ -1417,7 +1417,7 @@ class BehaviorEditor(BaseEditor):
             {"Name": str, "Type": VariableType, "Min": int, "Max": int, "Default": str},
             title="Edit Variables",
             help="""\
-                NOTE that variables are referenced by their index in bindings and TAE. Deleting or inserting names may invalidate your behavior!
+                NOTE that variables are referenced by their index in bindings and TAE. HkbEditor will adjust references in common record types, but may miss newer or more obscure ones.
                 
                 Remember to run "File/Update name ID Files" after adding new entries!
                 """,
@@ -1476,7 +1476,7 @@ class BehaviorEditor(BaseEditor):
             {"Name": str},
             title="Edit Events",
             help="""\
-                NOTE that events are referenced by their index in TransitionInfos and other nodes. Deleting or inserting names may invalidate your behavior.
+                NOTE that events are referenced by their index in TransitionInfos and other nodes. HkbEditor will adjust references in common record types, but may miss newer or more obscure ones.
                 
                 Remember to run "File/Update name ID Files" after adding new entries!
                 """,
@@ -1535,7 +1535,7 @@ class BehaviorEditor(BaseEditor):
             {"Name": str},
             title="Edit Animation Names",
             help="""\
-                NOTE that events are referenced by their index in ClipGenerators. Deleting or inserting names may invalidate your behavior.
+                NOTE that events are referenced by their index in ClipGenerators. HkbEditor will adjust references in common record types, but may miss newer or more obscure ones.
                 """,
             on_add=on_add,
             on_update=on_update,
