@@ -149,7 +149,7 @@ def edit_simple_array_dialog(
             dpg.set_value(f"{tag}_total", f"({len(matches)} matches)")
 
         for item_idx, item in matches:
-            if filt != dpg.get_value(sender):
+            if filt != dpg.get_value(sender).lower():
                 # Crude attempt to return early
                 break
 
