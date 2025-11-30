@@ -94,6 +94,7 @@ def fix_index_references(
     new_idx : int
         The new index of the modified array value. Set to None if an item at prev_idx was deleted.
     """
+
     def get_adjusted_index(idx):
         if idx < 0:
             return idx

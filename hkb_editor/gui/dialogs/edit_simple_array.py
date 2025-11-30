@@ -1,10 +1,26 @@
 from typing import Any, Callable, Type
 import logging
+import re
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.gui.helpers import center_window, create_simple_value_widget, table_sort, add_paragraphs, get_paragraph_height
+from hkb_editor.gui.helpers import (
+    center_window,
+    create_simple_value_widget,
+    table_sort,
+    add_paragraphs,
+    get_paragraph_height,
+)
 from hkb_editor.gui import style
 from .make_tuple import new_tuple_dialog
+
+
+search_help_text = """\
+By default this will filter the items by simple string match.
+
+For more advanced searches you may combine several filters separated by commas (,). These filters will be applied in the order they are specified.
+
+To only search specific index ranges you may use the ">X" or "<X" filters, where X is a number.
+"""
 
 
 def edit_simple_array_dialog(
@@ -123,6 +139,30 @@ def edit_simple_array_dialog(
         # TODO can use this to show where items are referenced
         print("TODO not implemented yet")
 
+    def is_match(filt: str, idx: int, item: Any):
+        filt = filt.strip().lower()
+        if re.match(r"[<>][0-9]+", filt):
+            num = int(filt[1:])
+            if filt[0] == "<" and idx < num:
+                return True
+            elif filt[0] == ">" and idx > num:
+                return True
+        else:
+            return filt in str(idx) or filt in str(item).lower()
+
+    def get_matching_items(filt: str):
+        if not filt:
+            return [(idx, item) for idx, item in enumerate(items)]
+
+        filt_parts = filt.lower().split(",")
+        matches = list(enumerate(items))
+        for part in filt_parts:
+            matches = [
+                (idx, item) for idx, item in matches if is_match(part, idx, item)
+            ]
+
+        return matches
+
     def fill_table(sender: str = None, filt: str = None, user_data: Any = None):
         if sender is None:
             sender = f"{tag}_filter"
@@ -132,16 +172,7 @@ def edit_simple_array_dialog(
 
         dpg.delete_item(f"{tag}_table", slot=1, children_only=True)
 
-        if filt:
-            filt = filt.lower()
-            matches = [
-                (idx, item)
-                for idx, item in enumerate(items)
-                if filt in str(idx) or filt in str(item).lower()
-            ]
-        else:
-            matches = [(idx, item) for idx, item in enumerate(items)]
-
+        matches = get_matching_items(filt)
         if len(matches) > item_limit:
             dpg.set_value(f"{tag}_total", f"(showing {item_limit}/{len(matches)})")
             matches = matches[:item_limit]
@@ -149,7 +180,7 @@ def edit_simple_array_dialog(
             dpg.set_value(f"{tag}_total", f"({len(matches)} matches)")
 
         for item_idx, item in matches:
-            if filt != dpg.get_value(sender).lower():
+            if filt != dpg.get_value(sender):
                 # Crude attempt to return early
                 break
 
@@ -212,7 +243,7 @@ def edit_simple_array_dialog(
         height=460,
         label=title,
         on_close=close_dialog,
-        #autosize=True,
+        # autosize=True,
         no_saved_settings=True,
         tag=tag,
     ) as dialog:
@@ -222,6 +253,11 @@ def edit_simple_array_dialog(
                 callback=fill_table,
                 tag=f"{tag}_filter",
             )
+
+            dpg.add_button(label="?")
+            with dpg.tooltip(dpg.last_item()):
+                add_paragraphs(search_help_text, 70, color=style.yellow)
+            
             dpg.add_text("", tag=f"{tag}_total")
 
         with dpg.table(
@@ -230,7 +266,7 @@ def edit_simple_array_dialog(
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,
             width=-1,
-            #height=-help_text_height,  # set later
+            # height=-help_text_height,  # set later
             borders_outerH=True,
             sortable=True,
             # sort_tristate=True,
@@ -263,7 +299,7 @@ def edit_simple_array_dialog(
         if help:
             dpg.add_separator()
             par = add_paragraphs(help, 90, color=style.light_blue)
-            
+
     dpg.focus_item(f"{tag}_filter")
     fill_table(f"{tag}_filter", "", None)
 
@@ -272,7 +308,7 @@ def edit_simple_array_dialog(
     table_h = 25
     if help:
         table_h += get_paragraph_height(par)
-    
+
     # Round to nearest 10
     table_h = max(10, int(round(table_h / 10)) * 10)
     dpg.configure_item(f"{tag}_table", height=-table_h)
