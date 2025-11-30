@@ -22,6 +22,12 @@ from hkb_editor.hkb.hkb_types import (
 from hkb_editor.hkb.skeleton import load_skeleton_bones
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.xml import xml_from_str
+from hkb_editor.hkb.index_attributes import (
+    event_attributes,
+    variable_attributes,
+    animation_attributes,
+    fix_index_references,
+)
 from hkb_editor.templates.glue import get_templates
 
 from hkb_editor.external import (
@@ -1351,14 +1357,9 @@ class BehaviorEditor(BaseEditor):
             return
 
         def on_add(idx: int, new_value: list):
-            if self.beh.find_variable(new_value[0], None):
-                self.logger.warning(
+            if self.beh.find_variable(new_value[0], None) is not None:
+                raise ValueError(
                     "A variable named '%s' already exists (%d)", new_value[0], idx
-                )
-
-            if idx not in (-1, len(self.beh._variables)):
-                self.logger.warning(
-                    f"Inserting variable {new_value[0]} at index {idx} will affect all references to variables {idx + 1} and beyond"
                 )
 
             try:
@@ -1372,6 +1373,10 @@ class BehaviorEditor(BaseEditor):
 
             # Update new_value from the created variable
             new_value[:] = self.beh.get_variable(idx).astuple()
+
+            if idx not in (-1, len(self.beh._variables) - 1):
+                self.logger.info("Fixing affected references of known variable attributes")
+                fix_index_references(self.beh, variable_attributes, None, idx)
 
         def on_update(
             idx: int,
@@ -1392,9 +1397,17 @@ class BehaviorEditor(BaseEditor):
         def on_delete(idx: int):
             undo_manager.on_delete_variable(self.beh, idx)
             self.beh.delete_variable(idx)
-            self.logger.warning(
-                "Deleting a variable may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!"
-            )
+            if idx not in (-1, len(self.beh._variables) + 1):
+                self.logger.info("Fixing affected references of known variable attributes")
+                fix_index_references(self.beh, variable_attributes, idx, None)
+
+        def on_move(idx: int, new_idx: int):
+            with undo_manager.combine():
+                undo_manager.on_move_variable(self.beh, idx, new_idx)
+
+            self.beh.move_variable(idx, new_idx)
+            self.logger.info("Fixing affected references of known variable attributes")
+            fix_index_references(self.beh, variable_attributes, idx, new_idx)
 
         edit_simple_array_dialog(
             [
@@ -1411,6 +1424,7 @@ class BehaviorEditor(BaseEditor):
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
+            on_move=on_move,
             tag=tag,
         )
 
@@ -1423,18 +1437,16 @@ class BehaviorEditor(BaseEditor):
 
         def on_add(idx: int, new_value: list):
             new_value = new_value[0]
-            if self.beh.find_event(new_value, None):
-                self.logger.warning(
+            if self.beh.find_event(new_value, None) is not None:
+                raise ValueError(
                     "An event named '%s' already exists (%d)", new_value, idx
-                )
-
-            if idx not in (-1, len(self.beh._events)):
-                self.logger.warning(
-                    f"Inserting event {new_value[0]} at index {idx} will affect all references to events {idx + 1} and beyond"
                 )
 
             self.beh.create_event(new_value, idx)
             undo_manager.on_create_event(self.beh, new_value, idx)
+            if idx not in (-1, len(self.beh._events) - 1):
+                self.logger.info("Fixing affected references of known event attributes")
+                fix_index_references(self.beh, event_attributes, None, idx)
 
         def on_update(idx: int, old_value: tuple[str], new_value: list):
             old_value = old_value[0]
@@ -1445,11 +1457,19 @@ class BehaviorEditor(BaseEditor):
             undo_manager.on_update_event(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            self.beh.delete_event(idx)
             undo_manager.on_delete_event(self.beh, idx)
-            self.logger.warning(
-                "Deleting an event may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!"
-            )
+            self.beh.delete_event(idx)
+            if idx not in (-1, len(self.beh._events) + 1):
+                self.logger.info("Fixing affected references of known event attributes")
+                fix_index_references(self.beh, event_attributes, idx, None)
+
+        def on_move(idx: int, new_idx: int):
+            with undo_manager.combine():
+                undo_manager.on_move_event(self.beh, idx, new_idx)
+
+            self.beh.move_event(idx, new_idx)
+            self.logger.info("Fixing affected references of known event attributes")
+            fix_index_references(self.beh, event_attributes, idx, new_idx)
 
         edit_simple_array_dialog(
             [(e,) for e in self.beh.get_events()],
@@ -1463,6 +1483,7 @@ class BehaviorEditor(BaseEditor):
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
+            on_move=on_move,
             tag=tag,
         )
 
@@ -1475,18 +1496,16 @@ class BehaviorEditor(BaseEditor):
 
         def on_add(idx: int, new_value: list):
             new_value = new_value[0]
-            if self.beh.find_animation(new_value, None):
-                self.logger.warning(
+            if self.beh.find_animation(new_value, None) is not None:
+                raise ValueError(
                     "An animation named '%s' already exists (%d)", new_value, idx
-                )
-
-            if idx not in (-1, len(self.beh._animations)):
-                self.logger.warning(
-                    f"Inserting animation {new_value[0]} at index {idx} will affect all references to animations {idx + 1} and beyond"
                 )
 
             self.beh.create_animation(new_value, idx)
             undo_manager.on_create_animation(self.beh, new_value, idx)
+            if idx not in (-1, len(self.beh._animations) - 1):
+                self.logger.info("Fixing affected references of known animation attributes")
+                fix_index_references(self.beh, animation_attributes, None, idx)
 
         def on_update(idx: int, old_value: tuple[str], new_value: list):
             old_value = old_value[0]
@@ -1497,11 +1516,19 @@ class BehaviorEditor(BaseEditor):
             undo_manager.on_update_animation(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            self.beh.delete_animation(idx)
             undo_manager.on_delete_animation(self.beh, idx)
-            self.logger.warning(
-                "Deleting an animation may lead to invalid behavior. Use 'workflows -> Verify Behavior' to check for problems!"
-            )
+            self.beh.delete_animation(idx)
+            if idx not in (-1, len(self.beh._animations) + 1):
+                self.logger.info("Fixing affected references of known animation attributes")
+                fix_index_references(self.beh, animation_attributes, idx, None)
+
+        def on_move(idx: int, new_idx: int):
+            with undo_manager.combine():
+                undo_manager.on_move_animation(self.beh, idx, new_idx)
+
+            self.beh.move_animation(idx, new_idx)
+            self.logger.info("Fixing affected references of known animation attributes")
+            fix_index_references(self.beh, animation_attributes, idx, new_idx)
 
         edit_simple_array_dialog(
             [(a,) for a in self.beh.get_animations()],
@@ -1513,6 +1540,7 @@ class BehaviorEditor(BaseEditor):
             on_add=on_add,
             on_update=on_update,
             on_delete=on_delete,
+            on_move=on_move,
             tag=tag,
         )
 

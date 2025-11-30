@@ -627,11 +627,15 @@ class GraphWidget:
 
         self.regenerate()
 
-    def reveal_all_nodes(self) -> None:
+    def reveal_all_nodes(self, max_depth: int = -1) -> None:
+        if max_depth == 0:
+            return
+
         for n in self.graph.nodes:
             node = self.nodes[n]
-            node.visible = True
-            node.unfolded = True
+            if max_depth < 0 or node.level < max_depth:
+                node.visible = True
+                node.unfolded = True
 
         self.regenerate()
 

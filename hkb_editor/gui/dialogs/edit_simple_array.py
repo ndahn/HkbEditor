@@ -15,9 +15,9 @@ def edit_simple_array_dialog(
     help: str = None,
     choices: dict[int, list[str | tuple[str, Any]]] = None,
     on_add: Callable[[int, list], bool] = None,
-    on_update: Callable[[int, tuple, list], bool] = None,
-    on_delete: Callable[[int], bool] = None,
-    final_only: bool = True,
+    on_update: Callable[[int, tuple, list], None] = None,
+    on_delete: Callable[[int], None] = None,
+    on_move: Callable[[int, int], None] = None,
     on_close: Callable[[str, list[str], Any], None] = None,
     get_item_hint: Callable[[int], list[str]] = None,
     item_limit: int = None,
@@ -61,6 +61,31 @@ def edit_simple_array_dialog(
         # input_box = dpg.get_item_children(row, slot=1)[1]
         # dpg.focus_item(input_box)
 
+    def move_entry(sender: str, app_data: Any, move: tuple[int, int]):
+        idx, offset = move
+        new_idx = idx + offset
+
+        if not 0 <= new_idx < len(items):
+            return
+
+        # May raise as a veto
+        if on_move:
+            on_move(idx, new_idx)
+
+        items[new_idx], items[idx] = items[idx], items[new_idx]
+        fill_table()
+
+    def delete_entry(sender: str, app_data: Any, index: int):
+        if index is None:
+            index = len(items) - 1
+
+        # May raise as a veto
+        if on_delete:
+            on_delete(index)
+
+        del items[index]
+        fill_table()
+
     def update_entry(sender, new_value: Any, user_data: tuple[int, int]):
         item_idx, val_idx = user_data
 
@@ -88,16 +113,11 @@ def edit_simple_array_dialog(
 
         items[item_idx] = tuple(new_item)
 
-    def delete_entry(sender: str, app_data: Any, index: int):
-        if index is None:
-            index = len(items) - 1
-
-        # May raise as a veto
-        if on_delete:
-            on_delete(index)
-
-        del items[index]
-        fill_table()
+    def toggle_advanced(sender: str, enabled: bool, user_data: Any):
+        if enabled:
+            dpg.enable_item(f"{tag}_column_advanced")
+        else:
+            dpg.disable_item(f"{tag}_column_advanced")
 
     def show_item_hint(sender: str, app_data: Any, index: int):
         # TODO can use this to show where items are referenced
@@ -147,29 +167,37 @@ def edit_simple_array_dialog(
                         width=-1,
                     )
 
-                if not final_only or get_item_hint:
-                    with dpg.group(horizontal=True, horizontal_spacing=2):
-                        if not final_only:
-                            dpg.add_button(
-                                label="(-)",
-                                small=True,
-                                callback=delete_entry,
-                                user_data=item_idx,
-                            )
-                            dpg.add_button(
-                                label="(+)",
-                                small=True,
-                                callback=new_entry_dialog,
-                                user_data=item_idx + 1,
-                            )
+                with dpg.group(horizontal=True, horizontal_spacing=2):
+                    dpg.add_button(
+                        label="+",
+                        callback=new_entry_dialog,
+                        user_data=item_idx + 1,
+                    )
+                    dpg.add_button(
+                        arrow=True,
+                        direction=dpg.mvDir_Down,
+                        callback=move_entry,
+                        user_data=(item_idx, 1),
+                    )
+                    dpg.add_button(
+                        arrow=True,
+                        direction=dpg.mvDir_Up,
+                        callback=move_entry,
+                        user_data=(item_idx, -1),
+                    )
+                    dpg.add_button(
+                        label="-",
+                        callback=delete_entry,
+                        user_data=item_idx,
+                    )
 
-                        if get_item_hint:
-                            dpg.add_button(
-                                label="(?)",
-                                small=True,
-                                callback=show_item_hint,
-                                user_data=item_idx,
-                            )
+                    if get_item_hint:
+                        dpg.add_button(
+                            label="(?)",
+                            small=True,
+                            callback=show_item_hint,
+                            user_data=item_idx,
+                        )
 
     def close_dialog():
         if on_close:
@@ -213,20 +241,24 @@ def edit_simple_array_dialog(
             dpg.add_table_column(label="Index")
             for col in columns.keys():
                 dpg.add_table_column(label=col, width_stretch=True)
-            dpg.add_table_column()
+            dpg.add_table_column(tag=f"{tag}_column_advanced", enabled=False)
 
-        if final_only:
-            with dpg.group(horizontal=True):
-                dpg.add_button(
-                    label="Add New",
-                    callback=new_entry_dialog,
-                    user_data=None,
-                )
-                dpg.add_button(
-                    label="Delete Last",
-                    callback=delete_entry,
-                    user_data=None,
-                )
+        with dpg.group(horizontal=True, show=True):
+            dpg.add_button(
+                label="Add New",
+                callback=new_entry_dialog,
+            )
+            dpg.add_button(
+                label="Delete Last",
+                callback=delete_entry,
+            )
+            # Vertical separator :)
+            dpg.add_text("|")
+            dpg.add_checkbox(
+                label="Advanced",
+                default_value=False,
+                callback=toggle_advanced,
+            )
 
         if help:
             dpg.add_separator()

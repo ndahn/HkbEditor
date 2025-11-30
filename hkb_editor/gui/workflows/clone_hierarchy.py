@@ -1155,7 +1155,7 @@ def open_merge_hierarchy_dialog(
                     )
 
                     # Reveal everything when first showing
-                    graph_preview.reveal_all_nodes()
+                    graph_preview.reveal_all_nodes(3)
                     dpg.split_frame()  # wait for dimensions to be known
                     graph_preview.zoom_show_all()
 
@@ -1164,7 +1164,7 @@ def open_merge_hierarchy_dialog(
 
                 # Events
                 with dpg.group():
-                    with dpg.tree_node(label="Events", default_open=True):
+                    with dpg.tree_node(label=f"Events ({len(results.events)})"):
                         with dpg.table(
                             header_row=False,
                             policy=dpg.mvTable_SizingFixedFit,
@@ -1211,7 +1211,7 @@ def open_merge_hierarchy_dialog(
                     dpg.add_spacer(height=10)
 
                     # Variables
-                    with dpg.tree_node(label="Variables", default_open=True):
+                    with dpg.tree_node(label=f"Variables ({len(results.variables)})"):
                         with dpg.table(
                             header_row=False,
                             policy=dpg.mvTable_SizingFixedFit,
@@ -1258,7 +1258,7 @@ def open_merge_hierarchy_dialog(
                     dpg.add_spacer(height=10)
 
                     # Animations
-                    with dpg.tree_node(label="Animations", default_open=True):
+                    with dpg.tree_node(label=f"Animations ({len(results.animations)})"):
                         with dpg.table(
                             header_row=False,
                             policy=dpg.mvTable_SizingFixedFit,
@@ -1305,7 +1305,7 @@ def open_merge_hierarchy_dialog(
                     dpg.add_spacer(height=10)
 
                     # Types
-                    with dpg.tree_node(label="Types", default_open=True):
+                    with dpg.tree_node(label=f"Types ({len(results.type_map)})"):
                         with dpg.table(
                             header_row=False,
                             policy=dpg.mvTable_SizingFixedFit,
@@ -1342,7 +1342,7 @@ def open_merge_hierarchy_dialog(
                     dpg.add_spacer(height=10)
 
                     # Objects
-                    with dpg.tree_node(label="Objects", default_open=True):
+                    with dpg.tree_node(label=f"Objects ({len(results.objects)})"):
                         with dpg.table(
                             header_row=False,
                             policy=dpg.mvTable_SizingFixedFit,

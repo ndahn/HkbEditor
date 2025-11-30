@@ -280,8 +280,20 @@ class UndoManager:
     ) -> None:
         old_value = behavior.get_variable(idx).astuple()
         undo_manager.on_complex_action(
-            lambda i=idx: behavior.delete_variable(i),
             lambda i=idx, v=old_value: behavior.create_variable(*v, i),
+            lambda i=idx: behavior.delete_variable(i),
+        )
+
+    @skip_if_guarded
+    def on_move_variable(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+        new_idx: int,
+    ) -> None:
+        undo_manager.on_complex_action(
+            lambda i=idx, j=new_idx: behavior.move_variable(j, i),
+            lambda i=idx, j=new_idx: behavior.move_variable(i, j),
         )
 
     @skip_if_guarded
@@ -314,8 +326,20 @@ class UndoManager:
     ) -> None:
         old_value = behavior.get_event(idx)
         undo_manager.on_complex_action(
-            lambda i=idx: behavior.delete_event(i),
             lambda i=idx, v=old_value: behavior.create_event(v, i),
+            lambda i=idx: behavior.delete_event(i),
+        )
+
+    @skip_if_guarded
+    def on_move_event(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+        new_idx: int,
+    ) -> None:
+        undo_manager.on_complex_action(
+            lambda i=idx, j=new_idx: behavior.move_event(j, i),
+            lambda i=idx, j=new_idx: behavior.move_event(i, j),
         )
 
     @skip_if_guarded
@@ -348,8 +372,20 @@ class UndoManager:
     ) -> None:
         old_value = behavior.get_animation(idx)
         undo_manager.on_complex_action(
-            lambda i=idx: behavior.delete_animation(i),
             lambda i=idx, v=old_value: behavior.create_animation(v, i),
+            lambda i=idx: behavior.delete_animation(i),
+        )
+
+    @skip_if_guarded
+    def on_move_animation(
+        self,
+        behavior: HavokBehavior,
+        idx: int,
+        new_idx: int,
+    ) -> None:
+        undo_manager.on_complex_action(
+            lambda i=idx, j=new_idx: behavior.move_animation(j, i),
+            lambda i=idx, j=new_idx: behavior.move_animation(i, j),
         )
 
     @contextmanager

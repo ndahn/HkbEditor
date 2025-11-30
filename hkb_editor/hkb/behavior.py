@@ -132,6 +132,13 @@ class HavokBehavior(Tagfile):
         del self._event_infos[idx]
         del self._events[idx]
 
+    def move_event(self, idx: int, new_idx: int) -> None:
+        event = self._events.pop(idx)
+        infos = self._event_infos.pop(idx)
+
+        self._events.insert(new_idx, event)
+        self._event_infos.insert(new_idx, infos)
+
     # HKS variables
     def create_variable(
         self,
@@ -456,6 +463,17 @@ class HavokBehavior(Tagfile):
 
         self._cleanup_variable_defaults()
 
+    def move_variable(self, idx: int, new_idx: int) -> None:
+        var = self._variables.pop(idx)
+        bounds = self._variable_bounds.pop(idx)
+        infos = self._variable_infos.pop(idx)
+        defaults = self._variable_defaults["wordVariableValues"].pop(idx)
+
+        self._variables.insert(new_idx, var)
+        self._variable_bounds.insert(new_idx, bounds)
+        self._variable_infos.insert(new_idx, infos)
+        self._variable_defaults["wordVariableValues"].insert(new_idx, defaults)
+
     def _cleanup_variable_defaults(self) -> None:
         words: HkbArray[HkbRecord] = self._variable_defaults["wordVariableValues"]
 
@@ -564,3 +582,7 @@ class HavokBehavior(Tagfile):
 
     def delete_animation(self, idx: int) -> None:
         del self._animations[idx]
+
+    def move_animation(self, idx: int, new_idx: int) -> None:
+        anim = self._animations.pop(idx)
+        self._animations.insert(new_idx, anim)

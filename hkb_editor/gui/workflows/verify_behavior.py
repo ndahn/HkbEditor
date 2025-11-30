@@ -1,4 +1,6 @@
 import logging
+import re
+from pathlib import Path
 import networkx as nx
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray, HkbPointer
@@ -7,6 +9,7 @@ from hkb_editor.hkb.index_attributes import (
     variable_attributes,
     animation_attributes,
 )
+from .update_name_ids import get_nameidfile_folder
 
 
 def _safe_pointer_get(ptr: HkbPointer) -> HkbRecord:
@@ -139,6 +142,69 @@ def check_graph(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
             logger.warning(f"- {cycle}")
 
 
+def check_nameid_files(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
+    logger = root_logger.getChild("nameidfiles")
+    path = get_nameidfile_folder(behavior)
+
+    if not path:
+        logger.warning("Could not get folder of name ID files")
+        return
+
+    def check_nameidfile_contents(file_path: Path, values: list[str]):
+        line_pattern = re.compile(r"([0-9]+)\s*=\s*\"(.+)\"")
+        registered = set()
+        expected = 0
+
+        # Read the file contents
+        with file_path.open(errors="ignore") as f:
+            for line in f.readlines():
+                line = line.strip()
+
+                if line.startswith("\x00"):
+                    break
+
+                if line.startswith("Num "):
+                    expected = int(line.split("=")[-1])
+                    continue
+
+                match = re.match(line_pattern, line)
+                if match:
+                    # idx = int(match.group(1))
+                    name = match.group(2)
+                    registered.add(name)
+
+        if len(registered) != expected:
+            logger.error(f"{file_path.name} has wrong number of entries: expected {expected}, but found {len(registered)}")
+
+        # Are all our values contained?
+        if not registered.issuperset(values):
+            logger.error(f"{file_path.name} is missing entries, please run File -> Update name ID files")
+
+    stateids_file = path / "statenameid.txt"
+    if stateids_file.is_file():
+        statenames = [
+            obj["name"].get_value()
+            for obj in behavior.query("type_name='hkbStateMachine::StateInfo'")
+        ]
+        check_nameidfile_contents(stateids_file, statenames)
+    else:
+        logger.error(f"{stateids_file} not found, please copy it from the game folder")
+
+    eventids_file = path / "eventnameid.txt"
+    if eventids_file.is_file():
+        eventnames = behavior.get_events()
+        check_nameidfile_contents(eventids_file, eventnames)
+    else:
+        logger.error(f"{eventids_file} not found, please copy it from the game folder")
+
+    variableids_file = path / "variablenameid.txt"
+    if variableids_file.is_file():
+        variablenames = behavior.get_variables()
+        check_nameidfile_contents(variableids_file, variablenames)
+    else:
+        logger.error(f"{variableids_file} not found, please copy it from the game folder")
+
+
 def verify_behavior(behavior: HavokBehavior) -> None:
     logger = logging.getLogger("verify")
     
@@ -152,4 +218,7 @@ def verify_behavior(behavior: HavokBehavior) -> None:
     check_attributes(behavior, logger)
 
     logger.info("-> checking graph structure...")
+    check_graph(behavior, logger)
+
+    logger.info("-> checking name ID files...")
     check_graph(behavior, logger)
