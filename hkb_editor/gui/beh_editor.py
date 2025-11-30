@@ -885,10 +885,10 @@ class BehaviorEditor(BaseEditor):
 
         name = obj.get_field("name", None, resolve=True)
         if name:
-            lines.insert(0, (name, style.yellow))
-
             # Check if there is an event associated with this StateInfo
             if obj.type_name == "hkbStateMachine::StateInfo":
+                name = f"{name} ({obj['stateId'].get_value()})"
+
                 sm = self.beh.objects[self.canvas.root]
                 transitions: HkbArray[HkbRecord] = sm.get_field(
                     "wildcardTransitions/transitions", None
@@ -901,9 +901,11 @@ class BehaviorEditor(BaseEditor):
                             event_id = trans["eventId"].get_value()
                             if event_id >= 0:
                                 event = self.beh.get_event(event_id)
-                                lines.insert(1, (f"<{event}>", style.green))
+                                lines.insert(0, (f"<{event}>", style.green))
 
                             break
+
+            lines.insert(0, (name, style.yellow))
 
         return lines
 

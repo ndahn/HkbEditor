@@ -1,4 +1,5 @@
 import logging
+import networkx as nx
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.index_attributes import (
@@ -85,15 +86,19 @@ def check_attributes(behavior: HavokBehavior, root_logger: logging.Logger) -> No
         array: HkbArray
         for path, array in obj.find_fields_by_type(HkbArray):
             if array.is_pointer_array:
-                for i, ptr in enumerate(array):
+                has_nullptr = False
+                for ptr in array:
                     if not ptr.is_set():
-                        # TODO only warn if the null pointer creates a gap
-                        if i < len(array) - 1:
-                            # Will cause the game to crash if accessed
-                            logger.error(f"Pointer array {obj.object_id}/{path} contains non-terminal null-pointers, this is probably bad")
-                        else:
-                            logger.warning(f"Pointer array {obj.object_id}/{path} contains terminal null-pointers, might be okay")
+                        # Can still be okay if only null pointers follow
+                        has_nullptr = True
+                    elif has_nullptr:
+                        # Found a value after a null pointer, this will usually cause the game 
+                        # to crash when accessed
+                        logger.error(f"Pointer array {obj.object_id}/{path} contains non-terminal null-pointers, this is probably bad")
                         break
+                else:
+                    if has_nullptr:
+                        logger.warning(f"Pointer array {obj.object_id}/{path} contains terminal null-pointers, might be okay")
 
         if obj.type_name in event_attributes:
             paths = event_attributes[obj.type_name]
@@ -126,6 +131,12 @@ def check_graph(behavior: HavokBehavior, root_logger: logging.Logger) -> None:
 
     if abandoned:
         logger.warning(f"The following objects are abandoned: {[str(o) for o in abandoned]}")
+
+    cycles = list(nx.simple_cycles(g))
+    if cycles:
+        logger.warning("Behavior graph contains cycles:")
+        for cycle in cycles:
+            logger.warning(f"- {cycle}")
 
 
 def verify_behavior(behavior: HavokBehavior) -> None:

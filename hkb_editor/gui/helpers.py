@@ -448,7 +448,6 @@ def create_flag_checkboxes(
     with dpg.group():
         dpg.add_input_text
         dpg.add_input_int(
-            label="numeric",
             default_value=active_flags,
             callback=set_from_int,
             tag=f"{base_tag}_numeric",
