@@ -732,6 +732,7 @@ class BehaviorEditor(BaseEditor):
             self.attributes_widget = AttributesWidget(
                 self.alias_manager,
                 jump_callback=self.jump_to_object,
+                search_attribute_callback=self.search_attribute,
                 on_graph_changed=self.regenerate,
                 on_value_changed=self._on_value_modified,
                 pin_object_callback=self.add_pinned_object,
@@ -1340,6 +1341,10 @@ class BehaviorEditor(BaseEditor):
         path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
         self.clear_attributes()
         self.canvas.show_node_path(path)
+    
+    def search_attribute(self, path: str, value: XmlValueHandler):
+        path = re.sub(r":[0-9]+", ":*", path)
+        self.open_search_dialog(f"{path}={value.get_value()}")
 
     ####
     # Dialogs
@@ -1552,9 +1557,14 @@ class BehaviorEditor(BaseEditor):
     def open_search_dialog(self, query: str = ""):
         tag = f"{self.tag}_search_dialog"
         if dpg.does_item_exist(tag):
-            dpg.show_item(tag)
-            dpg.focus_item(tag)
-            return
+            if query:
+                # Open a new dialog replacing the previous search
+                dpg.delete_item(tag)
+                dpg.split_frame()
+            else:
+                dpg.show_item(tag)
+                dpg.focus_item(tag)
+                return
 
         def on_results(sender: str, matches: list[HkbRecord], user_data: Any) -> None:
             self.canvas.clear_highlights()

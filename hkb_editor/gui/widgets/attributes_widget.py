@@ -73,6 +73,7 @@ class AttributesWidget:
             [str, XmlValueHandler, tuple[Any, Any]], None
         ] = None,
         jump_callback: Callable[[str], None] = None,
+        search_attribute_callback: Callable[[str, XmlValueHandler], None] = None,
         pin_object_callback: Callable[[HkbRecord | str], None] = None,
         get_pinned_objects_callback: Callable[[], Iterable[str]] = None,
         hide_title: bool = False,
@@ -87,6 +88,7 @@ class AttributesWidget:
         self.on_graph_changed = on_graph_changed
         self.on_value_changed = on_value_changed
         self.jump_callback = jump_callback
+        self.search_attribute_callback = search_attribute_callback
         self.pin_object_callback = pin_object_callback
         self.get_pinned_objects_callback = get_pinned_objects_callback
         self.hide_title = hide_title
@@ -893,6 +895,11 @@ class AttributesWidget:
                 callback=self._jump,
                 tag=self.tag + "_attribute_menu_jump",
             )
+            dpg.add_selectable(
+                label="Find same", 
+                callback=self._search_attribute,
+                tag=self.tag + "_attribute_menu_search",
+            )
 
             # Bindable attributes
             dpg.add_separator()
@@ -1187,6 +1194,13 @@ class AttributesWidget:
             return
 
         self.jump_callback(oid)
+
+    def _search_attribute(self, sender: str) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        _, path, attribute = self.selected_attribute
+        self.search_attribute_callback(path, attribute)
 
     def _bind_variable(self, sender: str):
         # deselect the selectable
