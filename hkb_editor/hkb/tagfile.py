@@ -3,6 +3,7 @@ import logging
 from collections import deque
 from copy import deepcopy
 from functools import cache
+import re
 
 # lxml supports full xpath, which is beneficial for us
 from lxml import etree as ET
@@ -318,6 +319,14 @@ class Tagfile:
         object_filter: Callable[["HkbRecord"], bool] = None,
         search_root: "HkbRecord | str" = None,
     ) -> Generator["HkbRecord", None, None]:
+        # TODO would be nice to place this in the query module, but neither the query nor 
+        # the HkbRecord objects have any knowledge about the graph structure
+        parent_pattern = r"\bparent=(object[0-9]+)\b"
+        parent_query = re.search(parent_pattern, query_str)
+        if parent_query:
+            search_root = parent_query.group(1)
+            query_str = re.sub(parent_pattern, "", query_str).strip()
+
         if search_root:
             from .hkb_types import HkbRecord
 

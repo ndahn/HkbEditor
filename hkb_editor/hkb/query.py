@@ -15,7 +15,7 @@ lucene_grammar = r"""
 
     ?or_expr: and_expr (KW_OR and_expr)*        -> or_
     ?and_expr: not_expr (KW_AND not_expr)* 
-             | not_expr not_expr+                -> and_
+             | not_expr not_expr+               -> and_
     ?not_expr: KW_NOT not_expr                  -> not_
              | atom
 

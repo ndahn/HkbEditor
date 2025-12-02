@@ -1105,6 +1105,11 @@ class BehaviorEditor(BaseEditor):
             dpg.add_separator()
 
             dpg.add_selectable(
+                label="Search children",
+                callback=lambda s, a, u: self.open_search_dialog(f"parent={node.id}"),
+                user_data=node,
+            )
+            dpg.add_selectable(
                 label="Pin Object",
                 callback=lambda s, a, u: self.add_pinned_object(u),
                 user_data=obj,
@@ -1544,7 +1549,7 @@ class BehaviorEditor(BaseEditor):
             tag=tag,
         )
 
-    def open_search_dialog(self):
+    def open_search_dialog(self, query: str = ""):
         tag = f"{self.tag}_search_dialog"
         if dpg.does_item_exist(tag):
             dpg.show_item(tag)
@@ -1560,6 +1565,7 @@ class BehaviorEditor(BaseEditor):
             self.beh,
             pin_callback=lambda s, a, u: self.add_pinned_object(a),
             jump_callback=lambda s, a, u: self.jump_to_object(a),
+            initial_filter=query,
             result_callback=on_results,
             tag=tag,
         )
