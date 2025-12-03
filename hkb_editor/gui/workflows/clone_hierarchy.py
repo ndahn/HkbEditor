@@ -122,6 +122,7 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
                 meta_wildcards = root_meta.setdefault("wildcard_transitions", [])
                 meta_wildcards.append(transition)
 
+                # TODO not copied for some reason
                 transition_effect: HkbRecord = transition["transition"].get_target()
                 if transition_effect and transition_effect not in objects:
                     objects.append(transition_effect)
@@ -845,19 +846,27 @@ def restore_root_meta(
         and root_res.result.type_name == "hkbStateMachine::StateInfo"
     ):
         if not target_record.type_name == "hkbStateMachine":
-            raise ValueError(f"Expected target record to be of type hkbStateMachine, but got {target_record.type_name}")
+            raise ValueError(
+                f"Expected target record to be of type hkbStateMachine, but got {target_record.type_name}"
+            )
 
-        wildcards: HkbArray[HkbRecord] = ensure_statemachine_wildcards(target_record)["transitions"]
+        wildcards: HkbArray[HkbRecord] = ensure_statemachine_wildcards(target_record)[
+            "transitions"
+        ]
 
         root_res = results.objects[results.root_id]
         old_state_id = root_res.original["stateId"].get_value()
         new_state_id = root_res.result["stateId"].get_value()
 
-        transition_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine::TransitionInfo")
-        
+        transition_type = behavior.type_registry.find_first_type_by_name(
+            "hkbStateMachine::TransitionInfo"
+        )
+
         for transition_xml in results.root_meta.xpath(".//wildcard_transitions/record"):
-            transition = HkbRecord.init_from_xml(behavior, transition_type, transition_xml)
-            
+            transition = HkbRecord.init_from_xml(
+                behavior, transition_type, transition_xml
+            )
+
             # Translate event index
             event = transition["eventId"].get_value()
             event_res = results.events.get(event)
@@ -1342,7 +1351,10 @@ def open_merge_hierarchy_dialog(
                     dpg.add_spacer(height=10)
 
                     # Objects
-                    with dpg.tree_node(label=f"Objects ({len(results.objects)})"):
+                    with dpg.tree_node(
+                        label=f"Objects ({len(results.objects)})", 
+                        default_open=True,
+                    ):
                         with dpg.table(
                             header_row=False,
                             policy=dpg.mvTable_SizingFixedFit,
