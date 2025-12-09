@@ -1593,8 +1593,11 @@ class BehaviorEditor(BaseEditor):
     def open_graphmap_dialog(self):
         tag = f"{self.tag}_graphmap_dialog"
         if dpg.does_item_exist(tag):
+            # TODO just for testing
+            graphmap: GraphMap = dpg.get_item_user_data(tag)
+            graphmap.set_graph(self.canvas.graph)
             dpg.show_item(tag)
-            dpg.focus_item(tag)
+            #dpg.focus_item(tag)
             return
 
         def on_graphnode_selected(node_id: str):
@@ -1615,6 +1618,8 @@ class BehaviorEditor(BaseEditor):
                 on_graphnode_selected,
                 tag + "_content"
             )
+
+        dpg.set_item_user_data(dialog, w)
 
 
     def open_eventlistener_dialog(self):

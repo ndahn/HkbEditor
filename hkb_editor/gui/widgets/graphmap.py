@@ -107,7 +107,9 @@ class GraphMap:
 
     def set_graph(self, graph: nx.DiGraph) -> None:
         self.graph = graph
-        self._nodes: list[str] = list(graph.nodes)
+        self._nodes: list[str] = sorted(graph.nodes)
+        # TODO Performance seems to be okayish up until ~1000 nodes
+        print("### nodes", len(self._nodes))
 
         # Need to create a new series due to the bug mentioned below
         dpg.delete_item(f"{self.tag}_x_axis", children_only=True)
@@ -142,19 +144,20 @@ class GraphMap:
         
         dpg.delete_item(f"{self.tag}_plot", children_only=True, slot=2)
 
-        # TODO doesn't look right yet
+        # Use a map so that we can control the order of nodes in each layer
+        layers = {}
         max_layer_nodes = 0
         for layer, nodes in enumerate(nx.topological_generations(self.graph)):
             max_layer_nodes = max(len(nodes), max_layer_nodes)
-            for n in nodes:
-                self.graph.nodes[n]["layer"] = layer
+            layers[layer] = sorted(nodes)
 
         # TODO use this for our main layout, too
-        pos = nx.multipartite_layout(self.graph, subset_key="layer", scale=100)
-        points = np.vstack(list(pos.values()))
+        pos = nx.multipartite_layout(self.graph, subset_key=layers, scale=100)
+        # Be sure to use a consistent order of nodes
+        points = np.vstack(list(pos[n] for n in self._nodes))
         self._node_lookup = KDTree(points)
 
-        x_data, y_data = list(zip(*[pos[n] for n in pos.keys()]))
+        x_data, y_data = list(zip(*[pos[n] for n in self._nodes]))
         dpg.set_value(f"{self.tag}_series", [x_data, y_data])
 
         x_min = min(x_data)
@@ -169,7 +172,7 @@ class GraphMap:
 
         transformed_x = app_data[1]
         transformed_y = app_data[2]
-        node_indices = {n: i for i, n in enumerate(self.graph.nodes)}
+        node_indices = {n: i for i, n in enumerate(self._nodes)}
         scale = 1 / max(*self.get_zoom())
 
         def get_pos(node: str):
@@ -191,7 +194,7 @@ class GraphMap:
                     tag=edge_tag,
                 )
 
-        for node in self.graph.nodes:
+        for node in self._nodes:
             node_tag = f"{self.tag}_node_{node}"
             if dpg.does_item_exist(node_tag):
                 # TODO scale
