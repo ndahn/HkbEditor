@@ -61,7 +61,7 @@ class BaseEditor:
     def get_node_frontpage_short(self, node_id: str) -> str:
         return node_id
 
-    def on_node_selected(self, node: Node) -> None:
+    def on_node_selected(self, node: Node | str) -> None:
         self.selected_node = node
 
         # Update the attributes panel

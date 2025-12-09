@@ -134,8 +134,8 @@ class GraphWidget:
 
         return None
 
-    def set_origin(self, new_x: float, new_y: float) -> None:
-        self.transform = (new_x, new_y)
+    def set_origin(self, ox: float, oy: float) -> None:
+        self.transform = (ox, oy)
         self.look_at(*self.transform)
 
     def look_at(self, px: float, py: float) -> None:
@@ -143,6 +143,14 @@ class GraphWidget:
             f"{self.tag}_root",
             dpg.create_translation_matrix((px, py)),
         )
+
+    def look_at_node(self, node: str) -> None:
+        n = self.nodes[node]
+        cw, ch = dpg.get_item_rect_size(self.tag)
+        # Not sure why it's -n.pos, but it works
+        px = -n.pos[0] + cw / 2 - n.width / 2
+        py = -n.pos[1] + ch / 2 - n.height / 2
+        self.set_origin(px, py)
 
     def set_zoom(
         self,

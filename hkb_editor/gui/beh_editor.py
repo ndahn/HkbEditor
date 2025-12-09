@@ -52,6 +52,7 @@ from hkb_editor.hkb.version_updates import fix_variable_defaults
 
 from .base_editor import BaseEditor, Node
 from .widgets.attributes_widget import AttributesWidget
+from .widgets.graphmap import GraphMap  # TODO
 from .dialogs import (
     about_dialog,
     open_file_dialog,
@@ -516,6 +517,11 @@ class BehaviorEditor(BaseEditor):
                 label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"
         ):
             dpg.add_menu_item(
+                label="Graph Map...",
+                callback=lambda: self.open_graphmap_dialog(),
+            )
+
+            dpg.add_menu_item(
                 label="Event Listener...",
                 callback=lambda: self.open_eventlistener_dialog(),
             )
@@ -882,12 +888,15 @@ class BehaviorEditor(BaseEditor):
     def get_graph(self, root_id: str) -> nx.DiGraph:
         return self.beh.build_graph(root_id)
 
-    def get_node_frontpage(self, node: Node) -> list[str]:
-        obj = self.beh.objects[node.id]
+    def get_node_frontpage(self, node: Node | str) -> list[str]:
+        if isinstance(node, Node):
+            node = node.id
+        
+        obj = self.beh.objects[node]
 
         lines = [
             (obj.type_name, style.white),
-            (node.id, style.blue),
+            (node, style.blue),
         ]
 
         name = obj.get_field("name", None, resolve=True)
@@ -1341,6 +1350,7 @@ class BehaviorEditor(BaseEditor):
         path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
         self.clear_attributes()
         self.canvas.show_node_path(path)
+        self.canvas.look_at_node(object_id)
     
     def search_attribute(self, path: str, value: XmlValueHandler):
         path = re.sub(r":[0-9]+", ":*", path)
@@ -1579,6 +1589,33 @@ class BehaviorEditor(BaseEditor):
             result_callback=on_results,
             tag=tag,
         )
+
+    def open_graphmap_dialog(self):
+        tag = f"{self.tag}_graphmap_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        def on_graphnode_selected(node_id: str):
+            # TODO is this what we want?
+            self.jump_to_object(node_id)
+
+        with dpg.window(
+            width=500, 
+            height=500,
+            # FIXME crashes on close
+            on_close=lambda: dpg.delete_item(dialog),
+            tag=tag,
+        ) as dialog:
+            g = self.canvas.graph
+            w = GraphMap(
+                g, 
+                self.get_node_frontpage, 
+                on_graphnode_selected,
+                tag + "_content"
+            )
+
 
     def open_eventlistener_dialog(self):
         tag = f"{self.tag}_event_listener_dialog"
