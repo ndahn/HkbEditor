@@ -721,6 +721,32 @@ class CommonActionsMixin:
             **kwargs,
         )
 
+    def new_blender_generator(
+        self,
+        children: list[HkbRecord | str],
+        *,
+        object_id: str = "<new>",
+        name: str = "",
+        blendParameter: float = 1.0,
+        minCyclicBlendParameter: float = 0.0,
+        maxCyclicBlendParameter: float = 1.0,
+        indexOfSyncMasterChild: int = -1,
+        **kwargs,
+    ) -> HkbRecord:
+        children = [self.resolve_object(c) for c in children]
+
+        return self.new_record(
+            "hkbBlenderGenerator",
+            object_id,
+            name=name,
+            children=children,
+            blendParameter=blendParameter,
+            minCyclicBlendParameter=minCyclicBlendParameter,
+            maxCyclicBlendParameter=maxCyclicBlendParameter,
+            indexOfSyncMasterChild=indexOfSyncMasterChild,
+            **kwargs,
+        )
+
     def new_blender_generator_child(
         self,
         cmsg: HkbRecord | str,

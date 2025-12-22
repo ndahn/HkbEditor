@@ -291,7 +291,7 @@ class TemplateContext(CommonActionsMixin):
 
         return None
 
-    def array_add(self, record: HkbRecord | str, path: str, item: Any) -> None:
+    def array_add(self, record: HkbRecord | str, path: str, item: Any) -> int:
         """Append a value to an array field of the specified record.
 
         Note that when appending to pointer arrays you need to pass an object ID, not an actual object.
@@ -304,13 +304,20 @@ class TemplateContext(CommonActionsMixin):
             Path to the array within the record, with deeper levels separated by /.
         item : Any
             The item to append to the array.
+
+        Returns
+        -------
+            The index of the item in the array.
         """
         record = self.resolve_object(record)
         array: HkbArray = record.get_field(path)
+        idx = len(array)
 
         array.append(item)
         undo_manager.on_update_array_item(array, -1, None, item)
-        self.logger.debug(f"Appended {item} to {path} of {record}")
+        self.logger.debug(f"Appended {item} to {path} of {record} (index={idx})")
+
+        return idx
 
     def array_pop(self, record: HkbRecord | str, path: str, index: int = -1) -> Any:
         """Remove a value from an array inside a record.
