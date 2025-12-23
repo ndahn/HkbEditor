@@ -516,10 +516,11 @@ class BehaviorEditor(BaseEditor):
         with dpg.menu(
                 label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"
         ):
-            dpg.add_menu_item(
-                label="Graph Map...",
-                callback=lambda: self.open_graphmap_dialog(),
-            )
+            # TODO enable once https://github.com/hoffstadt/DearPyGui/issues/2374 is done
+            #dpg.add_menu_item(
+            #    label="Graph Map...",
+            #    callback=lambda: self.open_graphmap_dialog(),
+            #)
 
             dpg.add_menu_item(
                 label="Event Listener...",
