@@ -4,11 +4,14 @@ import time
 from dearpygui import dearpygui as dpg
 
 
+variant = "x"
+
+
 def _load_cats() -> None:
     if not dpg.does_item_exist("hkbeditor_icon_cat1"):
         with dpg.texture_registry():
             for i in range(1, 4):
-                cat = os.path.abspath(os.path.join(".", f"doc/cat{i}.png"))
+                cat = os.path.abspath(os.path.join(".", f"doc/cat{i}{variant}.png"))
                 w, h, _, data = dpg.load_image(cat)
                 dpg.add_static_texture(w, h, data, tag=f"hkbeditor_icon_cat{i}")
 
