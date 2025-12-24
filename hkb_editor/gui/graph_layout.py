@@ -60,7 +60,16 @@ class GraphLayout:
     def get_pos_for_node(
         self, graph: nx.DiGraph, node: Node, nodemap: dict[str, Node]
     ) -> tuple[float, float]:
-        level = node.level
+        parent_id = next(
+            (n for n in graph.predecessors(node.id) if nodemap[n].visible), None
+        )
+        if parent_id and parent_id in nodemap:
+            parent = nodemap[parent_id]
+            level = parent.level + 1
+            ymin = parent.y
+        else:
+            level = node.level
+            ymin = 0
 
         if level == 0:
             px, py = self.node0_margin
@@ -84,9 +93,6 @@ class GraphLayout:
             if py > 0.0:
                 py += self.step_y * self.zoom_factor
 
-            parent_id = next(
-                (n for n in graph.predecessors(node.id) if nodemap[n].visible), None
-            )
-            py = max(nodemap[parent_id].y, py)
+            py = max(ymin, py)
 
         return px, py

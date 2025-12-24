@@ -52,7 +52,7 @@ class GraphWidget:
         self.hover_enabled = hover_enabled
         self.tag = tag
 
-        self.color_generator = style.HighContrastColorGenerator()
+        self.color_generator = style.HighContrastColorGenerator(0.0, 0.18)
         self.graph = None
         self.root: str = None
         self.nodes: dict[str, Node] = {}
@@ -584,8 +584,11 @@ class GraphWidget:
             # Seems to happen sometimes on quick mouse movements or jump-to-object
             return
 
-        thickness = 2 if highlighted else 1
-        dpg.configure_item(tag, thickness=thickness)
+        params = {"thickness": 2 if highlighted else 1}
+        if not self.rainbow_edges:
+            params["color"] = style.orange if highlighted else style.white
+
+        dpg.configure_item(tag, **params)
 
         # highlight edge label if it exists, redraw it to place it on top
         if self.get_edge_label:
@@ -668,6 +671,11 @@ class GraphWidget:
         tag = f"{self.tag}_node_{node.id}"
 
         if dpg.does_item_exist(tag):
+            if not node.visible:
+                # Make the item appear in a sensible place
+                node.pos = self.layout.get_pos_for_node(self.graph, node, self.nodes)
+                node.visible = True
+            
             dpg.show_item(tag)
             return
 
@@ -723,7 +731,8 @@ class GraphWidget:
             return
 
         if self.rainbow_edges:
-            color = self.color_generator()
+            color = self.color_generator(node_a.id)
+            color = tuple((c + 255) // 2 for c in color)
         else:
             color = style.white
 

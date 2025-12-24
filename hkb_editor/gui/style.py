@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Any
 import colorsys
 import numpy as np
 from dearpygui import dearpygui as dpg
@@ -26,26 +26,34 @@ light_red = (255, 112, 119)
 class HighContrastColorGenerator:
     """Generates RGB colors with a certain distance apart so that subsequent colors are visually distinct."""
 
-    def __init__(self):
-        # Golden ratio conjugate, ensures well-spaced hues
-        self.hue_step = 0.61803398875
-        self.hue = 0
+    def __init__(self, initial_hue: float = 0.0, hue_step: float = 0.61803398875):
+        # 0.61803398875: golden ratio conjugate, ensures well-spaced hues
+        self.hue_step = hue_step
+        self.hue = initial_hue
+        self.initial_hue = initial_hue
+        self.cache = {}
 
     def __iter__(self):
         """Allows the class to be used as an iterable."""
         return self
 
     def reset(self) -> None:
-        self.hue = 0
+        self.hue = self.initial_hue
+        self.cache.clear()
 
-    def __next__(self):
+    def __next__(self) -> tuple[int, int, int]:
         """Generates the next high-contrast color."""
         self.hue = (self.hue + self.hue_step) % 1
         r, g, b = colorsys.hsv_to_rgb(self.hue, 1, 1)
         return (int(r * 255), int(g * 255), int(b * 255))
 
-    def __call__(self):
+    def __call__(self, key: Any = None) -> tuple[int, int, int]:
         """Allows calling the instance directly to get the next color."""
+        if key is not None:
+            if key not in self.cache:
+                self.cache[key] = next(self)
+            return self.cache[key]
+
         return next(self)
 
 
