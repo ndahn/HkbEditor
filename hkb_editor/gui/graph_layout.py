@@ -63,6 +63,7 @@ class GraphLayout:
         parent_id = next(
             (n for n in graph.predecessors(node.id) if nodemap[n].visible), None
         )
+        
         if parent_id and parent_id in nodemap:
             parent = nodemap[parent_id]
             level = parent.level + 1

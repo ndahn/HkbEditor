@@ -193,6 +193,8 @@ unsafe fn hkbfireevent_detour(lua_state: usize) -> usize {
         }
     }
 
+    // Causes crash on item pickup? 
+    // Check ExecMovableEventAnim in hks, too
     HkbFireEventHook.call(lua_state)
 }
 

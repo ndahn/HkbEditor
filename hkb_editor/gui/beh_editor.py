@@ -527,10 +527,11 @@ class BehaviorEditor(BaseEditor):
                 callback=lambda: self.open_eventlistener_dialog(),
             )
             
-            dpg.add_menu_item(
-                label="StateInfo Graph...",
-                callback=lambda: self.open_stategraph_dialog(),
-            )
+            # TODO needs an overhaul, right now it's just wrong
+            #dpg.add_menu_item(
+            #    label="StateInfo Graph...",
+            #    callback=lambda: self.open_stategraph_dialog(),
+            #)
 
             dpg.add_menu_item(
                 label="Generate Bone Mirror Map...",
