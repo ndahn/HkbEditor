@@ -134,16 +134,18 @@ unsafe extern "C" fn send_string_lua(lua_state: usize) -> i32 {
 
 /// Detour function for PushHksGlobals1 - registers custom Lua functions
 unsafe fn pushhksglobals1_detour(lua_state: usize) -> usize {
-    let context_guard = HOOK_CONTEXT.lock().unwrap();
-    if let Some(context) = context_guard.as_ref() {
-        // Register our custom function in Lua's global namespace
-        // Function name must be null-terminated C string
-        let function_name = CString::new("DebugSend").unwrap();
-        let _ = (context.game_fns.hks_addnamedcclosure_fn)(
-            lua_state,
-            function_name.as_ptr() as usize,
-            send_string_lua as usize
-        );
+    {
+        let context_guard = HOOK_CONTEXT.lock().unwrap();
+        if let Some(context) = context_guard.as_ref() {
+            // Register our custom function in Lua's global namespace
+            // Function name must be null-terminated C string
+            let function_name = CString::new("DebugSend").unwrap();
+            let _ = (context.game_fns.hks_addnamedcclosure_fn)(
+                lua_state,
+                function_name.as_ptr() as usize,
+                send_string_lua as usize
+            );
+        }
     }
     
     // Call the original function to continue normal initialization
@@ -152,49 +154,52 @@ unsafe fn pushhksglobals1_detour(lua_state: usize) -> usize {
 
 /// Detour function for HkbFireEvent - intercepts behavior events and forwards them over UDP
 unsafe fn hkbfireevent_detour(lua_state: usize) -> usize {
-    let context_guard = HOOK_CONTEXT.lock().unwrap();
-    if let Some(context) = context_guard.as_ref() {
-        let hkbself_ptr = (context.game_fns.lua_gethkbself_fn)(lua_state);
-        let behavior_context = (context.game_fns.get_hkbcontext_fn)(lua_state, hkbself_ptr);
+    // Lock inside limited scope, unlock before calling the original function.
+    // Some game events like item pickups may lead to additional calls to hkbfireevent 
+    // before this function returns, which would lead to a deadlock!
+    {
+        let context_guard = HOOK_CONTEXT.lock().unwrap();
+        if let Some(context) = context_guard.as_ref() {
+            let hkbself_ptr = (context.game_fns.lua_gethkbself_fn)(lua_state);
+            let behavior_context = (context.game_fns.get_hkbcontext_fn)(lua_state, hkbself_ptr);
 
-        // FUN_141451730 just dereferences behavior_context
-        let hkbcharacter_ptr = *(behavior_context as *const usize);
+            // FUN_141451730 just dereferences behavior_context
+            let hkbcharacter_ptr = *(behavior_context as *const usize);
 
-        if hkbcharacter_ptr != 0 {
-            // Name is an attribute of hkbCharacter at 0x40
-            let string_and_flag = *((hkbcharacter_ptr + 0x40) as *const usize);
+            if hkbcharacter_ptr != 0 {
+                // Name is an attribute of hkbCharacter at 0x40
+                let string_and_flag = *((hkbcharacter_ptr + 0x40) as *const usize);
 
-            // Make sure the pointer is in userspace
-            if string_and_flag > 0x10000000000 {
-                // The stored string is a hkStringPtr, which stores a flag in the
-                // first byte. Usually 0, but just in case.
-                let actual_string_ptr = (string_and_flag & !1) as *const i8;
-                let character_id = CStr::from_ptr(actual_string_ptr).to_str();
+                // Make sure the pointer is in userspace
+                if string_and_flag > 0x10000000000 {
+                    // The stored string is a hkStringPtr, which stores a flag in the
+                    // first byte. Usually 0, but just in case.
+                    let actual_string_ptr = (string_and_flag & !1) as *const i8;
+                    let character_id = CStr::from_ptr(actual_string_ptr).to_str();
 
-                // Enemies are usually named something like c4080_1234, where 1234
-                // is probably their model variation
-                if character_id.is_ok()
-                    && (context.config.chr.is_empty()
-                        || character_id.unwrap().starts_with(context.config.chr.as_str()))
-                {
-                    let lua_str_ptr = (context.game_fns.lua_getstring_fn)(lua_state, 1, 0);
-                    let event_str =
-                        CStr::from_ptr(lua_str_ptr as *const i8).to_str().unwrap();
-                    let data_str = format!("{}:{}", character_id.unwrap(), event_str);
+                    // Enemies are usually named something like c4080_1234, where 1234
+                    // is probably their model variation
+                    if character_id.is_ok()
+                        && (context.config.chr.is_empty()
+                            || character_id.unwrap().starts_with(context.config.chr.as_str()))
+                    {
+                        let lua_str_ptr = (context.game_fns.lua_getstring_fn)(lua_state, 1, 0);
+                        let event_str =
+                            CStr::from_ptr(lua_str_ptr as *const i8).to_str().unwrap();
+                        let data_str = format!("{}:{}", character_id.unwrap(), event_str);
 
-                    if context.config.print {
-                        println!("{}", data_str);
+                        if context.config.print {
+                            println!("{}", data_str);
+                        }
+
+                        let remote = format!("127.0.0.1:{}", context.config.port);
+                        let _ = context.sock.send_to(data_str.as_bytes(), &remote);
                     }
-
-                    let remote = format!("127.0.0.1:{}", context.config.port);
-                    let _ = context.sock.send_to(data_str.as_bytes(), &remote);
                 }
             }
         }
-    }
+    } // lock released
 
-    // Causes crash on item pickup? 
-    // Check ExecMovableEventAnim in hks, too
     HkbFireEventHook.call(lua_state)
 }
 
