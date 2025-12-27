@@ -196,7 +196,7 @@ class CommonActionsMixin:
         """Get the animation with the specified name, or create a new one if it doesn't exist yet.
 
         Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
-        
+
         TODO mention animations.txt
 
         Parameters
@@ -504,7 +504,7 @@ class CommonActionsMixin:
         if not source.object_id and object_id == "<new>":
             # Looks like an object that shouldn't be at the top level
             object_id = None
-            
+
         attributes = {k: v.get_value() for k, v in source.get_value().items()}
         attributes.update(**overrides)
 
@@ -529,10 +529,10 @@ class CommonActionsMixin:
             for attr in attributes:
                 src_attr = source.get_field(attr)
                 new_val = src_attr.get_value()
-                
+
                 dest_attr = dest.get_field(attr)
                 old_val = dest_attr.get_value()
-                
+
                 dest_attr.set_value(new_val)
                 undo_manager.on_update_value(dest_attr, old_val, new_val)
 
@@ -840,14 +840,14 @@ class CommonActionsMixin:
     def register_wildcard_transition(
         self,
         statemachine: HkbRecord | str,
-        toStateId: int, 
-        eventId: Event | int,
+        toStateId: int,
+        eventId: Event | str | int,
         *,
         transition_effect: HkbRecord | str = None,
-        flags: TransitionInfoFlags = 3584, 
+        flags: TransitionInfoFlags = 3584,
         # ALLOW_SELF_TRANSITION_BY_TRANSITION_FROM_ANY_STATE,
-        # IS_LOCAL_WILDCARD 
-        # IS_GLOBAL_WILDCARD 
+        # IS_LOCAL_WILDCARD
+        # IS_GLOBAL_WILDCARD
         **kwargs,
     ) -> HkbRecord:
         statemachine = self.resolve_object(statemachine)
@@ -896,64 +896,30 @@ class CommonActionsMixin:
         animation: Animation | str | int,
         name: str,
         *,
-        clip_mode: PlaybackMode = PlaybackMode.SINGLE_PLAY,
-        state_transitions: HkbRecord | str = None,
-        cmsg_name: str = None,
-        enableScript: bool = True,
-        enableTae: bool = True,
-        offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
-        animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
-        checkAnimEndSlotNo: int = -1,
-        **cmsg_kwargs,
+        state_kwargs: dict[str, Any] = None,
+        cmsg_kwargs: dict[str, Any] = None,
+        clip_kwargs: dict[str, Any] = None,
     ) -> tuple[HkbRecord, HkbRecord, HkbRecord]:
-        transitions = self.resolve_object(state_transitions)
+        # ClipGenerator
+        if clip_kwargs is None:
+            clip_kwargs = {}
 
-        clip = self.new_clip(animation, mode=clip_mode)
-        cmsg = self.new_cmsg(
-            animation.anim_id,
-            name=cmsg_name or name + "_CMSG",
-            generators=[clip],
-            enableScript=enableScript,
-            enableTae=enableTae,
-            offsetType=offsetType,
-            animeEndEventType=animeEndEventType,
-            checkAnimEndSlotNo=checkAnimEndSlotNo,
-            **cmsg_kwargs,
-        )
-        state = self.new_stateinfo(
-            stateId=state_id,
-            name=name,
-            generator=cmsg,
-            transitions=transitions.object_id if transitions else None,
-        )
+        clip = self.new_clip(animation, **clip_kwargs)
+
+        # CMSG
+        if cmsg_kwargs is None:
+            cmsg_kwargs = {}
+        cmsg_kwargs.setdefault("name", name + "_CMSG")
+        cmsg_kwargs.setdefault("generators", [clip])
+
+        cmsg = self.new_cmsg(animation, **cmsg_kwargs)
+
+        # StateInfo
+        if state_kwargs is None:
+            state_kwargs = {}
+        state_kwargs.setdefault("name", name)
+        state_kwargs.setdefault("generator", cmsg)
+
+        state = self.new_stateinfo(state_id, **state_kwargs)
 
         return (state, cmsg, clip)
-
-    def create_blend_chain(
-        self,
-        clip: HkbRecord | str,
-        animation: Animation | str | int,
-        cmsg_name: str = None,
-        *,
-        blend_weight: int = 1,
-        enableScript: bool = True,
-        enableTae: bool = True,
-        offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
-        animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
-        checkAnimEndSlotNo: int = -1,
-        **cmsg_kwargs,
-    ) -> tuple[HkbRecord, HkbRecord]:
-        cmsg = self.new_cmsg(
-            animation.anim_id,
-            name=cmsg_name,
-            generators=[clip],
-            enableScript=enableScript,
-            enableTae=enableTae,
-            offsetType=offsetType,
-            animeEndEventType=animeEndEventType,
-            checkAnimEndSlotNo=checkAnimEndSlotNo,
-            **cmsg_kwargs,
-        )
-        blend = self.new_blender_generator_child(cmsg, weight=blend_weight)
-
-        return (blend, cmsg)
