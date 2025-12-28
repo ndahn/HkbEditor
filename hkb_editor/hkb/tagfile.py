@@ -51,6 +51,8 @@ class Tagfile:
         )
 
     def _regenerate_cache(self) -> None:
+        from .hkb_types import HkbRecord
+        
         self.objects = {
             obj.get("id"): HkbRecord.from_object(self, obj)
             for obj in self._tree.findall(".//object")

@@ -29,6 +29,11 @@ class HkbVariable:
 
 class HavokBehavior(Tagfile):
     def __init__(self, xml_file: str, undo: bool):
+        # Define before _regenerate_cache runs the first time
+        self._events: CachedArray[str] = None
+        self._variables: CachedArray[str] = None
+        self._animations: CachedArray[str] = None
+
         super().__init__(xml_file, undo)
 
         # Locate the root statemachine
@@ -53,16 +58,8 @@ class HavokBehavior(Tagfile):
             "hkbVariableValueSet"
         )
 
-        # Querying the actual values of a full array can be very slow, especially for
-        # arrays with 10s of thousands of items. Caching these here will increase the
-        # initial file opening time by a few seconds, but in return the user won't have
-        # to sit idle every time they open a select dialog or similar
-        self._events: CachedArray[str] = None
-        self._variables: CachedArray[str] = None
-        self._animations: CachedArray[str] = None
-
     def _regenerate_cache(self):
-        super()._regenerate_cache
+        super()._regenerate_cache()
 
         # There's some special objects storing the string values referenced from HKS
         strings_type_id = self.type_registry.find_first_type_by_name(

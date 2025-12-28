@@ -239,6 +239,8 @@ class HkbXmlElement(ET.ElementBase):
     Custom lxml Element that tracks mutations for undo/redo."""
     _undo_stacks: WeakKeyDictionary["HkbXmlElement", UndoStack] = WeakKeyDictionary()
     
+    # NOTE custom element classes should never have a constructor!
+
     @property
     def undo_stack(self) -> UndoStack:
         root = self.getroottree().getroot()
@@ -247,8 +249,7 @@ class HkbXmlElement(ET.ElementBase):
     @property
     def attrib(self):
         """Incurs slight overhead as it wraps the actual element's attrib dict in a class that tracks mutations. Consider using get and set instead. It is discouraged to keep references to the returned dict. Accessing the same dict instance before and after an undo/redo operation may result in undefined behavior."""
-        real_attrib = super(HkbXmlElement, self.__class__).attrib.fget(self)
-        return UndoAttrib(self, real_attrib)
+        return UndoAttrib(self, super(HkbXmlElement, self).attrib)
 
     def _check_move(self, el):
         if el.getparent() is not None:
@@ -257,35 +258,41 @@ class HkbXmlElement(ET.ElementBase):
         
     @property
     def text(self) -> str:
-        return super(HkbXmlElement, self.__class__).text.fget(self)
+        return super(HkbXmlElement, self).text
     
     @text.setter
     def text(self, value: str):
         undo_stack = self.undo_stack
         if undo_stack is not None:
             old_text = self.text
+
+            def undo():
+                super(HkbXmlElement, self).text = old_text
+
+            def redo():
+                super(HkbXmlElement, self).text = value
             
-            undo_stack.record(
-                undo_fn=lambda: type(self).text.fset(self, old_text),
-                redo_fn=lambda: type(self).text.fset(self, value)
-            )
+            undo_stack.record(undo, redo)
         
         type(self).text.fset(self, value)
     
     @property
     def tail(self) -> str:
-        return super(HkbXmlElement, self.__class__).tail.fget(self)
+        return super(HkbXmlElement, self).tail
     
     @tail.setter
     def tail(self, value: str):
         undo_stack = self.undo_stack
         if undo_stack is not None:
             old_tail = self.tail
+
+            def undo():
+                super(HkbXmlElement, self).tail = old_tail
+
+            def redo():
+                super(HkbXmlElement, self).tail = value
             
-            undo_stack.record(
-                undo_fn=lambda: type(self).tail.fset(self, old_tail),
-                redo_fn=lambda: type(self).tail.fset(self, value)
-            )
+            undo_stack.record(undo, redo)
         
         type(self).tail.fset(self, value)
     
@@ -298,14 +305,14 @@ class HkbXmlElement(ET.ElementBase):
                 if old_value is None:
                     self.attrib.pop(key, None)
                 else:
-                    super().set(key, old_value)
+                    super(HkbXmlElement, self).set(key, old_value)
             
             def redo():
-                super().set(key, value)
+                super(HkbXmlElement, self).set(key, value)
             
             undo_stack.record(undo, redo)
         
-        super().set(key, value)
+        super(HkbXmlElement, self).set(key, value)
     
     def __setitem__(self, key: str, value: str):
         undo_stack = self.undo_stack
@@ -316,14 +323,14 @@ class HkbXmlElement(ET.ElementBase):
                 if old_value is None:
                     self.attrib.pop(key, None)
                 else:
-                    super().set(key, old_value)
+                    super(HkbXmlElement, self).set(key, old_value)
             
             def redo():
-                super().set(key, value)
+                super(HkbXmlElement, self).set(key, value)
             
             undo_stack.record(undo, redo)
         
-        super().__setitem__(key, value)
+        super(HkbXmlElement, self).__setitem__(key, value)
     
     def __delitem__(self, key: str):
         undo_stack = self.undo_stack
@@ -332,22 +339,22 @@ class HkbXmlElement(ET.ElementBase):
             
             if old_value is not None:
                 undo_stack.record(
-                    undo_fn=lambda: super().set(key, old_value),
+                    undo_fn=lambda: super(HkbXmlElement, self).set(key, old_value),
                     redo_fn=lambda: self.attrib.pop(key, None)
                 )
         
-        super().__delitem__(key)
+        super(HkbXmlElement, self).__delitem__(key)
     
     def append(self, child) -> None:
         self._check_move(child)
         undo_stack = self.undo_stack
         if undo_stack is not None:
             undo_stack.record(
-                undo_fn=lambda: super().remove(child),
-                redo_fn=lambda: super().append(child)
+                undo_fn=lambda: super(HkbXmlElement, self).remove(child),
+                redo_fn=lambda: super(HkbXmlElement, self).append(child)
             )
         
-        super().append(child)
+        super(HkbXmlElement, self).append(child)
     
     def remove(self, child) -> None:
         undo_stack = self.undo_stack
@@ -355,22 +362,22 @@ class HkbXmlElement(ET.ElementBase):
             index = list(self).index(child)
             
             undo_stack.record(
-                undo_fn=lambda: super().insert(index, child),
-                redo_fn=lambda: super().remove(child)
+                undo_fn=lambda: super(HkbXmlElement, self).insert(index, child),
+                redo_fn=lambda: super(HkbXmlElement, self).remove(child)
             )
         
-        super().remove(child)
+        super(HkbXmlElement, self).remove(child)
     
     def insert(self, index: int, child) -> None:
         self._check_move(child)
         undo_stack = self.undo_stack
         if undo_stack is not None:
             undo_stack.record(
-                undo_fn=lambda: super().remove(child),
-                redo_fn=lambda: super().insert(index, child)
+                undo_fn=lambda: super(HkbXmlElement, self).remove(child),
+                redo_fn=lambda: super(HkbXmlElement, self).insert(index, child)
             )
         
-        super().insert(index, child)
+        super(HkbXmlElement, self).insert(index, child)
     
     def clear(self):
         undo_stack = self.undo_stack
@@ -381,20 +388,20 @@ class HkbXmlElement(ET.ElementBase):
             old_children = list(self)
             
             def undo():
-                super().clear()
+                super(HkbXmlElement, self).clear()
                 for key, val in old_attrib.items():
-                    super().set(key, val)
+                    super(HkbXmlElement, self).set(key, val)
                 type(self).text.fset(self, old_text)
                 type(self).tail.fset(self, old_tail)
                 for child in old_children:
-                    super().append(child)
+                    super(HkbXmlElement, self).append(child)
             
             def redo():
-                super().clear()
+                super(HkbXmlElement, self).clear()
             
             undo_stack.record(undo, redo)
         
-        super().clear()
+        super(HkbXmlElement, self).clear()
     
     def extend(self, elements: list):
         for e in elements:
@@ -405,11 +412,11 @@ class HkbXmlElement(ET.ElementBase):
             elements_list = list(elements)
             
             undo_stack.record(
-                undo_fn=lambda: [super().remove(e) for e in elements_list],
-                redo_fn=lambda: super().extend(elements_list)
+                undo_fn=lambda: [super(HkbXmlElement, self).remove(e) for e in elements_list],
+                redo_fn=lambda: super(HkbXmlElement, self).extend(elements_list)
             )
         
-        super().extend(elements)
+        super(HkbXmlElement, self).extend(elements)
     
     def replace(self, old_element, new_element):
         self._check_move(new_element)
@@ -418,16 +425,16 @@ class HkbXmlElement(ET.ElementBase):
             index = list(self).index(old_element)
             
             def undo():
-                super().remove(new_element)
-                super().insert(index, old_element)
+                super(HkbXmlElement, self).remove(new_element)
+                super(HkbXmlElement, self).insert(index, old_element)
             
             def redo():
-                super().remove(old_element)
-                super().insert(index, new_element)
+                super(HkbXmlElement, self).remove(old_element)
+                super(HkbXmlElement, self).insert(index, new_element)
             
             undo_stack.record(undo, redo)
         
-        super().replace(old_element, new_element)
+        super(HkbXmlElement, self).replace(old_element, new_element)
     
     def addnext(self, element):
         self._check_move(element)
@@ -437,10 +444,10 @@ class HkbXmlElement(ET.ElementBase):
             
             undo_stack.record(
                 undo_fn=lambda: parent.remove(element) if parent is not None else None,
-                redo_fn=lambda: super().addnext(element)
+                redo_fn=lambda: super(HkbXmlElement, self).addnext(element)
             )
         
-        super().addnext(element)
+        super(HkbXmlElement, self).addnext(element)
     
     def addprevious(self, element):
         self._check_move(element)
@@ -450,10 +457,10 @@ class HkbXmlElement(ET.ElementBase):
             
             undo_stack.record(
                 undo_fn=lambda: parent.remove(element) if parent is not None else None,
-                redo_fn=lambda: super().addprevious(element)
+                redo_fn=lambda: super(HkbXmlElement, self).addprevious(element)
             )
         
-        super().addprevious(element)
+        super(HkbXmlElement, self).addprevious(element)
 
 
 def _get_xml_parser() -> ET.XMLParser:
