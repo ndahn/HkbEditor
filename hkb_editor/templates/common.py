@@ -4,7 +4,6 @@ import re
 import logging
 from dataclasses import dataclass
 
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
@@ -142,7 +141,6 @@ class CommonActionsMixin:
             var_type = VariableType(var_type)
             var = (variable, var_type, range_min, range_max, default)
             idx = self._behavior.create_variable(*var)
-            undo_manager.on_create_variable(self._behavior, *var, idx)
             self.logger.debug(
                 f"Created new variable {variable} ({idx}) with type {var_type.name}"
             )
@@ -185,7 +183,6 @@ class CommonActionsMixin:
                 raise ValueError(f"Cannot create new event from {event}")
 
             idx = self._behavior.create_event(event)
-            undo_manager.on_create_event(self._behavior, event)
             self.logger.debug(f"Created new event {event} ({idx})")
 
         return Event(idx, event)
@@ -232,7 +229,6 @@ class CommonActionsMixin:
                 raise ValueError(f"Invalid animation name '{animation}'")
 
             idx = self._behavior.create_animation(animation)
-            undo_manager.on_create_animation(self._behavior, animation)
             self.logger.debug(f"Created new animation {animation} ({idx})")
 
         full_name = self._behavior.get_animation(idx, full_name=True)
@@ -351,7 +347,7 @@ class CommonActionsMixin:
         binding_set_ptr: HkbPointer = record["variableBindingSet"]
         var_idx = self.variable(variable).index
 
-        with undo_manager.combine():
+        with self._behavior.transaction():
             if not binding_set_ptr.get_value():
                 # Need to create a new variable binding set first
                 binding_set_type_id = (
@@ -370,12 +366,7 @@ class CommonActionsMixin:
                 )
 
                 self._behavior.add_object(binding_set)
-                undo_manager.on_create_object(self._behavior, binding_set)
-
                 binding_set_ptr.set_value(binding_set)
-                undo_manager.on_update_value(
-                    binding_set_ptr, None, binding_set.object_id
-                )
             else:
                 binding_set = binding_set_ptr.get_target()
 
@@ -384,9 +375,7 @@ class CommonActionsMixin:
                 if bind["memberPath"] == path:
                     # Binding for this path already exists, update it
                     bound_var_idx = bind["variableIndex"]
-                    old_value = bound_var_idx.get_value()
                     bound_var_idx.set_value(var_idx)
-                    undo_manager.on_update_value(bound_var_idx, old_value, var_idx)
                     break
             else:
                 # Create a new binding for the path
@@ -401,7 +390,6 @@ class CommonActionsMixin:
                     },
                 )
                 bindings.append(bind)
-                undo_manager.on_update_array_item(bindings, -1, None, bind)
 
         return binding_set
 
@@ -433,8 +421,7 @@ class CommonActionsMixin:
 
         for idx, bnd in enumerate(bindings):
             if bnd["memberPath"].get_value() == path:
-                old_value = bindings.pop(idx)
-                undo_manager.on_update_array_item(bindings, idx, old_value, None)
+                bindings.pop(idx)
 
     def new_record(
         self,
@@ -474,7 +461,6 @@ class CommonActionsMixin:
         )
         if record.object_id:
             self._behavior.add_object(record)
-            undo_manager.on_create_object(self._behavior, record)
 
         self.logger.debug(f"Created new {record}")
 
@@ -525,16 +511,13 @@ class CommonActionsMixin:
                 f"Types don't match ({source.type_name} vs {dest.type_name})"
             )
 
-        with undo_manager.combine():
+        with self._behavior.transaction():
             for attr in attributes:
                 src_attr = source.get_field(attr)
                 new_val = src_attr.get_value()
-
+                
                 dest_attr = dest.get_field(attr)
-                old_val = dest_attr.get_value()
-
                 dest_attr.set_value(new_val)
-                undo_manager.on_update_value(dest_attr, old_val, new_val)
 
     # Offer common defaults and highlight required settings for the most common objects
     # TODO document functions and their arguments

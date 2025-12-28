@@ -28,7 +28,7 @@ from hkb_editor.hkb.index_attributes import (
     is_variable_attribute,
     is_animation_attribute,
 )
-from hkb_editor.hkb.xml import get_xml_parser
+from hkb_editor.hkb.xml import xml_from_str
 from hkb_editor.templates.common import CommonActionsMixin
 
 from hkb_editor.gui.dialogs import (
@@ -52,7 +52,6 @@ from hkb_editor.gui.workflows.bind_attribute import (
     set_bindable_attribute_state,
 )
 from hkb_editor.gui.workflows.aliases import AliasManager
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.workflows.clone_hierarchy import paste_hierarchy, MergeAction
 from hkb_editor.gui.helpers import (
     create_flag_checkboxes,
@@ -586,8 +585,7 @@ class AttributesWidget:
             if idx < 0:
                 return
 
-            old_value = array.pop(idx)
-            undo_manager.on_update_array_item(array, idx, old_value, None)
+            array.pop(idx)
 
             # Records potentially contain pointers which will affect the graph
             Handler = get_value_handler(
@@ -613,7 +611,6 @@ class AttributesWidget:
 
             idx = len(array)
             array.append(new_item)
-            undo_manager.on_update_array_item(array, idx, None, new_item)
 
             # TODO doesn't work for some reason
             # self._create_attribute_widget(
@@ -1043,7 +1040,6 @@ class AttributesWidget:
 
         old_value = handler.get_value()
         handler.set_value(new_value)
-        undo_manager.on_update_value(handler, old_value, new_value)
 
         if self.on_value_changed:
             self.on_value_changed(sender, handler, (old_value, new_value))
@@ -1104,9 +1100,9 @@ class AttributesWidget:
         data = pyperclip.paste()
 
         # Clipboard contains an XML object
-        with undo_manager.guard(self.tagfile):
+        with self.tagfile.transaction():
             if data.startswith("<object") or data.startswith("<record"):
-                xml = ET.fromstring(data, get_xml_parser())
+                xml = xml_from_str(data)
                 xml_type_id = xml.get("typeid")
                 new_value = HkbRecord.init_from_xml(self.tagfile, xml_type_id, xml)
                 self.tagfile.add_object(new_value, self.tagfile.new_id())
@@ -1133,9 +1129,8 @@ class AttributesWidget:
         index = int(index)
         array: HkbArray = self.record.get_field(array_path)
 
-        with undo_manager.combine():
-            old_value = array.pop(index)
-            undo_manager.on_update_array_item(array, index, old_value, None)
+        with self.tagfile.transaction():
+            array.pop(index)
             self.logger.info(f"Removed {self.record.object_id}/{path}")
             self._update_attribute(sender, None, attribute)
 

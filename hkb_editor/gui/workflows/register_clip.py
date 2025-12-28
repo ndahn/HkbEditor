@@ -6,7 +6,6 @@ from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
 from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags as ClipFlags
 from hkb_editor.templates.common import CommonActionsMixin
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_animation, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes, add_paragraphs
 from hkb_editor.gui import style
@@ -90,7 +89,7 @@ def register_clip_dialog(
             return
 
         # Get or create the animation
-        with undo_manager.guard(behavior):
+        with behavior.transaction():
             animation = util.animation(animation_name)
 
             # dpg combo only gives us the item, not the index
@@ -111,7 +110,6 @@ def register_clip_dialog(
 
             generators: HkbArray = selected_cmsg["generators"]
             generators.append(clip.object_id)
-            undo_manager.on_update_array_item(generators, -1, None, clip.object_id)
 
         callback(dialog, (selected_cmsg, clip), user_data)  
         dpg.delete_item(dialog)

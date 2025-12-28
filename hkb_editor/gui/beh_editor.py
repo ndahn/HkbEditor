@@ -64,7 +64,6 @@ from .tools import (
     eventlistener_dialog,
     open_state_graph_viewer,
 )
-from .workflows.undo import undo_manager
 from .workflows.aliases import AliasManager, AliasMap
 from .workflows.create_cmsg import create_cmsg_dialog
 from .workflows.register_clip import register_clip_dialog
@@ -201,7 +200,6 @@ class BehaviorEditor(BaseEditor):
         # dpg.split_frame(delay=64)
         # center_window(loading_screen)
 
-        undo_manager.clear()
         self.alias_manager.clear()
         self.clear_attributes()
         self.remove_all_pinned_objects()
@@ -220,7 +218,7 @@ class BehaviorEditor(BaseEditor):
                 file_path = unpack_binder(file_path)
 
             self.logger.info("Loading behavior...")
-            self.beh = HavokBehavior(file_path)
+            self.beh = HavokBehavior(file_path, undo=True)
 
             self.config.add_recent_file(file_path)
             self.config.save()
@@ -364,11 +362,11 @@ class BehaviorEditor(BaseEditor):
         center_window(wnd)
 
     def undo(self) -> None:
-        if not undo_manager.can_undo():
+        if not self.beh.undo():
+            self.logger.info("Nothing to undo")
             return
 
-        self.logger.info(f"Undo: {undo_manager.top()}")
-        undo_manager.undo()
+        self.logger.debug("Undo")
 
         for oid in self.get_pinned_objects():
             if oid not in self.beh.objects:
@@ -378,11 +376,11 @@ class BehaviorEditor(BaseEditor):
         self.attributes_widget.regenerate()
 
     def redo(self) -> None:
-        if not undo_manager.can_redo():
+        if not self.beh.redo():
+            self.logger.info("Nothing to redo")
             return
 
-        self.logger.info(f"Redo: {undo_manager.top()}")
-        undo_manager.redo()
+        self.logger.debug("Redo")
 
         self.regenerate()
         self.attributes_widget.regenerate()
@@ -943,14 +941,9 @@ class BehaviorEditor(BaseEditor):
 
         def do_attach(target_obj: XmlValueHandler, new_obj: HkbRecord) -> HkbPointer:
             if isinstance(target_obj, HkbPointer):
-                old_value = target_obj.get_value()
                 target_obj.set_value(new_obj)
-                undo_manager.on_update_value(target_obj, old_value, new_obj.object_id)
-
             elif isinstance(target_obj, HkbArray):
-                ptr: HkbPointer = target_obj.append(new_obj)
-                undo_manager.on_update_array_item(target_obj, -1, None, ptr)
-
+                target_obj.append(new_obj)
             else:
                 raise ValueError(f"Invalid target object {target_obj}")
 
@@ -986,7 +979,7 @@ class BehaviorEditor(BaseEditor):
             except Exception:
                 raise ValueError("Clipboard does not contain valid XML data")
 
-            with undo_manager.guard(self.beh):
+            with self.beh.transaction():
                 new_obj = HkbRecord.init_from_xml(self.beh, xml_type_id, xml)
                 self.beh.add_object(new_obj, self.beh.new_id())
 
@@ -1133,12 +1126,11 @@ class BehaviorEditor(BaseEditor):
             return
 
         self.logger.info(f"Deleting single node {node.id}")
-        with undo_manager.combine():
+        with self.beh.transaction():
             self._on_node_delete(node.id)
 
             # Delete the object last so that any code running before can still inspect it
             self.beh.delete_object(record.object_id)
-            undo_manager.on_delete_object(self.beh, record)
 
         self.regenerate()
 
@@ -1164,7 +1156,7 @@ class BehaviorEditor(BaseEditor):
         self.logger.info(
             f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents"
         )
-        with undo_manager.guard(self.beh):
+        with self.beh.transaction():
             self._on_node_delete(node.id)
 
             self.beh.delete_object(node.id)
@@ -1193,12 +1185,10 @@ class BehaviorEditor(BaseEditor):
                         # Pointer belongs to a pointer array remove this index
                         index = int(index_match.group(2))
                         array: HkbArray = parent.get_field(index_match.group(1))
-                        old_value = array.pop(index)
-                        undo_manager.on_update_array_item(array, index, old_value, None)
+                        array.pop(index)
                     else:
                         # Regular field
                         ptr.set_value(None)
-                        undo_manager.on_update_value(ptr, object_id, None)
 
         if first_parent:
             self.selected_node = self.canvas.nodes[first_parent]
@@ -1216,7 +1206,6 @@ class BehaviorEditor(BaseEditor):
         for idx, trans in enumerate(transitions):
             if trans["toStateId"].get_value() == state_id:
                 transitions.pop(idx)
-                undo_manager.on_update_array_item(transitions, idx, trans, None)
                 self.logger.info(
                     f"Deleted obsolete wildcard transition {idx} for state {state_id}"
                 )
@@ -1391,7 +1380,6 @@ class BehaviorEditor(BaseEditor):
                 pass
 
             self.beh.create_variable(*new_value, idx)
-            undo_manager.on_create_variable(self.beh, new_value, idx)
 
             # Update new_value from the created variable
             new_value[:] = self.beh.get_variable(idx).astuple()
@@ -1414,19 +1402,14 @@ class BehaviorEditor(BaseEditor):
 
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
-            undo_manager.on_update_variable(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            undo_manager.on_delete_variable(self.beh, idx)
             self.beh.delete_variable(idx)
             if idx not in (-1, len(self.beh._variables) + 1):
                 self.logger.info("Fixing affected references of known variable attributes")
                 fix_index_references(self.beh, variable_attributes, idx, None)
 
         def on_move(idx: int, new_idx: int):
-            with undo_manager.combine():
-                undo_manager.on_move_variable(self.beh, idx, new_idx)
-
             self.beh.move_variable(idx, new_idx)
             self.logger.info("Fixing affected references of known variable attributes")
             fix_index_references(self.beh, variable_attributes, idx, new_idx)
@@ -1465,7 +1448,6 @@ class BehaviorEditor(BaseEditor):
                 )
 
             self.beh.create_event(new_value, idx)
-            undo_manager.on_create_event(self.beh, new_value, idx)
             if idx not in (-1, len(self.beh._events) - 1):
                 self.logger.info("Fixing affected references of known event attributes")
                 fix_index_references(self.beh, event_attributes, None, idx)
@@ -1476,19 +1458,14 @@ class BehaviorEditor(BaseEditor):
 
             self.beh.delete_event(idx)
             self.beh.create_event(new_value, idx=idx)
-            undo_manager.on_update_event(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            undo_manager.on_delete_event(self.beh, idx)
             self.beh.delete_event(idx)
             if idx not in (-1, len(self.beh._events) + 1):
                 self.logger.info("Fixing affected references of known event attributes")
                 fix_index_references(self.beh, event_attributes, idx, None)
 
         def on_move(idx: int, new_idx: int):
-            with undo_manager.combine():
-                undo_manager.on_move_event(self.beh, idx, new_idx)
-
             self.beh.move_event(idx, new_idx)
             self.logger.info("Fixing affected references of known event attributes")
             fix_index_references(self.beh, event_attributes, idx, new_idx)
@@ -1524,7 +1501,6 @@ class BehaviorEditor(BaseEditor):
                 )
 
             self.beh.create_animation(new_value, idx)
-            undo_manager.on_create_animation(self.beh, new_value, idx)
             if idx not in (-1, len(self.beh._animations) - 1):
                 self.logger.info("Fixing affected references of known animation attributes")
                 fix_index_references(self.beh, animation_attributes, None, idx)
@@ -1535,19 +1511,14 @@ class BehaviorEditor(BaseEditor):
 
             self.beh.delete_animation(idx)
             self.beh.create_animation(new_value, idx=idx)
-            undo_manager.on_update_animation(self.beh, idx, old_value, new_value)
 
         def on_delete(idx: int):
-            undo_manager.on_delete_animation(self.beh, idx)
             self.beh.delete_animation(idx)
             if idx not in (-1, len(self.beh._animations) + 1):
                 self.logger.info("Fixing affected references of known animation attributes")
                 fix_index_references(self.beh, animation_attributes, idx, None)
 
         def on_move(idx: int, new_idx: int):
-            with undo_manager.combine():
-                undo_manager.on_move_animation(self.beh, idx, new_idx)
-
             self.beh.move_animation(idx, new_idx)
             self.logger.info("Fixing affected references of known animation attributes")
             fix_index_references(self.beh, animation_attributes, idx, new_idx)

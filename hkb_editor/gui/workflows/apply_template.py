@@ -13,7 +13,6 @@ from hkb_editor.templates import (
 )
 from hkb_editor.templates.glue import execute_template
 from hkb_editor.hkb import HavokBehavior, HkbRecord
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.helpers import center_window, add_paragraphs, create_value_widget
 from hkb_editor.gui import style
 
@@ -87,7 +86,7 @@ def apply_template_dialog(
     def on_okay() -> None:
         dpg.hide_item(f"{tag}_notification")
 
-        prev_undo = undo_manager.top()
+        prev_undo = behavior.top_undo_id()
         last_obj_id = next(reversed(behavior.objects.keys()))
 
         try:
@@ -111,7 +110,7 @@ def apply_template_dialog(
             logger.debug("======================================")
             logger.info(f"Executing template '{template._title}'")
 
-            with undo_manager.guard(behavior):
+            with behavior.transaction():
                 for arg in args.values():
                     if arg.value in (None, ""):
                         continue
@@ -133,9 +132,9 @@ def apply_template_dialog(
             show_status(f"Error: {str(e)}")
 
             # Undo any changes that might have already happened
-            if prev_undo != undo_manager.top():
+            if prev_undo != behavior.top_undo_id():
                 try:
-                    undo_manager.undo()
+                    behavior.undo()
                     logger.warning("All recorded changes undone")
                 except Exception as e:
                     logger.error(f"Some of the changes the failed template made could not be undone: {e}")

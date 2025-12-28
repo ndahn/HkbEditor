@@ -1,40 +1,463 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Any
 import logging
+from collections import deque
+from contextlib import contextmanager
+from weakref import WeakKeyDictionary
 from lxml import etree as ET
 
 if TYPE_CHECKING:
     from .tagfile import Tagfile
 
 
-class GuardedElement(ET.ElementBase):
-    def _warn_or_clone(self, el):
+class UndoStack:
+    def __init__(self, max_size: int = 50):
+        self._undos: deque[tuple[int, Callable, Callable]] = deque(maxlen=max_size)
+        self._redos: deque[tuple[int, Callable, Callable]] = deque(maxlen=max_size)
+        self._action_id = 0
+        self._max_size = max_size
+        self._transaction_buffer: list[tuple[Callable, Callable]] = None
+    
+    def record(self, undo_fn: Callable, redo_fn: Callable):
+        if self._transaction_buffer is not None:
+            # Inside a transaction - buffer the operation
+            self._transaction_buffer.append((self._action_id, undo_fn, redo_fn))
+        else:
+            # Normal operation - record immediately
+            self._undos.append((self._action_id, undo_fn, redo_fn))
+            self._redos.clear()
+
+        self._action_id += 1
+
+    @contextmanager
+    def transaction(self):
+        """
+        Group multiple mutations into a single undo/redo action.
+        
+        Usage:
+            with undo_stack.transaction():
+                element.set("a", "1")
+                element.set("b", "2")
+                element.append(child)
+            # All three operations undo/redo together
+        """
+        if self._transaction_buffer is not None:
+            # Nested transactions - just continue with current buffer
+            yield
+            return
+        
+        # Start new transaction
+        self._transaction_buffer = []
+        try:
+            yield
+        finally:
+            # Commit transaction
+            operations = self._transaction_buffer
+            self._transaction_buffer = None
+            
+            if operations:
+                # Combine all operations into single undo/redo
+                def combined_undo():
+                    # Execute undos in reverse order
+                    for undo_fn, _ in reversed(operations):
+                        undo_fn()
+                
+                def combined_redo():
+                    # Execute redos in forward order
+                    for _, redo_fn in operations:
+                        redo_fn()
+                
+                self._undos.append((combined_undo, combined_redo))
+                self._redos.clear()
+
+    def top_undo_id(self) -> int:
+        if not self._undos:
+            return -1
+
+        # Implementing this for redo is not useful I think
+        return self._undos[-1][0]
+
+    def can_undo(self) -> bool:
+        return bool(self._undos)
+
+    def can_redo(self) -> bool:
+        return bool(self._redos)
+
+    def undo(self) -> bool:
+        if not self._undos:
+            return False
+        aid, undo_fn, redo_fn = self._undos.pop()
+        undo_fn()
+        self._redos.append((aid, undo_fn, redo_fn))
+        return True
+    
+    def redo(self) -> bool:
+        if not self._redos:
+            return False
+        aid, undo_fn, redo_fn = self._redos.pop()
+        redo_fn()
+        self._undos.append((aid, undo_fn, redo_fn))
+        return True
+    
+    def clear(self):
+        self._undos.clear()
+        self._redos.clear()
+
+
+class UndoAttrib(dict):
+    """Wrapper around element.attrib that tracks mutations."""
+    
+    def __init__(self, element: "HkbXmlElement", attrib_dict):
+        self._element = element
+        self._attrib = attrib_dict
+        super().__init__(attrib_dict)
+    
+    def __setitem__(self, key, value):
+        undo_stack = self._element.undo_stack
+        if undo_stack is not None:
+            old_value = self._attrib.get(key)
+            
+            def undo():
+                if old_value is None:
+                    self._attrib.pop(key, None)
+                else:
+                    self._attrib[key] = old_value
+            
+            def redo():
+                self._attrib[key] = value
+            
+            undo_stack.record(undo, redo)
+        
+        self._attrib[key] = value
+        super().__setitem__(key, value)
+    
+    def __delitem__(self, key: str):
+        undo_stack = self._element.undo_stack
+        if undo_stack is not None:
+            old_value = self._attrib.get(key)
+            
+            if old_value is not None:
+                undo_stack.record(
+                    undo_fn=lambda: self._attrib.__setitem__(key, old_value),
+                    redo_fn=lambda: self._attrib.pop(key, None)
+                )
+        
+        self._attrib.pop(key, None)
+        super().__delitem__(key)
+    
+    def __getitem__(self, key: str):
+        return self._attrib[key]
+    
+    def __contains__(self, key):
+        return key in self._attrib
+    
+    def __iter__(self):
+        return iter(self._attrib)
+    
+    def __len__(self):
+        return len(self._attrib)
+    
+    def get(self, key, default=None):
+        return self._attrib.get(key, default)
+    
+    def keys(self):
+        return self._attrib.keys()
+    
+    def values(self):
+        return self._attrib.values()
+    
+    def items(self):
+        return self._attrib.items()
+    
+    def pop(self, key: str, default: Any):
+        undo_stack = self._element.undo_stack
+        if undo_stack is not None:
+            old_value = self._attrib.get(key)
+            
+            if old_value is not None:
+                undo_stack.record(
+                    undo_fn=lambda: self._attrib.__setitem__(key, old_value),
+                    redo_fn=lambda: self._attrib.pop(key, None)
+                )
+        
+        result = self._attrib.pop(key, default)
+        if key in self:
+            super().__delitem__(key)
+        return result
+    
+    def update(self, *args, **kwargs):
+        updates = dict(*args, **kwargs)
+        
+        undo_stack = self._element.undo_stack
+        if undo_stack is not None and updates:
+            old_values = {k: self._attrib.get(k) for k in updates}
+            
+            def undo():
+                for key, old_val in old_values.items():
+                    if old_val is None:
+                        self._attrib.pop(key, None)
+                    else:
+                        self._attrib[key] = old_val
+            
+            def redo():
+                self._attrib.update(updates)
+            
+            undo_stack.record(undo, redo)
+        
+        self._attrib.update(updates)
+        super().update(updates)
+    
+    def clear(self):
+        undo_stack = self._element.undo_stack
+        if undo_stack is not None:
+            old_attrib = dict(self._attrib)
+            
+            if old_attrib:
+                undo_stack.record(
+                    undo_fn=lambda: self._attrib.update(old_attrib),
+                    redo_fn=lambda: self._attrib.clear()
+                )
+        
+        self._attrib.clear()
+        super().clear()
+    
+    def setdefault(self, key: str, default: Any = None):
+        if key not in self._attrib:
+            undo_stack = self._element.undo_stack
+            if undo_stack is not None:
+                undo_stack.record(
+                    undo_fn=lambda: self._attrib.pop(key, None),
+                    redo_fn=lambda: self._attrib.__setitem__(key, default)
+                )
+            self._attrib[key] = default
+            super().__setitem__(key, default)
+        
+        return self._attrib[key]
+
+
+class HkbXmlElement(ET.ElementBase):
+    """
+    Custom lxml Element that tracks mutations for undo/redo."""
+    _undo_stacks: WeakKeyDictionary["HkbXmlElement", UndoStack] = WeakKeyDictionary()
+    
+    @property
+    def undo_stack(self) -> UndoStack:
+        root = self.getroottree().getroot()
+        return HkbXmlElement._undo_stacks.get(root)
+
+    @property
+    def attrib(self):
+        """Incurs slight overhead as it wraps the actual element's attrib dict in a class that tracks mutations. Consider using get and set instead. It is discouraged to keep references to the returned dict. Accessing the same dict instance before and after an undo/redo operation may result in undefined behavior."""
+        real_attrib = super(HkbXmlElement, self.__class__).attrib.fget(self)
+        return UndoAttrib(self, real_attrib)
+
+    def _check_move(self, el):
         if el.getparent() is not None:
             attrs = " ".join(f"{k}={v}" for k,v in el.attrib.items())
             logging.getLogger().warning(f"Element is about to be moved, this might be a bug: <{el.tag} {attrs}>")
+        
+    @property
+    def text(self) -> str:
+        return super(HkbXmlElement, self.__class__).text.fget(self)
+    
+    @text.setter
+    def text(self, value: str):
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            old_text = self.text
+            
+            undo_stack.record(
+                undo_fn=lambda: type(self).text.fset(self, old_text),
+                redo_fn=lambda: type(self).text.fset(self, value)
+            )
+        
+        type(self).text.fset(self, value)
+    
+    @property
+    def tail(self) -> str:
+        return super(HkbXmlElement, self.__class__).tail.fget(self)
+    
+    @tail.setter
+    def tail(self, value: str):
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            old_tail = self.tail
+            
+            undo_stack.record(
+                undo_fn=lambda: type(self).tail.fset(self, old_tail),
+                redo_fn=lambda: type(self).tail.fset(self, value)
+            )
+        
+        type(self).tail.fset(self, value)
+    
+    def set(self, key: str, value: str):
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            old_value = self.get(key)
+            
+            def undo():
+                if old_value is None:
+                    self.attrib.pop(key, None)
+                else:
+                    super().set(key, old_value)
+            
+            def redo():
+                super().set(key, value)
+            
+            undo_stack.record(undo, redo)
+        
+        super().set(key, value)
+    
+    def __setitem__(self, key: str, value: str):
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            old_value = self.get(key)
+            
+            def undo():
+                if old_value is None:
+                    self.attrib.pop(key, None)
+                else:
+                    super().set(key, old_value)
+            
+            def redo():
+                super().set(key, value)
+            
+            undo_stack.record(undo, redo)
+        
+        super().__setitem__(key, value)
+    
+    def __delitem__(self, key: str):
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            old_value = self.get(key)
+            
+            if old_value is not None:
+                undo_stack.record(
+                    undo_fn=lambda: super().set(key, old_value),
+                    redo_fn=lambda: self.attrib.pop(key, None)
+                )
+        
+        super().__delitem__(key)
+    
+    def append(self, child) -> None:
+        self._check_move(child)
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            undo_stack.record(
+                undo_fn=lambda: super().remove(child),
+                redo_fn=lambda: super().append(child)
+            )
+        
+        super().append(child)
+    
+    def remove(self, child) -> None:
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            index = list(self).index(child)
+            
+            undo_stack.record(
+                undo_fn=lambda: super().insert(index, child),
+                redo_fn=lambda: super().remove(child)
+            )
+        
+        super().remove(child)
+    
+    def insert(self, index: int, child) -> None:
+        self._check_move(child)
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            undo_stack.record(
+                undo_fn=lambda: super().remove(child),
+                redo_fn=lambda: super().insert(index, child)
+            )
+        
+        super().insert(index, child)
+    
+    def clear(self):
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            old_attrib = dict(self.attrib)
+            old_text = self.text
+            old_tail = self.tail
+            old_children = list(self)
+            
+            def undo():
+                super().clear()
+                for key, val in old_attrib.items():
+                    super().set(key, val)
+                type(self).text.fset(self, old_text)
+                type(self).tail.fset(self, old_tail)
+                for child in old_children:
+                    super().append(child)
+            
+            def redo():
+                super().clear()
+            
+            undo_stack.record(undo, redo)
+        
+        super().clear()
+    
+    def extend(self, elements: list):
+        for e in elements:
+            self._check_move(e)
 
-    def append(self, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.append(self, el)
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            elements_list = list(elements)
+            
+            undo_stack.record(
+                undo_fn=lambda: [super().remove(e) for e in elements_list],
+                redo_fn=lambda: super().extend(elements_list)
+            )
+        
+        super().extend(elements)
+    
+    def replace(self, old_element, new_element):
+        self._check_move(new_element)
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            index = list(self).index(old_element)
+            
+            def undo():
+                super().remove(new_element)
+                super().insert(index, old_element)
+            
+            def redo():
+                super().remove(old_element)
+                super().insert(index, new_element)
+            
+            undo_stack.record(undo, redo)
+        
+        super().replace(old_element, new_element)
+    
+    def addnext(self, element):
+        self._check_move(element)
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            parent = self.getparent()
+            
+            undo_stack.record(
+                undo_fn=lambda: parent.remove(element) if parent is not None else None,
+                redo_fn=lambda: super().addnext(element)
+            )
+        
+        super().addnext(element)
+    
+    def addprevious(self, element):
+        self._check_move(element)
+        undo_stack = self.undo_stack
+        if undo_stack is not None:
+            parent = self.getparent()
+            
+            undo_stack.record(
+                undo_fn=lambda: parent.remove(element) if parent is not None else None,
+                redo_fn=lambda: super().addprevious(element)
+            )
+        
+        super().addprevious(element)
 
-    def insert(self, i, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.insert(self, i, el)
 
-    def extend(self, it):
-        fixed = [self._warn_or_clone(e) for e in it]
-        return ET.ElementBase.extend(self, fixed)
-
-    def addnext(self, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.addnext(self, el)
-
-    def addprevious(self, el):
-        self._warn_or_clone(el)
-        return ET.ElementBase.addprevious(self, el)
-
-
-def get_xml_parser() -> ET.XMLParser:
-    lookup = ET.ElementDefaultClassLookup(element=GuardedElement)
+def _get_xml_parser() -> ET.XMLParser:
+    lookup = ET.ElementDefaultClassLookup(element=HkbXmlElement)
     
     # lxml keeps comments, which affect subelement counts and iterations.
     parser = ET.XMLParser(remove_comments=True)
@@ -43,14 +466,20 @@ def get_xml_parser() -> ET.XMLParser:
     return parser
 
 
-def xml_from_str(xml: str) -> ET.Element:
-    parser = get_xml_parser()
-    return ET.fromstring(xml, parser=parser)
+def xml_from_str(xml: str, undo: bool = False) -> HkbXmlElement:
+    tree = ET.fromstring(xml, parser=_get_xml_parser())
+    root = tree.getroot()
+    if undo:
+        HkbXmlElement._undo_stacks[root] = UndoStack()
+    return root
 
 
-def xml_from_file(path: str) -> ET.Element:
-    parser = get_xml_parser()
-    return ET.parse(path, parser=parser)
+def xml_from_file(path: str, undo: bool = False) -> HkbXmlElement:
+    tree = ET.parse(path, parser=_get_xml_parser())
+    root = tree.getroot()
+    if undo:
+        HkbXmlElement._undo_stacks[root] = UndoStack()
+    return root
 
 
 def xml_to_str(xml: ET.Element) -> str:

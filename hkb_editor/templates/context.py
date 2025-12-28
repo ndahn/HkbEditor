@@ -7,7 +7,6 @@ from enum import Enum, Flag
 from docstring_parser import parse as parse_docstring, DocstringParam
 
 from .common import CommonActionsMixin, Variable, Event, Animation
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.hkb import HavokBehavior, HkbRecord, HkbArray
 
 
@@ -259,12 +258,11 @@ class TemplateContext(CommonActionsMixin):
         if isinstance(record, str):
             record = self._behavior[record]
 
-        with undo_manager.combine():
+        with self._behavior.transaction():
             for path, value in attributes.items():
                 handler = record.get_field(path)
                 
                 handler.set_value(value)
-                undo_manager.on_update_value(handler, handler.get_value(), value)
                 self.logger.debug(f"Updated {path}={value} of {record}")
 
     def delete(self, record: HkbRecord | str) -> HkbRecord:
@@ -284,7 +282,6 @@ class TemplateContext(CommonActionsMixin):
 
         if record.object_id:
             self._behavior.delete_object(record)
-            undo_manager.on_delete_object(self._behavior, record)
             self.logger.debug(f"Deleted object {record}")
 
             return record
@@ -314,7 +311,6 @@ class TemplateContext(CommonActionsMixin):
         idx = len(array)
 
         array.append(item)
-        undo_manager.on_update_array_item(array, -1, None, item)
         self.logger.debug(f"Appended {item} to {path} of {record} (index={idx})")
 
         return idx
@@ -340,7 +336,6 @@ class TemplateContext(CommonActionsMixin):
         array: HkbArray = record.get_field(path)
 
         ret = array.pop(index).get_value()
-        undo_manager.on_update_array_item(array, index, ret, None)
         self.logger.debug(f"Removed item {index} ({ret}) from {path} of {record}")
         
         return ret

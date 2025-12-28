@@ -9,7 +9,7 @@ from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb.xml import get_xml_parser, add_type_comments
+from hkb_editor.hkb.xml import xml_from_str, add_type_comments
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.index_attributes import (
@@ -20,7 +20,6 @@ from hkb_editor.hkb.index_attributes import (
 from hkb_editor.hkb import HkbPointer, HkbRecord, HkbArray, XmlValueHandler
 from hkb_editor.hkb.type_registry import TypeMismatch
 from hkb_editor.gui import style
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.helpers import common_loading_indicator, add_paragraphs
 
 
@@ -139,7 +138,7 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
                 # No break, for the unlikely case that a state has multiple wildcard transitions
 
     # Create using the parser so we can use our guarded xml element class
-    xml_root = ET.fromstring(b"<behavior_hierarchy/>", get_xml_parser())
+    xml_root = xml_from_str(b"<behavior_hierarchy/>")
     xml_root_meta = ET.SubElement(xml_root, "root_meta", root_id=start_id)
     xml_events = ET.SubElement(xml_root, "events")
     xml_variables = ET.SubElement(xml_root, "variables")
@@ -214,7 +213,7 @@ def import_hierarchy(
     interactive: bool = True,
 ):
     try:
-        xmldoc = ET.fromstring(xml, get_xml_parser())
+        xmldoc = xml_from_str(xml)
     except Exception as e:
         raise ValueError(f"Failed to parse hierarchy: {e}")
 
@@ -257,16 +256,14 @@ def import_hierarchy(
                     )
                     continue
 
-                old_value = ptr.get_value()
                 ptr.set_value(target_id)
-                undo_manager.on_update_value(ptr, old_value, target_id)
             except ValueError as e:
                 logger.warning(f"Pointer update failed: {e}")
 
         if callback:
             callback(results)
 
-    with undo_manager.combine():
+    with behavior.transaction():
         # The taret object may be attached in more than one place
         targets: list[tuple[HkbRecord, str]] = []
 
@@ -308,7 +305,7 @@ def paste_hierarchy(
 ) -> MergeResult:
     if isinstance(xml, str):
         try:
-            xmldoc = ET.fromstring(xml, get_xml_parser())
+            xmldoc = xml_from_str(xml)
         except Exception as e:
             raise ValueError(f"Failed to parse hierarchy: {e}")
     else:
@@ -381,7 +378,7 @@ def paste_hierarchy(
             behavior, xmldoc, results, target_record, add_objects
         )
     else:
-        with undo_manager.guard(behavior):
+        with behavior.transaction():
             resolve_conflicts(behavior, target_record, results)
             results.pin_objects = True
             add_objects()
@@ -450,7 +447,7 @@ def paste_children(
     # Parse the xml
     if isinstance(xml, str):
         try:
-            xmldoc = ET.fromstring(xml, get_xml_parser())
+            xmldoc = xml_from_str(xml)
         except Exception as e:
             raise ValueError("Clipboard data is not a valid hierarchy") from e
     else:
@@ -473,7 +470,7 @@ def paste_children(
             behavior, xmldoc, results, target_record, add_children
         )
     else:
-        with undo_manager.guard(behavior):
+        with behavior.transaction():
             resolve_conflicts(behavior, target_record, results)
             results.pin_objects = True
             add_children()
@@ -929,17 +926,9 @@ def ensure_statemachine_wildcards(statemachine: HkbRecord) -> HkbRecord:
         wildcards = HkbRecord.new(
             statemachine.tagfile, statemachine.get_field_type("wildcardTransitions")
         )
-
         statemachine.tagfile.add_object(wildcards)
-        undo_manager.on_create_object(statemachine.tagfile, wildcards)
-
         statemachine["wildcardTransitions"].set_value(wildcards)
-        undo_manager.on_update_value(
-            statemachine["wildcardTransitions"],
-            None,
-            wildcards.object_id,
-        )
-
+        
     return wildcards
 
 
@@ -1042,7 +1031,7 @@ def open_merge_hierarchy_dialog(
     def resolve():
         loading = common_loading_indicator("Merging Hierarchy")
         try:
-            with undo_manager.guard(behavior):
+            with behavior.transaction():
                 resolve_conflicts(behavior, target_record, results)
                 results.pin_objects = dpg.get_value(f"{tag}_pin_objects")
                 callback()

@@ -1,6 +1,7 @@
 from typing import Callable, Generator, TYPE_CHECKING, Any
 import logging
 from collections import deque
+from contextlib import contextmanager
 from copy import deepcopy
 from functools import cache
 import re
@@ -9,7 +10,7 @@ import re
 from lxml import etree as ET
 import networkx as nx
 
-from .xml import get_xml_parser, add_type_comments
+from .xml import xml_from_file, add_type_comments, HkbXmlElement
 from .type_registry import TypeRegistry
 from .query import query_objects
 
@@ -21,27 +22,22 @@ _undefined = object()
 
 
 class Tagfile:
-    def __init__(self, xml_file: str):
+    def __init__(self, xml_file: str, undo: bool = False):
         from .hkb_types import HkbRecord
 
         self.file = xml_file
-
-        self._tree: ET._ElementTree = ET.parse(xml_file, parser=get_xml_parser())
-        root: ET._Element = self._tree.getroot()
+        self._tree: HkbXmlElement = xml_from_file(xml_file, undo=undo)
 
         # Some versions of HKLib seem to decompile floats with commas
-        self.floats_use_commas = bool(root.xpath("(//real[contains(@dec, ',')])[1]"))
+        self.floats_use_commas = bool(self._tree.xpath("(//real[contains(@dec, ',')])[1]"))
 
         self.type_registry = TypeRegistry()
-        self.type_registry.load_types(root)
+        self.type_registry.load_types(self._tree)
 
         # TODO hide behind a property, changing this dict should also affect the xml
-        self.objects: dict[str, HkbRecord] = {
-            obj.get("id"): HkbRecord.from_object(self, obj)
-            for obj in root.findall(".//object")
-        }
-
         # TODO cache objects by name and type_name for quick access
+        self.objects: dict[str, HkbRecord] = {}
+        self._regenerate_cache()
 
         objectid_values = [
             int(k[len("object") :])
@@ -53,6 +49,93 @@ class Tagfile:
         self.behavior_root: HkbRecord = self.find_first_by_type_name(
             "hkRootLevelContainer"
         )
+
+    def _regenerate_cache(self) -> None:
+        self.objects = {
+            obj.get("id"): HkbRecord.from_object(self, obj)
+            for obj in self._tree.findall(".//object")
+        }
+
+    def is_undo_enabled(self) -> bool:
+        """Check whether undo is supported for the underlying xml tree.
+
+        Returns
+        -------
+        bool
+            True if undo is supported, false otherwise.
+        """
+        return bool(self._tree.undo_stack)
+
+    @contextmanager
+    def transaction(self):
+        """Combine all subsequent mutations of the underlying xml structure into a single undo/redo action.
+
+        Usage
+        -----
+            with tagfile.transaction():
+                element.set("a", "1")
+                element.set("b", "2")
+                element.append(child)
+            # All three operations undo/redo together
+        """
+        with self._tree.undo_stack.transaction() as t:
+            yield t
+
+    def top_undo_id(self) -> int:
+        """Get the ID of the topmost undo item. Useful for checking if the undo stack has been changed.
+
+        Returns
+        -------
+        int
+            The ID of the topmost undo item. Calling undo, then redo will place the same undo item on the top again, and so the same ID will be returned.
+        """
+        undo_stack = self._tree.undo_stack
+        if undo_stack:
+            return undo_stack.top_undo_id()
+        
+        return -1
+
+    def can_undo(self) -> bool:
+        """Check if there are actions to undo.
+
+        Returns
+        -------
+        bool
+            True if there is at least one action to undo, False otherwise.
+        """
+        undo_stack = self._tree.undo_stack
+        return undo_stack and undo_stack.can_undo()
+
+    def undo(self) -> bool:
+        """Undo the last mutation of the underlying xml structure.
+
+        Returns
+        -------
+        bool
+            True if an action was undone, False otherwise.
+        """
+        return self._tree.undo_stack.undo()
+
+    def can_redo(self) -> bool:
+        """Check if there are actions to redo.
+
+        Returns
+        -------
+        bool
+            True if there is at least one action to redo, False otherwise.
+        """
+        undo_stack = self._tree.undo_stack
+        return undo_stack and undo_stack.can_redo()
+
+    def redo(self) -> bool:
+        """Redo the last mutation of the underlying xml structure.
+
+        Returns
+        -------
+        bool
+            True if an action was redone, False otherwise.
+        """
+        return self._tree.undo_stack.redo()
 
     def save_to_file(self, file_path: str) -> None:
         # Add comments on the copy. We don't want to keep these as they can mess up
@@ -73,9 +156,9 @@ class Tagfile:
         g = nx.DiGraph()
 
         visited = set()
-        todo: deque[tuple[str, ET.Element]] = deque()
+        todo: deque[tuple[str, HkbXmlElement]] = deque()
 
-        def expand(elem: ET.Element, parent_id: str) -> None:
+        def expand(elem: HkbXmlElement, parent_id: str) -> None:
             if parent_id in visited:
                 return
 
@@ -223,13 +306,13 @@ class Tagfile:
 
         return winner
 
-    def find_object_for(self, item: "XmlValueHandler | ET._Element") -> "HkbRecord":
+    def find_object_for(self, item: "XmlValueHandler | HkbXmlElement") -> "HkbRecord":
         from .hkb_types import XmlValueHandler
 
         if isinstance(item, XmlValueHandler):
             item = item.element
 
-        parent: ET._Element = item
+        parent: HkbXmlElement = item
 
         while parent is not None and not parent.tag == "object":
             parent = parent.getparent()
@@ -296,7 +379,7 @@ class Tagfile:
             visited.add(candidate_id)
 
             # Search upwards through the hierarchy to see if any ancestors match our criteria
-            parents: list[ET._Element] = self._tree.xpath(
+            parents: list[HkbXmlElement] = self._tree.xpath(
                 f"/*/object[.//pointer[@id='{candidate_id}']]"
             )
 
@@ -350,18 +433,26 @@ class Tagfile:
         return f"object{new_id}"
 
     def add_object(self, record: "HkbRecord", id: str = None) -> str:
+        if record in self.objects.values():
+            # Prevent some shenanigans that could potentially add an object a second time
+            raise ValueError("Cannot add an object that's already part of the tree.")
+        
         if id is None:
             if record.object_id:
                 id = record.object_id
             else:
                 id = self.new_id()
 
-        if id in self.objects:
-            raise ValueError(f"An object with ID {id} already exists")
+        if not id:
+            raise ValueError(f"Invalid ID '{id}'")
 
-        record.object_id = id
-        self._tree.getroot().append(record.as_object())
-        self.objects[id] = record
+        if id in self.objects:
+            raise ValueError(f"An object with ID '{id}' already exists")
+
+        with self.transaction():
+            record.object_id = id
+            self._tree.append(record.as_object())
+            self.objects[id] = record
 
         return id
 
@@ -385,19 +476,20 @@ class Tagfile:
         if isinstance(object_id, HkbRecord):
             object_id = object_id.object_id
 
-        obj = self.objects.pop(object_id)
+        with self.transaction():
+            obj = self.objects.pop(object_id)
 
-        # Proper objects will have their <record> inside an <object> tag
-        parent: ET._Element = obj.element.getparent()
+            # Proper objects will have their <record> inside an <object> tag
+            parent: HkbXmlElement = obj.element.getparent()
 
-        if parent is None:
-            parent = self._tree.getroot()
+            if parent is None:
+                parent = self._tree
 
-        # Make sure to not leave an empty <object> tag behind!
-        if parent.tag == "object":
-            object_elem = parent
-            parent.getparent().remove(object_elem)
-        else:
-            parent.remove(obj.element)
+            # Make sure to not leave an empty <object> tag behind!
+            if parent.tag == "object":
+                object_elem = parent
+                parent.getparent().remove(object_elem)
+            else:
+                parent.remove(obj.element)
 
         return obj

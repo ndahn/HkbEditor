@@ -11,7 +11,6 @@ from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfoArray_Flags as TransitionInfoFlags,
 )
 from hkb_editor.templates.common import CommonActionsMixin
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.dialogs import select_event, select_animation, select_object
 from hkb_editor.gui.helpers import center_window, create_flag_checkboxes, add_paragraphs
 from hkb_editor.gui import style
@@ -97,7 +96,7 @@ def create_cmsg_dialog(
         if not cmsg_name.endswith("_CMSG"):
             cmsg_name += "_CMSG"
 
-        with undo_manager.guard(behavior):
+        with behavior.transaction():
             # Get or create the animation slot
             animation = util.animation(animation_val)
 
@@ -152,17 +151,13 @@ def create_cmsg_dialog(
             # add stateinfo to statemachine/states array
             sm_states = statemachine["states"]
             sm_states.append(stateinfo.object_id)
-            undo_manager.on_update_array_item(sm_states, -1, None, stateinfo.object_id)
 
             # Add transition info to statemachine
             # TODO doesn't mesh well with undo yet
             #util.register_wildcard_transition(statemachine, new_state_id, event)
             wildcard_transitions = wildcard_transitions_ptr.get_target()["transitions"]
             wildcard_transitions.append(transitioninfo)
-            undo_manager.on_update_array_item(
-                wildcard_transitions, -1, None, transitioninfo
-            )
-
+            
         callback(dialog, (stateinfo, cmsg, clip), user_data)
         dpg.delete_item(dialog)
 

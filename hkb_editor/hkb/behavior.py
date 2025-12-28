@@ -28,8 +28,8 @@ class HkbVariable:
 
 
 class HavokBehavior(Tagfile):
-    def __init__(self, xml_file: str):
-        super().__init__(xml_file)
+    def __init__(self, xml_file: str, undo: bool):
+        super().__init__(xml_file, undo)
 
         # Locate the root statemachine
         self.root_sm = None
@@ -40,6 +40,29 @@ class HavokBehavior(Tagfile):
                 break
         else:
             logging.getLogger().warning("Could not locate root statemachine")
+
+        graphdata_type_id = self.type_registry.find_first_type_by_name(
+            "hkbBehaviorGraphData"
+        )
+        graphdata_obj = next(self.find_objects_by_type(graphdata_type_id))
+
+        self._event_infos: HkbArray = graphdata_obj["eventInfos"]
+        self._variable_infos: HkbArray = graphdata_obj["variableInfos"]
+        self._variable_bounds: HkbArray = graphdata_obj["variableBounds"]
+        self._variable_defaults: HkbRecord = self.find_first_by_type_name(
+            "hkbVariableValueSet"
+        )
+
+        # Querying the actual values of a full array can be very slow, especially for
+        # arrays with 10s of thousands of items. Caching these here will increase the
+        # initial file opening time by a few seconds, but in return the user won't have
+        # to sit idle every time they open a select dialog or similar
+        self._events: CachedArray[str] = None
+        self._variables: CachedArray[str] = None
+        self._animations: CachedArray[str] = None
+
+    def _regenerate_cache(self):
+        super()._regenerate_cache
 
         # There's some special objects storing the string values referenced from HKS
         strings_type_id = self.type_registry.find_first_type_by_name(
@@ -54,18 +77,6 @@ class HavokBehavior(Tagfile):
         self._events = CachedArray[str](strings_obj["eventNames"])
         self._variables = CachedArray[str](strings_obj["variableNames"])
         self._animations = CachedArray[str](strings_obj["animationNames"])
-
-        graphdata_type_id = self.type_registry.find_first_type_by_name(
-            "hkbBehaviorGraphData"
-        )
-        graphdata_obj = next(self.find_objects_by_type(graphdata_type_id))
-
-        self._event_infos: HkbArray = graphdata_obj["eventInfos"]
-        self._variable_infos: HkbArray = graphdata_obj["variableInfos"]
-        self._variable_bounds: HkbArray = graphdata_obj["variableBounds"]
-        self._variable_defaults: HkbRecord = self.find_first_by_type_name(
-            "hkbVariableValueSet"
-        )
 
     def get_character_id(self) -> str:
         """Returns the character ID of this behavior, e.g. c0000."""
@@ -91,12 +102,13 @@ class HavokBehavior(Tagfile):
         if idx is None or idx < 0:
             idx = len(self._events)
 
-        self._events.insert(idx, event_name)
+        with self.transaction():
+            self._events.insert(idx, event_name)
 
-        # This one never has any meaningful data, but must still have an entry
-        self._event_infos.insert(
-            idx, HkbRecord.new(self, self._event_infos.element_type_id)
-        )
+            # This one never has any meaningful data, but must still have an entry
+            self._event_infos.insert(
+                idx, HkbRecord.new(self, self._event_infos.element_type_id)
+            )
 
         if idx < 0:
             return len(self._events) - idx
@@ -129,15 +141,17 @@ class HavokBehavior(Tagfile):
         self._events[idx] = new_name
 
     def delete_event(self, idx: int) -> None:
-        del self._event_infos[idx]
-        del self._events[idx]
+        with self.transaction():
+            del self._event_infos[idx]
+            del self._events[idx]
 
     def move_event(self, idx: int, new_idx: int) -> None:
-        event = self._events.pop(idx)
-        infos = self._event_infos.pop(idx)
+        with self.transaction():
+            event = self._events.pop(idx)
+            infos = self._event_infos.pop(idx)
 
-        self._events.insert(new_idx, event)
-        self._event_infos.insert(new_idx, infos)
+            self._events.insert(new_idx, event)
+            self._event_infos.insert(new_idx, infos)
 
     # HKS variables
     def create_variable(
@@ -157,33 +171,34 @@ class HavokBehavior(Tagfile):
 
         var_type = VariableType(var_type)
 
-        # Update the defaults array first to verify the default value is valid
-        self.set_variable_default(idx, default, vtype=var_type)
+        with self.transaction():
+            # Update the defaults array first to verify the default value is valid
+            self.set_variable_default(idx, default, vtype=var_type)
 
-        self._variables.insert(idx, variable_name)
+            self._variables.insert(idx, variable_name)
 
-        # These must have matching entries as well
-        self._variable_infos.insert(
-            idx,
-            HkbRecord.new(
-                self,
-                self._variable_infos.element_type_id,
-                {
-                    "type": var_type.value,
-                },
-            ),
-        )
-        self._variable_bounds.insert(
-            idx,
-            HkbRecord.new(
-                self,
-                self._variable_bounds.element_type_id,
-                {
-                    "min/value": range_min,
-                    "max/value": range_max,
-                },
-            ),
-        )
+            # These must have matching entries as well
+            self._variable_infos.insert(
+                idx,
+                HkbRecord.new(
+                    self,
+                    self._variable_infos.element_type_id,
+                    {
+                        "type": var_type.value,
+                    },
+                ),
+            )
+            self._variable_bounds.insert(
+                idx,
+                HkbRecord.new(
+                    self,
+                    self._variable_bounds.element_type_id,
+                    {
+                        "min/value": range_min,
+                        "max/value": range_max,
+                    },
+                ),
+            )
 
         if idx < 0:
             return len(self._variables) - idx
@@ -456,23 +471,25 @@ class HavokBehavior(Tagfile):
         return default
 
     def delete_variable(self, idx: int) -> None:
-        del self._variables[idx]
-        del self._variable_bounds[idx]
-        del self._variable_infos[idx]
-        del self._variable_defaults["wordVariableValues"][idx]
+        with self.transaction():
+            del self._variables[idx]
+            del self._variable_bounds[idx]
+            del self._variable_infos[idx]
+            del self._variable_defaults["wordVariableValues"][idx]
 
-        self._cleanup_variable_defaults()
+            self._cleanup_variable_defaults()
 
     def move_variable(self, idx: int, new_idx: int) -> None:
-        var = self._variables.pop(idx)
-        bounds = self._variable_bounds.pop(idx)
-        infos = self._variable_infos.pop(idx)
-        defaults = self._variable_defaults["wordVariableValues"].pop(idx)
+        with self.transaction():
+            var = self._variables.pop(idx)
+            bounds = self._variable_bounds.pop(idx)
+            infos = self._variable_infos.pop(idx)
+            defaults = self._variable_defaults["wordVariableValues"].pop(idx)
 
-        self._variables.insert(new_idx, var)
-        self._variable_bounds.insert(new_idx, bounds)
-        self._variable_infos.insert(new_idx, infos)
-        self._variable_defaults["wordVariableValues"].insert(new_idx, defaults)
+            self._variables.insert(new_idx, var)
+            self._variable_bounds.insert(new_idx, bounds)
+            self._variable_infos.insert(new_idx, infos)
+            self._variable_defaults["wordVariableValues"].insert(new_idx, defaults)
 
     def _cleanup_variable_defaults(self) -> None:
         words: HkbArray[HkbRecord] = self._variable_defaults["wordVariableValues"]
@@ -505,13 +522,14 @@ class HavokBehavior(Tagfile):
 
         # Quads and pointers are referenced from the words array, so when a variable is removed
         # it can leave behind abandoned items in those arrays
-        quads: HkbArray = self._variable_defaults["quadVariableValues"]
-        pointers: HkbArray = self._variable_defaults["variantVariableValues"]
+        with self.transaction():
+            quads: HkbArray = self._variable_defaults["quadVariableValues"]
+            pointers: HkbArray = self._variable_defaults["variantVariableValues"]
 
-        cleanup(
-            quads, [VariableType.VECTOR3, VariableType.VECTOR4, VariableType.QUATERNION]
-        )
-        cleanup(pointers, [VariableType.POINTER])
+            cleanup(
+                quads, [VariableType.VECTOR3, VariableType.VECTOR4, VariableType.QUATERNION]
+            )
+            cleanup(pointers, [VariableType.POINTER])
 
     # animationNames array
     def get_full_animation_name(self, animation_name: str) -> str:
@@ -584,5 +602,6 @@ class HavokBehavior(Tagfile):
         del self._animations[idx]
 
     def move_animation(self, idx: int, new_idx: int) -> None:
-        anim = self._animations.pop(idx)
-        self._animations.insert(new_idx, anim)
+        with self.transaction():
+            anim = self._animations.pop(idx)
+            self._animations.insert(new_idx, anim)

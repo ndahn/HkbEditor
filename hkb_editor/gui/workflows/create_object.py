@@ -3,7 +3,6 @@ import re
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import Tagfile, HkbRecord
-from hkb_editor.gui.workflows.undo import undo_manager
 from hkb_editor.gui.workflows.aliases import AliasManager
 from hkb_editor.gui.dialogs import find_dialog
 from hkb_editor.gui.widgets import AttributesWidget
@@ -134,7 +133,7 @@ def create_object_dialog(
             show_warning("No type selected")
             return
 
-        with undo_manager.guard(tagfile):
+        with tagfile.transaction():
             tagfile.add_object(record)
             callback(window, record, user_data)
             
