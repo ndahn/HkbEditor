@@ -86,13 +86,23 @@ class HkbInteger(XmlValueHandler):
         if element.tag != "integer":
             raise ValueError(f"Invalid element <{element.tag}>")
 
+        format = tagfile.type_registry.get_format(type_id)
+        self.signed = (format & 0x200 != 0)
+        self.byte_size = (format >> 10)
+
         super().__init__(tagfile, element, type_id)
 
     def get_value(self) -> int:
-        return int(self.element.attrib.get("value", 0))
+        val = int(self.element.attrib.get("value", 0))
+        if not self.signed:
+            return abs(val)
+        return val
 
     def set_value(self, value: "HkbInteger | int") -> None:
-        self.element.set("value", str(int(value)))
+        val = str(int(value))
+        if not self.signed:
+            val = abs(val)
+        self.element.set("value", val)
 
     def __int__(self) -> int:
         return self.get_value()
@@ -118,6 +128,10 @@ class HkbFloat(XmlValueHandler):
     def __init__(self, tagfile: Tagfile, element: HkbXmlElement, type_id: str):
         if element.tag != "real":
             raise ValueError(f"Invalid element <{element.tag}>")
+
+        # Not needed/relevant for now
+        #format = tagfile.type_registry.get_format(type_id)
+        #self.bigendian = (format & 0x100 != 0)
 
         super().__init__(tagfile, element, type_id)
 
@@ -294,9 +308,12 @@ class HkbArray(XmlValueHandler, Generic[T]):
         if element.tag != "array":
             raise ValueError(f"Invalid element {element}")
 
+        # TODO make use of this!
+        format = tagfile.type_registry.get_format(type_id)
+        self.max_size = format >> 8
+
         super().__init__(tagfile, element, type_id)
-        # TODO format of element_type_id will be easier to check
-        self.is_pointer_array = self.get_item_wrapper() == HkbPointer
+        self.is_pointer_array = (self.get_item_wrapper() == HkbPointer)
 
     @property
     def element_type_id(self) -> str:
@@ -782,51 +799,25 @@ class HkbRecord(XmlValueHandler):
 def get_value_handler(
     type_registry: TypeRegistry, type_id: str
 ) -> Type[XmlValueHandler]:
-    # TODO don't hardcode these, should be derived from the behavior somehow
-    # From a different file:
-    # 0          void
-    # 1          incomplete
-    # 3          string (ptr)
-    # 6          pointer
-    # 7          record
-    # 8          array
-    # 552        array(2)
-    # 1064       array(4)
-    # 3112       array(12)
-    # 4136       array(16)
-    # 8194       bool8 (unsigned, LE)
-    # 8196       uint8 (LE)
-    # 8708       int8 (LE)
-    # 16388      uint16 (LE)
-    # 16900      int16 (LE)
-    # 32772      uint32 (LE)
-    # 33284      int32 (LE)
-    # 65540      uint64 (LE)
-    # 1525253    float
     format_map = {
-        0: None,  # TODO void
-        1: object,  # TODO opaque
+        0: None,  # Void
+        1: None,  # Opaque
+        2: HkbBool,
         3: HkbString,
+        4: HkbInteger,
+        5: HkbFloat,
         6: HkbPointer,
         7: HkbRecord,
         8: HkbArray,
-        131: HkbString,
-        1064: HkbArray,
-        4136: HkbArray,
-        8194: HkbBool,
-        8196: HkbInteger,
-        8232: HkbArray,
-        8708: HkbInteger,
-        16388: HkbInteger,
-        16900: HkbInteger,
-        32772: HkbInteger,
-        33284: HkbInteger,
-        65540: HkbInteger,
-        1525253: HkbFloat,
     }
 
-    type_format = type_registry.get_format(type_id)
-    return format_map[type_format]
+    format = type_registry.get_format(type_id)
+    tp = format_map[format & 0xf]
+
+    if tp is None:
+        raise TypeError(f"Don't know how to handle type_id {type_id} (format={format})")
+
+    return tp
 
 
 def wrap_element(

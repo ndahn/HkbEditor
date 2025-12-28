@@ -55,6 +55,8 @@ class TypeRegistry:
             subtype = self._get_attribute(type_el, "subtype", "id")
             parent = self._get_attribute(type_el, "parent", "id")
 
+            # TODO field flags
+            # https://github.com/The12thAvenger/HKLib/blob/main/HKLib.Reflection/HavokType.cs#L82
 
             self.types[type_id] = {
                 "name": name,
