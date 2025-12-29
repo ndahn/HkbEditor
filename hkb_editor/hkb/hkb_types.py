@@ -56,7 +56,7 @@ class HkbString(XmlValueHandler):
     @classmethod
     def new(cls, tagfile: Tagfile, type_id: str, value: str = None) -> "HkbString":
         val = str(value) if value is not None else ""
-        elem = HkbXmlElement("string", value=val)
+        elem = HkbXmlElement.new("string", value=val)
         return HkbString(tagfile, elem, type_id)
 
     def __init__(self, tagfile: Tagfile, element: HkbXmlElement, type_id: str):
@@ -79,7 +79,7 @@ class HkbInteger(XmlValueHandler):
     @classmethod
     def new(cls, tagfile: Tagfile, type_id: str, value: int = None) -> "HkbInteger":
         val = int(value) if value is not None else 0
-        elem = HkbXmlElement("integer", value=str(val))
+        elem = HkbXmlElement.new("integer", value=str(val))
         return HkbInteger(tagfile, elem, type_id)
 
     def __init__(self, tagfile: Tagfile, element: HkbXmlElement, type_id: str):
@@ -100,10 +100,10 @@ class HkbInteger(XmlValueHandler):
         return val
 
     def set_value(self, value: "HkbInteger | int") -> None:
-        val = str(int(value))
+        val = int(value)
         if not self.signed:
             val = abs(val)
-        self.element.set("value", val)
+        self.element.set("value", str(val))
 
     def __int__(self) -> int:
         return self.get_value()
@@ -112,7 +112,7 @@ class HkbInteger(XmlValueHandler):
 class HkbFloat(XmlValueHandler):
     @classmethod
     def new(cls, tagfile: Tagfile, type_id: str, value: float = None) -> "HkbFloat":
-        elem = HkbXmlElement("real", dec="", hex="")
+        elem = HkbXmlElement.new("real", dec="", hex="")
         ret = HkbFloat(tagfile, elem, type_id)
 
         # Slightly roundabout, but this way we get proper comma handling etc.
@@ -167,7 +167,7 @@ class HkbBool(XmlValueHandler):
     def new(cls, tagfile: Tagfile, type_id: str, value: bool = None) -> "HkbBool":
         bval = bool(value) if value is not None else False
         rep = "true" if bval else "false"
-        elem = HkbXmlElement("bool", value=rep)
+        elem = HkbXmlElement.new("bool", value=rep)
         return HkbBool(tagfile, elem, type_id)
 
     def __init__(self, tagfile: Tagfile, element: HkbXmlElement, type_id: str):
@@ -193,7 +193,7 @@ class HkbPointer(XmlValueHandler):
     @classmethod
     def new(cls, tagfile: Tagfile, type_id: str, value: str = None) -> "HkbPointer":
         val = str(value) if value else "object0"
-        elem = HkbXmlElement("pointer", id=val)
+        elem = HkbXmlElement.new("pointer", id=val)
         return HkbPointer(tagfile, elem, type_id)
 
     def __init__(self, tagfile: Tagfile, element: HkbXmlElement, type_id: str):
@@ -302,7 +302,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
             elem_type_id = tagfile.type_registry.get_subtype(temp_type)
             temp_type = tagfile.type_registry.get_parent(temp_type)
 
-        elem = HkbXmlElement("array", count=str(len(items)), elementtypeid=elem_type_id)
+        elem = HkbXmlElement.new("array", count=str(len(items)), elementtypeid=elem_type_id)
         elem.extend(item.element for item in items)
 
         return HkbArray(tagfile, elem, type_id)
@@ -514,12 +514,12 @@ class HkbRecord(XmlValueHandler):
         path_values: dict[str, Any] = None,
         object_id: str = None,
     ) -> "HkbRecord":
-        record_elem = HkbXmlElement("record")
+        record_elem = HkbXmlElement.new("record")
         record = HkbRecord(tagfile, record_elem, type_id, object_id)
 
         # Make sure the xml subtree contains all required fields
         for fname, ftype in tagfile.type_registry.get_field_types(type_id).items():
-            field_elem = HkbXmlElement("field", name=fname)
+            field_elem = HkbXmlElement.new("field", name=fname)
             record_elem.append(field_elem)
 
             # Handler.new will create all expected fields for the subelement
@@ -790,7 +790,7 @@ class HkbRecord(XmlValueHandler):
         if not id:
             id = self.object_id
 
-        elem = HkbXmlElement("object", typeid=self.type_id, id=id)
+        elem = HkbXmlElement.new("object", typeid=self.type_id, id=id)
         elem.append(self.element)
 
         return elem

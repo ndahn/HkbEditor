@@ -29,22 +29,22 @@ def run(
     try:
         # Check if it already exists
         ctx.find("name=BuddyGenerate")
+        ctx.logger.info("BuddyGenerate already exists, nothing to do")
     except KeyError:
-        pass
-    else:
         summon_stateid = ctx.get_next_state_id(master_sm)
-        ctx.create_state_chain(
+        summon_state, _, _ = ctx.create_state_chain(
             summon_stateid,
             "a000_001830",
             "BuddyGenerate",
             cmsg_kwargs={
                 "offsetType": CmsgOffsetType.ANIM_ID,
                 "animeEndEventType": AnimeEndEventType.FIRE_IDLE_EVENT,
-                "changeTypeOfSelectedIndex": ChangeIndexType.SELF_TRANSITION,
+                "changeTypeOfSelectedIndexAfterActivate": ChangeIndexType.SELF_TRANSITION,
                 "checkAnimEndSlotNo": 1,
             },
         )
 
+        ctx.array_add(master_sm, "states", summon_state)
         ctx.register_wildcard_transition(
             master_sm,
             summon_stateid,
@@ -55,25 +55,25 @@ def run(
     try:
         # Check if it already exists
         ctx.find("name=BuddyDisappear")
+        ctx.logger.info("BuddyDisappear already exists, nothing to do")
     except KeyError:
-        pass
-    else:
-        summon_stateid = ctx.get_next_state_id(master_sm)
-        ctx.create_state_chain(
-            summon_stateid,
+        disappear_stateid = ctx.get_next_state_id(master_sm)
+        disappear_state, _, _ = ctx.create_state_chain(
+            disappear_stateid,
             "a000_001840",
             "BuddyDisappear",
             cmsg_kwargs={
                 "offsetType": CmsgOffsetType.ANIM_ID,
                 "animeEndEventType": AnimeEndEventType.FIRE_IDLE_EVENT,
-                "changeTypeOfSelectedIndex": ChangeIndexType.SELF_TRANSITION,
+                "changeTypeOfSelectedIndexAfterActivate": ChangeIndexType.SELF_TRANSITION,
                 "checkAnimEndSlotNo": 1,
             },
         )
 
+        ctx.array_add(master_sm, "states", disappear_state)
         ctx.register_wildcard_transition(
             master_sm,
-            summon_stateid,
+            disappear_stateid,
             "W_BuddyDisappear",
             transition_effect=default_transition,
         )

@@ -274,6 +274,13 @@ class HkbXmlElement(ET.ElementBase):
 
     # NOTE custom element classes should never have a constructor!
 
+    @classmethod
+    def new(cls, tag: str, **kwargs) -> "HkbXmlElement":
+        # ET.Element won't know about our custom class, and calling 
+        # HkbXmlElement("tag") directly is wrong and won't work
+        parser = _get_xml_parser()
+        return parser.makeelement(tag, **kwargs)
+
     @property
     def undo_stack(self) -> UndoStack:
         root = self.getroottree().getroot()
@@ -514,6 +521,16 @@ def _get_xml_parser() -> ET.XMLParser:
     parser.set_element_class_lookup(lookup)
 
     return parser
+
+
+def make_element(tag: str, **kwargs) -> HkbXmlElement:
+    return HkbXmlElement.new(tag, **kwargs)
+
+
+def make_subelement(parent: ET.Element, tag: str, **kwargs) -> HkbXmlElement:
+    child = HkbXmlElement.new(tag, **kwargs)
+    parent.append(child)
+    return child
 
 
 def xml_from_str(xml: str, undo: bool = False) -> HkbXmlElement:

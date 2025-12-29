@@ -9,7 +9,7 @@ from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb.xml import xml_from_str, add_type_comments
+from hkb_editor.hkb.xml import xml_from_str, add_type_comments, make_element, make_subelement
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.index_attributes import (
@@ -139,39 +139,39 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
 
     # Create using the parser so we can use our guarded xml element class
     xml_root = xml_from_str(b"<behavior_hierarchy/>")
-    xml_root_meta = ET.SubElement(xml_root, "root_meta", root_id=start_id)
-    xml_events = ET.SubElement(xml_root, "events")
-    xml_variables = ET.SubElement(xml_root, "variables")
-    xml_animations = ET.SubElement(xml_root, "animations")
-    xml_types = ET.SubElement(xml_root, "types")
-    xml_objects = ET.SubElement(
+    xml_root_meta = make_subelement(xml_root, "root_meta", root_id=start_id)
+    xml_events = make_subelement(xml_root, "events")
+    xml_variables = make_subelement(xml_root, "variables")
+    xml_animations = make_subelement(xml_root, "animations")
+    xml_types = make_subelement(xml_root, "types")
+    xml_objects = make_subelement(
         xml_root, "objects", graph=str(nx.to_edgelist(hierarchy_graph))
     )
 
     # Root Meta
     # Unique paths to reach the object, important when importing a subtree
     for root_path in behavior.get_unique_object_paths(start_id):
-        ET.SubElement(xml_root_meta, "path").text = str(root_path)
+        make_subelement(xml_root_meta, "path").text = str(root_path)
 
     # Additional metadata for potentially reconstructing the root node
     for key, items in root_meta.items():
-        meta_group = ET.SubElement(xml_root_meta, key)
+        meta_group = make_subelement(xml_root_meta, key)
 
         for item in items:
             if isinstance(item, XmlValueHandler):
                 meta_group.append(deepcopy(item.element))
             else:
-                ET.SubElement(meta_group, "item", value=str(item))
+                make_subelement(meta_group, "item", value=str(item))
 
     # Events
     for idx, evt in events.items():
-        ET.SubElement(xml_events, "event", idx=str(idx), name=evt)
+        make_subelement(xml_events, "event", idx=str(idx), name=evt)
 
     # Variables
     for idx, var in variables.items():
         # Need to include ALL variable attributes so we can reconsruct it if needed
         if var:
-            ET.SubElement(
+            make_subelement(
                 xml_variables,
                 "variable",
                 idx=str(idx),
@@ -182,15 +182,15 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
                 default=str(var.default),
             )
         else:
-            ET.SubElement(xml_variables, "variable", idx=str(idx), name="")
+            make_subelement(xml_variables, "variable", idx=str(idx), name="")
 
     # Animations
     for idx, anim in animations.items():
-        ET.SubElement(xml_animations, "animation", idx=str(idx), name=anim)
+        make_subelement(xml_animations, "animation", idx=str(idx), name=anim)
 
     # Types
     for type_id, type_name in type_map.items():
-        ET.SubElement(xml_types, "type", id=type_id, name=type_name)
+        make_subelement(xml_types, "type", id=type_id, name=type_name)
 
     # Objects
     for obj in objects:
@@ -477,7 +477,7 @@ def paste_children(
 
 
 def find_conflicts(
-    behavior: HavokBehavior, xml: ET.Element, target_record: HkbRecord
+    behavior: HavokBehavior, xml: ET._Element, target_record: HkbRecord
 ) -> MergeResult:
     results = MergeResult()
     results.root_meta = xml.find("root_meta")
@@ -576,7 +576,7 @@ def find_conflicts(
             )
 
     def _find_object_conflicts(
-        behavior: HavokBehavior, xml: ET.Element, results: MergeResult
+        behavior: HavokBehavior, xml: ET._Element, results: MergeResult
     ) -> None:
         logger = logging.getLogger()
         mismatching_types = set()
@@ -1012,7 +1012,7 @@ def fix_state_ids(statemachine: HkbRecord):
 
 def open_merge_hierarchy_dialog(
     behavior: HavokBehavior,
-    xml: ET.Element,
+    xml: ET._Element,
     results: MergeResult,
     target_record: HkbRecord,
     callback: Callable[[], None],

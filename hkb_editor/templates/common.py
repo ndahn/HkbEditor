@@ -887,6 +887,7 @@ class CommonActionsMixin:
         if clip_kwargs is None:
             clip_kwargs = {}
 
+        animation = self.animation(animation)
         clip = self.new_clip(animation, **clip_kwargs)
 
         # CMSG
