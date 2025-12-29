@@ -86,6 +86,7 @@ class HkbInteger(XmlValueHandler):
         if element.tag != "integer":
             raise ValueError(f"Invalid element <{element.tag}>")
 
+        # No endianness since the int is stored as a string
         format = tagfile.type_registry.get_format(type_id)
         self.signed = (format & 0x200 != 0)
         self.byte_size = (format >> 10)
@@ -131,11 +132,18 @@ class HkbFloat(XmlValueHandler):
 
         # Not needed/relevant for now
         #format = tagfile.type_registry.get_format(type_id)
+        # Only matters when reading from the hex representation
         #self.bigendian = (format & 0x100 != 0)
+        # Guessed, only have 1525253 to go off right now
+        # See https://github.com/The12thAvenger/HKLib/blob/main/HKLib.Serialization/hk2018/Xml/FormatHandlers/FloatFormatHandler.cs#L39
+        #self.size = (format >> 12) & 0xf
+        # 23: float, 52: double
+        #self.mantissa_bits = format >> 16
 
         super().__init__(tagfile, element, type_id)
 
     def get_value(self) -> float:
+        # TODO would be (slightly) better to use the hex representation
         # Behaviors use commas as decimal separators
         return float(self.element.attrib.get("dec", "0").replace(",", "."))
 
