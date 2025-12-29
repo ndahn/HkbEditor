@@ -12,11 +12,11 @@ def run(
 ):
     """Make NPC Summonable
 
-    Makes an NPC summonable if it isn't already. This will create the BuddyGenerate and BuddyDisappear states in the Master_SM, which are activated by firing W_BuddyGenerate and W_BuddyDisappear.
+    Makes an NPC summonable if it isn't already. This will create the BuddyGenerate and BuddyDisappear states in the Master_SM, which are activated by firing W_BuddyGenerate and W_BuddyDisappear (as well as W_Event1830 and W_Event1840).
 
     Author: FloppyDonuts & Managarm
 
-    Status: hopeful
+    Status: confirmed
 
     Parameters
     ----------
@@ -51,6 +51,13 @@ def run(
             "W_BuddyGenerate",
             transition_effect=default_transition,
         )
+        ctx.register_wildcard_transition(
+            master_sm,
+            summon_stateid,
+            "W_Event1830",
+            transition_effect=default_transition,
+        )
+        
 
     try:
         # Check if it already exists
@@ -75,5 +82,11 @@ def run(
             master_sm,
             disappear_stateid,
             "W_BuddyDisappear",
+            transition_effect=default_transition,
+        )
+        ctx.register_wildcard_transition(
+            master_sm,
+            disappear_stateid,
+            "W_Event1840",
             transition_effect=default_transition,
         )
