@@ -167,7 +167,7 @@ class Tagfile:
         tmp = deepcopy(self._tree)
         add_type_comments(tmp, self)
         ET.indent(tmp)
-        tmp.write(file_path)
+        tmp.getroottree().write(file_path)
 
         self.file = file_path
 
