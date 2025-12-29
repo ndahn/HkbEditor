@@ -375,8 +375,8 @@ class HkbArray(XmlValueHandler, Generic[T]):
         if index < 0:
             index = len(self) + index
 
-        self.element[:] = [elem for i, elem in enumerate(self.element) if i != index]
-
+        child = self.element[index]
+        self.element.remove(child)
         self._count -= 1
 
     def _verify_compatible(self, value: T) -> None:

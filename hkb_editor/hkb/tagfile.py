@@ -10,7 +10,7 @@ import re
 from lxml import etree as ET
 import networkx as nx
 
-from .xml import xml_from_file, add_type_comments, HkbXmlElement
+from .xml import xml_from_file, add_type_comments, HkbXmlElement, MutationType
 from .type_registry import TypeRegistry
 from .query import query_objects
 
@@ -89,13 +89,27 @@ class Tagfile:
         Returns
         -------
         int
-            The ID of the topmost undo item. Calling undo, then redo will place the same undo item on the top again, and so the same ID will be returned.
+            The ID of the topmost undo item, or -1 if there is nothing to undo. Calling undo, then redo will place the same undo item on the top again, and so the same ID will be returned.
         """
         undo_stack = self._tree.undo_stack
         if undo_stack:
             return undo_stack.top_undo_id()
         
         return -1
+
+    def top_undo_type(self) -> MutationType:
+        """Get the mutation type of the topmost undo item.
+
+        Returns
+        -------
+        ActionType
+            Type of the topmost undo item, or None if there is nothing to undo.
+        """
+        undo_stack = self._tree.undo_stack
+        if undo_stack:
+            return undo_stack.top_undo_type()
+        
+        return None
 
     def can_undo(self) -> bool:
         """Check if there are actions to undo.
@@ -108,15 +122,19 @@ class Tagfile:
         undo_stack = self._tree.undo_stack
         return undo_stack and undo_stack.can_undo()
 
-    def undo(self) -> bool:
+    def undo(self) -> MutationType:
         """Undo the last mutation of the underlying xml structure.
 
         Returns
         -------
-        bool
-            True if an action was undone, False otherwise.
+        ActionType
+            The type of the mutation that was undone, or None if there was nothing to undo.
         """
-        return self._tree.undo_stack.undo()
+        ret = self._tree.undo_stack.undo()
+        if ret == MutationType.STRUCTURE:
+            # So far we only cache structure elements, not attributes
+            self._regenerate_cache()
+        return ret
 
     def can_redo(self) -> bool:
         """Check if there are actions to redo.
@@ -129,15 +147,19 @@ class Tagfile:
         undo_stack = self._tree.undo_stack
         return undo_stack and undo_stack.can_redo()
 
-    def redo(self) -> bool:
+    def redo(self) -> MutationType:
         """Redo the last mutation of the underlying xml structure.
 
         Returns
         -------
-        bool
-            True if an action was redone, False otherwise.
+        ActionType
+            The type of the mutation that was redone, or None if there was nothing to redo.
         """
-        return self._tree.undo_stack.redo()
+        ret = self._tree.undo_stack.redo()
+        if ret == MutationType.STRUCTURE:
+            # So far we only cache structure elements, not attributes
+            self._regenerate_cache()
+        return ret
 
     def save_to_file(self, file_path: str) -> None:
         # Add comments on the copy. We don't want to keep these as they can mess up

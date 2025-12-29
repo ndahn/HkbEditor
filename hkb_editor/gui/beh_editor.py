@@ -362,7 +362,7 @@ class BehaviorEditor(BaseEditor):
         center_window(wnd)
 
     def undo(self) -> None:
-        if not self.beh.undo():
+        if self.beh.undo() is None:
             self.logger.info("Nothing to undo")
             return
 
@@ -376,7 +376,7 @@ class BehaviorEditor(BaseEditor):
         self.attributes_widget.regenerate()
 
     def redo(self) -> None:
-        if not self.beh.redo():
+        if self.beh.redo() is None:
             self.logger.info("Nothing to redo")
             return
 
