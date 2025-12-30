@@ -5,6 +5,7 @@ from lxml import etree as ET
 from .tagfile import Tagfile
 from .type_registry import TypeRegistry
 from .xml import HkbXmlElement
+from .game_specific import separate_game_specific_attributes
 
 
 _undefined = object()
@@ -511,7 +512,8 @@ class HkbRecord(XmlValueHandler):
         cls,
         tagfile: Tagfile,
         type_id: str,
-        path_values: dict[str, Any] = None,
+        attributes: dict[str, Any] = None,
+        *,
         object_id: str = None,
     ) -> "HkbRecord":
         record_elem = HkbXmlElement.new("record")
@@ -530,9 +532,19 @@ class HkbRecord(XmlValueHandler):
             # Note: userData is probably a void pointer and not useful to set
             # unless you are making a copy of another record
 
-        if path_values:
-            for path, val in path_values.items():
+
+        if attributes:
+            optional = separate_game_specific_attributes(record.type_name, attributes)
+            print("###", attributes, optional)
+            
+            for path, val in attributes.items():
                 record.set_field(path, val)
+
+            for path, val in optional.items():
+                try:
+                    record.set_field(path, val)
+                except KeyError:
+                    pass
 
         return record
 
@@ -540,7 +552,7 @@ class HkbRecord(XmlValueHandler):
     def init_from_xml(
         self, tagfile: Tagfile, type_id: str, xml: HkbXmlElement, object_id: str = None
     ) -> "HkbRecord":
-        obj = HkbRecord.new(tagfile, type_id, None, object_id)
+        obj = HkbRecord.new(tagfile, type_id, object_id=object_id)
         
         if xml.tag != "record":
             xml = xml.find("record")
@@ -801,7 +813,7 @@ class HkbRecord(XmlValueHandler):
         return f"{self.type_name}{name} (id={self.object_id})"
 
     def __repr__(self):
-        return "HkbRecord<" + self.type_name + "> (" + self.object_id + ")"
+        return f"HkbRecord<{self.type_name}>({self.object_id})"
 
 
 def get_value_handler(

@@ -593,7 +593,7 @@ def find_conflicts(
                 # If the record comes from a different game (or version), the xml element might
                 # have extra fields or miss some we are expecting. By constructing a new object
                 # we ensure that all required fields are present.
-                obj = HkbRecord.new(behavior, new_type_id, None, xmlobj.get("id"))
+                obj = HkbRecord.new(behavior, new_type_id, object_id=xmlobj.get("id"))
                 tmp = HkbRecord.from_object(behavior, xmlobj)
 
                 # Fix up element type IDs. Search for arrays in obj, but modify them in tmp so

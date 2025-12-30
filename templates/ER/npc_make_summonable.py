@@ -28,7 +28,7 @@ def run(
 
     try:
         # Check if it already exists
-        ctx.find("name=BuddyGenerate")
+        ctx.find("name=BuddyGenerate", start_from=master_sm)
         ctx.logger.info("BuddyGenerate already exists, nothing to do")
     except KeyError:
         summon_stateid = ctx.get_next_state_id(master_sm)
@@ -61,7 +61,7 @@ def run(
 
     try:
         # Check if it already exists
-        ctx.find("name=BuddyDisappear")
+        ctx.find("name=BuddyDisappear", start_from=master_sm)
         ctx.logger.info("BuddyDisappear already exists, nothing to do")
     except KeyError:
         disappear_stateid = ctx.get_next_state_id(master_sm)

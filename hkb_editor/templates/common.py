@@ -457,7 +457,10 @@ class CommonActionsMixin:
             object_id = self._behavior.new_id()
 
         record = HkbRecord.new(
-            self._behavior, type_id, path_values=kwargs, object_id=object_id
+            self._behavior,
+            type_id,
+            kwargs,
+            object_id=object_id,
         )
         if record.object_id:
             self._behavior.add_object(record)
@@ -515,7 +518,7 @@ class CommonActionsMixin:
             for attr in attributes:
                 src_attr = source.get_field(attr)
                 new_val = src_attr.get_value()
-                
+
                 dest_attr = dest.get_field(attr)
                 dest_attr.set_value(new_val)
 
@@ -535,6 +538,8 @@ class CommonActionsMixin:
         animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
         changeTypeOfSelectedIndexAfterActivate: ChangeIndexType = ChangeIndexType.NONE,
         checkAnimEndSlotNo: int = -1,
+        rideSync: bool = False,
+        isBasePoseAnim: bool = True,
         **kwargs,
     ) -> HkbRecord:
         if generators:
@@ -557,6 +562,8 @@ class CommonActionsMixin:
             checkAnimEndSlotNo=checkAnimEndSlotNo,
             animeEndEventType=animeEndEventType,
             changeTypeOfSelectedIndexAfterActivate=changeTypeOfSelectedIndexAfterActivate,
+            rideSync=rideSync,
+            isBasePoseAnim=isBasePoseAnim,
             **kwargs,
         )
 
