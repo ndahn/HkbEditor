@@ -535,7 +535,6 @@ class HkbRecord(XmlValueHandler):
 
         if attributes:
             optional = separate_game_specific_attributes(record.type_name, attributes)
-            print("###", attributes, optional)
             
             for path, val in attributes.items():
                 record.set_field(path, val)

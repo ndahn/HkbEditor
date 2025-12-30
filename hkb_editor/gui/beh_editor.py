@@ -1796,6 +1796,8 @@ class BehaviorEditor(BaseEditor):
                 for obj in new_objects:
                     self.add_pinned_object(obj.object_id)
 
+            self.regenerate()
+
         apply_template_dialog(
             self.beh,
             template_file,

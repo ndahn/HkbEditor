@@ -1048,7 +1048,7 @@ class AttributesWidget:
             try:
                 dpg.set_value(sender, ui_repr)
             except Exception:
-                print("###", ui_repr)
+                self.logger.error(f"dpg: set_value failed ({sender}, {ui_repr})")
 
     def _cut_value(self, sender: str, app_data: Any, user_data: Any) -> None:
         # deselect the selectable

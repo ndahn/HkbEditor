@@ -194,11 +194,7 @@ def apply_template_dialog(
 
         # Buttons
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Okay", callback=on_okay, tag=f"{tag}_button_okay")
-            dpg.add_button(
-                label="Cancel",
-                callback=lambda: dpg.delete_item(window),
-            )
+            dpg.add_button(label="Run Template", callback=on_okay, tag=f"{tag}_button_okay")
             dpg.add_checkbox(
                 label="Pin created objects",
                 default_value=True,

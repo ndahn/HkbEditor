@@ -153,7 +153,6 @@ class RotationKnob:
     def _on_mouse_down(self, sender: int, app_data: Any, user_data: Any) -> None:
         if not dpg.does_item_exist(f"{self.tag}_knob"):
             dpg.hide_item(self.handler_tag)
-            print("### KNOB SILENT")
             return
 
         if dpg.is_item_hovered(f"{self.tag}_knob"):
