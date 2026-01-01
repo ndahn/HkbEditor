@@ -9,6 +9,7 @@ from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_OffsetType as CmsgOffsetType,
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
     CustomManualSelectorGenerator_ChangeTypeOfSelectedIndexAfterActivate as ChangeIndexType,
+    CustomManualSelectorGenerator_RideSync as RideSync,
     hkbClipGenerator_PlaybackMode as PlaybackMode,
     hkbBlendCurveUtils_BlendCurve as BlendCurve,
     hkbVariableInfo_VariableType as VariableType,
@@ -554,7 +555,7 @@ class CommonActionsMixin:
         animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
         changeTypeOfSelectedIndexAfterActivate: ChangeIndexType = ChangeIndexType.NONE,
         checkAnimEndSlotNo: int = -1,
-        rideSync: bool = False,
+        rideSync: RideSync = RideSync.DISABLE,
         isBasePoseAnim: bool = True,
         **kwargs,
     ) -> HkbRecord:
@@ -582,7 +583,7 @@ class CommonActionsMixin:
             What to do when the generator index changes while already active.
         checkAnimEndSlotNo : int, optional
             ?unknown?
-        rideSync : bool, optional
+        rideSync : RideSync, optional
             Related to torrent, only present in Elden Ring.
         isBasePoseAnim : bool, optional
             Related to nightfarer animation layers, only present in Nightreign.

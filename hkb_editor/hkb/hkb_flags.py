@@ -12,6 +12,16 @@ from .type_registry import TypeRegistry
 
 
 class hkbClipGenerator_Flags(IntFlag):
+    """Used in hkbClipGenerator.
+
+    - NONE: Default, no modifiers.
+    - CONTINUE_MOTION_AT_END:
+    - SYNC_HALF_CYCLE_IN_PING_PONG_MODE: 
+    - MIRROR: Mirror the animation based on the skeleton's mirror bone pairings.
+    - FORCE_DENSE_POSE: 
+    - DONT_CONVERT_ANNOTATIONS_TO_TRIGGERS:
+    - IGNORE_MOTION: 
+    """
     NONE = 0  # added
     CONTINUE_MOTION_AT_END = 1
     SYNC_HALF_CYCLE_IN_PING_PONG_MODE = 2
@@ -85,6 +95,11 @@ class hkbDockingGenerator_Flags(IntFlag):
 
 
 class hkbLayerGenerator_Flags(IntFlag):
+    """Used in hkbLayerGenerator.
+
+    - NONE: Default, no modifiers.
+    - SYNC: adjust speed of children so their cycles are aligned.
+    """
     NONE = 0  # added
     SYNC = 1
 
