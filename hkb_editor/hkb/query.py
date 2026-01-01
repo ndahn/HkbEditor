@@ -63,6 +63,7 @@ You may run queries over the following fields:
 - type_id
 - type_name
 - name
+- parent
 - any attribute path
 
 Examples:

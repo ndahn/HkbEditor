@@ -426,6 +426,41 @@ class Tagfile:
         object_filter: Callable[["HkbRecord"], bool] = None,
         search_root: "HkbRecord | str" = None,
     ) -> Generator["HkbRecord", None, None]:
+        """Find behavior nodes matching the specified criteria. 
+
+        Supports Lucene-style search queries like `<field>=<value>`.
+
+        - Fields are used verbatim, with the only excception that array indices may be replaced by a `*` wildcard.
+        - Values may be specified using fields, wildcards, fuzzy searches, ranges.
+        - Terms may be combined using grouping, OR, NOT. 
+        - Terms separated by a space are assumed to be AND.
+
+        You may run queries over the following fields:
+        
+        - id
+        - object_id (same as id)
+        - type_id
+        - type_name
+        - name
+        - parent
+        - any attribute path
+
+        Examples:
+        - `id=*588 OR type_name:hkbStateMachine`
+        - `bindings:0/memberPath=selectedGeneratorIndex`
+        - `NOT animId=[100000..200000]`
+        - `name=~AddDamageFire`
+
+        Yields
+        ------
+        HkbRecord
+            Iterator over matching records.
+
+        Raises
+        ------
+        ValueError
+            If the query has invalid syntax.
+        """
         # TODO would be nice to place this in the query module, but neither the query nor 
         # the HkbRecord objects have any knowledge about the graph structure
         parent_pattern = r"\bparent=(object[0-9]+)\b"

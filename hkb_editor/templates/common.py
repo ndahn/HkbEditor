@@ -938,7 +938,7 @@ class CommonActionsMixin:
 
         Parameters
         ----------
-        cmsg : HkbRecord | str
+        generator : HkbRecord | str
             The generator to activate as this blend layer is weighted more.
         object_id : str, optional
             The object ID the record should use. Create a new ID if "<new>" is passed.
