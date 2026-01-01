@@ -73,7 +73,7 @@ def run(
             checkAnimEndSlotNo=1,
             changeTypeOfSelectedIndexAfterActivate=ChangeIndexType.SELF_TRANSITION,
         )
-        state = ctx.new_stateinfo(
+        state = ctx.new_statemachine_state(
             state_id,
             name=f"{base_name}{anim.anim_id}",
             generator=cmsg,

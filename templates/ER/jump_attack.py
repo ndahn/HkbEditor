@@ -115,7 +115,7 @@ def run(
 
         # TODO check if already exists
         # Landing selector
-        jump_landing_msg = ctx.new_selector(
+        jump_landing_msg = ctx.new_manual_selector(
             "JumpAttack_Land",
             name=f"Jump_{jt} Selector_{attack_name}",
             selectedIndexCanChangeAfterActivate=True,
@@ -129,7 +129,7 @@ def run(
 
         # TODO check if already exists
         # Form selector
-        jump_formrequest_msg = ctx.new_selector(
+        jump_formrequest_msg = ctx.new_manual_selector(
             "JumpAttackFormRequest",
             name=f"Jump_{jt} Selector_N-H_{attack_name}",
             generators=[
@@ -152,7 +152,7 @@ def run(
         userData=18350084,
     )
 
-    loop_handcondition_msg = ctx.new_selector(
+    loop_handcondition_msg = ctx.new_manual_selector(
         "JumpAttack_HandCondition",
         name=f"Jump_Loop_{attack_name}_HandCondition Selector",
         generators=[loop_cmsg],
@@ -188,7 +188,7 @@ def run(
                     )
                 )
 
-            swing_msg = ctx.new_selector(
+            swing_msg = ctx.new_manual_selector(
                 "SwingPose",
                 name=f"Jump_Land_Common_{attack_name}_Swing_Selector",
                 generators=swing_cmsgs,
@@ -203,7 +203,7 @@ def run(
                 userData=18350087,
             )
 
-        swing_handcondition_msg = ctx.new_selector(
+        swing_handcondition_msg = ctx.new_manual_selector(
             "JumpAttack_HandCondition",
             name=f"Jump_Land_Common_{attack_name}_Swing_HandConditionSelector",
             generators=[swing_msg],
@@ -240,7 +240,7 @@ def run(
             userData=18350090,
         )
 
-        fall_landing_msg = ctx.new_selector(
+        fall_landing_msg = ctx.new_manual_selector(
             "JumpAttack_Land",
             name=f"JumpAttack_Start_Falling_{jt}_N_{attack_name}_ConditionSelector",
             generators=[
@@ -252,7 +252,7 @@ def run(
             generatorChangedTransitionEffect=landing_transition_effect,
         )
 
-        fall_formrequest_msg = ctx.new_selector(
+        fall_formrequest_msg = ctx.new_manual_selector(
             "JumpAttackFormRequest",
             name=f"JumpAttack_Start_Falling_{jt}_N-H_{attack_name}",
             generators=[fall_landing_msg],
@@ -277,7 +277,7 @@ def run(
         userData=18350097,
     )
 
-    landf_formrequest_msg = ctx.new_selector(
+    landf_formrequest_msg = ctx.new_manual_selector(
         "JumpAttackFormRequest",
         name=f"Jump_Attack_Land_F {attack_name} Selector",
         generators=[landf_cmsg],

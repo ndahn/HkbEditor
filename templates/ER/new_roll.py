@@ -75,7 +75,7 @@ def run(
         )
         new_roll_cmsgs.append(cmsg)
 
-    new_roll_msg = ctx.new_selector(
+    new_roll_msg = ctx.new_manual_selector(
         "RollingDirectionIndex",
         name=f"{roll_name} Selector",
         generators=new_roll_cmsgs,
@@ -108,7 +108,7 @@ def run(
         )
         new_roll_selftrans_cmsgs.append(cmsg)
 
-    new_roll_selftrans_msg = ctx.new_selector(
+    new_roll_selftrans_msg = ctx.new_manual_selector(
         "RollingDirectionIndex_SelfTrans",
         name=f"{roll_name}_Selftrans Selector",
         generators=new_roll_selftrans_cmsgs,

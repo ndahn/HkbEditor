@@ -406,7 +406,7 @@ def run(
     )
 
     state_id = ctx.get_next_state_id(jump_sm)
-    state = ctx.new_stateinfo(
+    state = ctx.new_statemachine_state(
         state_id,
         name=jump_name,
         transitions=state_transitions,

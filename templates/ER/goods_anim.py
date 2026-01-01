@@ -152,7 +152,7 @@ def run(
             animeEndEventType=AnimeEndEventType.NONE,
         )
 
-        normalitem_selector = ctx.new_selector(
+        normalitem_selector = ctx.new_manual_selector(
             weapon_type_var,
             name=f"Item{name} Selector",
             generators=[
@@ -165,7 +165,7 @@ def run(
 
         normalitem_sm = ctx.find("name=NormalItem_SM")
         normal_state_id = ctx.get_next_state_id(normalitem_sm)
-        normalitem_state = ctx.new_stateinfo(
+        normalitem_state = ctx.new_statemachine_state(
             normal_state_id,
             name=f"Item{name}",
             generator=normalitem_selector,
@@ -211,7 +211,7 @@ def run(
             checkAnimEndSlotNo=1,
         )
 
-        normalitem_upper_selector = ctx.new_selector(
+        normalitem_upper_selector = ctx.new_manual_selector(
             weapon_type_var,
             name=f"Item{name}_Upper Selector",
             generators=[
@@ -224,7 +224,7 @@ def run(
 
         normalitem_upper_sm = ctx.find("name=NormalItem_Upper_SM")
         normalitem_upper_state_id = ctx.get_next_state_id(normalitem_upper_sm)
-        normalitem_upper_state = ctx.new_stateinfo(
+        normalitem_upper_state = ctx.new_statemachine_state(
             normalitem_upper_state_id,
             generator=normalitem_upper_selector,
         )

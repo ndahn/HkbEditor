@@ -135,7 +135,7 @@ def create_cmsg_dialog(
                 enableTae=True,
                 checkAnimEndSlotNo=-1,
             )
-            stateinfo = util.new_stateinfo(
+            stateinfo = util.new_statemachine_state(
                 name=base_name,
                 generator=cmsg,
                 transitions=stateinfo_transition_effect_id,

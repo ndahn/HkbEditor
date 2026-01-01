@@ -506,6 +506,22 @@ class CommonActionsMixin:
         *attributes,
         allow_type_mismatch: bool = False,
     ) -> None:
+        """Copy all attributes from the source record to the destination record.
+
+        Parameters
+        ----------
+        source : HkbRecord | str
+            The record to read attributes from.
+        dest : HkbRecord | str
+            The record to write attributes to.
+        allow_type_mismatch : bool, optional
+            If False, the source and destination record types must match exactly.
+
+        Raises
+        ------
+        ValueError
+            If allow_type_mismatch is False and the source and destination record types mismatch.
+        """
         source = self.resolve_object(source)
         dest = self.resolve_object(dest)
 
@@ -542,6 +558,42 @@ class CommonActionsMixin:
         isBasePoseAnim: bool = True,
         **kwargs,
     ) -> HkbRecord:
+        """Create a new CustomManualSelectorGenerator (CMSG). A CMSG selects the generator to activate based on the state of the character, e.g. equipped skill, magic, or idle stance.
+
+        Parameters
+        ----------
+        animId : int | Animation
+            ID of animations this CMSG will handle (the Y part of aXXX_YYYYYY). All attached ClipGenerators should use this animation ID.
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        name : str, optional
+            The name of the new object.
+        generators : list[HkbRecord  |  str], optional
+            The generators this CMSG may choose from.
+        enableScript : bool, optional
+            ?unknown?
+        enableTae : bool, optional
+            Does this CMSG have actual animations associated?
+        offsetType : CmsgOffsetType, optional
+            How to choose the generator index to activate.
+        animeEndEventType : AnimeEndEventType, optional
+            What to do once the activated generator finishes.
+        changeTypeOfSelectedIndexAfterActivate : ChangeIndexType, optional
+            What to do when the generator index changes while already active.
+        checkAnimEndSlotNo : int, optional
+            ?unknown?
+        rideSync : bool, optional
+            Related to torrent, only present in Elden Ring.
+        isBasePoseAnim : bool, optional
+            Related to nightfarer animation layers, only present in Nightreign.
+        kwargs : dict, optional
+            Additional attributes for the record.
+        
+        Returns
+        -------
+        HkbRecord
+            The created CMSG record.
+        """
         if generators:
             generators = [self.resolve_object(obj).object_id for obj in generators]
         else:
@@ -567,18 +619,47 @@ class CommonActionsMixin:
             **kwargs,
         )
 
-    def new_selector(
+    def new_manual_selector(
         self,
         variable: Variable | str | int,
         *,
         object_id: str = "<new>",
         name: str = "",
         generators: list[HkbRecord | str] = None,
+        selectedGeneratorIndex: int = 0,
         variableBindingSet: HkbRecord | str = None,
         generatorChangedTransitionEffect: HkbRecord | str = None,
         selectedIndexCanChangeAfterActivate: bool = False,
         **kwargs,
     ) -> HkbRecord:
+        """Creates a new ManualSelectorGenerator (MSG). The generator to activate is typically controlled by binding the `selectedGeneratorIndex` to a variable, which is then set from hks using `SetVariable()`.
+
+        Parameters
+        ----------
+        variable : Variable | str | int
+            Variable to bind the selectedGeneratorIndex to. Set to None if you don't want to bind it yet.
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        name : str, optional
+            The name of the new object.
+        generators : list[HkbRecord  |  str], optional
+            The generators this MSG may choose from. First generator will be 0.
+        selectedGeneratorIndex : int, optional
+            Initial value of the selected generator.
+        variableBindingSet : HkbRecord | str, optional
+            Set this if you want to reuse an already existing variable binding.
+        generatorChangedTransitionEffect : HkbRecord | str, optional
+            Transition effect to use when the generator index changes while active.
+        selectedIndexCanChangeAfterActivate : bool, optional
+            Whether the active generator index is allowed to change while active.
+        kwargs : dict, optional
+            Additional attributes for the record.
+
+        Returns
+        -------
+        HkbRecord
+            The created MSG record.
+        """
         if generators:
             generators = [self.resolve_object(obj).object_id for obj in generators]
         else:
@@ -597,6 +678,7 @@ class CommonActionsMixin:
             object_id,
             name=name,
             generators=generators,
+            selectedGeneratorIndex=selectedGeneratorIndex,
             variableBindingSet=(
                 variableBindingSet.object_id if variableBindingSet else None
             ),
@@ -625,6 +707,28 @@ class CommonActionsMixin:
         mode: PlaybackMode = PlaybackMode.SINGLE_PLAY,
         **kwargs,
     ) -> HkbRecord:
+        """Create a new ClipGenerator. These nodes are responsible for running TAE animations.
+
+        Parameters
+        ----------
+        animation : Animation | str | int
+            The animation to execute.
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        name : str, optional
+            The name of the new object.
+        playbackSpeed : int, optional
+            Multiplicative factor for the animation's playback speed.
+        mode : PlaybackMode, optional
+            How to play the animation.
+        kwargs : dict, optional
+            Additional attributes for the record.
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbClipGenerator record.
+        """
         animation = self.animation(animation)
 
         if name is None:
@@ -641,7 +745,7 @@ class CommonActionsMixin:
             **kwargs,
         )
 
-    def new_stateinfo(
+    def new_statemachine_state(
         self,
         stateId: int,
         *,
@@ -653,6 +757,34 @@ class CommonActionsMixin:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
+        """Create a new statemachine state. 
+        
+        Every statemachine can have only one state active at a time. However, it is possible to have multiple statemachines active by using layered animations (e.g. blending or half blends, see [new_blender_generator][] and [new_layer_generator][]).
+
+        FromSoft usually uses wildcard transitions, i.e. every state can transition to any state within the same statemachine with no prior conditions. However, states may also define dedicated transitions to other states.
+
+        Parameters
+        ----------
+        stateId : int
+            ID of the state. State IDs must be unique within their statemachine. See [get_next_state_id][] to generate a new valid ID.
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        name : str, optional
+            The name of the new object.
+        transitions : HkbRecord | str, optional
+            Custom transitions to other states.
+        generator : HkbRecord | str, optional
+            The generator this state will activate. Usually a CMSG or MSG, but any type of generator is valid, including a statemachine.
+        probability : float, optional
+            Probability weight to activate this state when the statemachine chooses a state at random.
+        enable : bool, optional
+            Whether this state can be activated.
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbStateMachine::StateInfo record.
+        """
         transitions = self.resolve_object(transitions)
         generator = self.resolve_object(generator)
 
@@ -674,6 +806,20 @@ class CommonActionsMixin:
         object_id: str = "<new>",
         transitions: list[HkbRecord] = None,
     ) -> HkbRecord:
+        """An object for defining possible transitions to other states within a statemachine.
+
+        Parameters
+        ----------
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        transitions : list[HkbRecord], optional
+            List of possible transitions. See [new_transition_info][] to generate these.
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbStateMachine::TransitionInfoArray record.
+        """
         return self.new_record(
             "hkbStateMachine::TransitionInfoArray",
             object_id,
@@ -689,6 +835,24 @@ class CommonActionsMixin:
         flags: TransitionInfoFlags = 0,
         **kwargs,
     ) -> HkbRecord:
+        """Defines a transition from the active state to another.
+
+        Parameters
+        ----------
+        toStateId : int
+            ID of the state to transition to.
+        eventId : Event | str | int
+            The event that will activate this transition (if the owning object is active).
+        transition : HkbRecord | str, optional
+            Blending effect to use when this transition becomes active. Often empty or the default transition (see [get_default_transition_effect][]).
+        flags : TransitionInfoFlags, optional
+            Additional flags for this transition.
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbStateMachine::TransitionInfo record.
+        """
         eventId = self.event(eventId)
 
         if not transition:
@@ -723,6 +887,30 @@ class CommonActionsMixin:
         indexOfSyncMasterChild: int = -1,
         **kwargs,
     ) -> HkbRecord:
+        """Generator object for handling animation blending (transitioning from one animation to another).
+
+        Parameters
+        ----------
+        children : list[HkbRecord  |  str]
+            Blending children, see [new_blender_generator_child][].
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        name : str, optional
+            The name of the new object.
+        blendParameter : float, optional
+            How far the blending has progressed. Typically bound to a variable and controlled from HKS or TAE.
+        minCyclicBlendParameter : float, optional
+            ?unknown?
+        maxCyclicBlendParameter : float, optional
+            ?unknown?
+        indexOfSyncMasterChild : int, optional
+            ?unknown?
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbBlenderGenerator record.
+        """
         children = [self.resolve_object(c) for c in children]
 
         return self.new_record(
@@ -739,19 +927,37 @@ class CommonActionsMixin:
 
     def new_blender_generator_child(
         self,
-        cmsg: HkbRecord | str,
+        generator: HkbRecord | str,
         *,
         object_id: str = "<new>",
         weight: float = 1.0,
         worldFromModelWeight: int = 1,
         **kwargs,
     ) -> HkbRecord:
-        cmsg = self.resolve_object(cmsg)
+        """A child object that can be attached to a BlenderGenerator ([new_blender_generator][]).
+
+        Parameters
+        ----------
+        cmsg : HkbRecord | str
+            The generator to activate as this blend layer is weighted more.
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        weight : float, optional
+            Weight of this blend layer compared to siblings.
+        worldFromModelWeight : int, optional
+            ?unknown?
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbBlenderGeneratorChild record.
+        """
+        generator = self.resolve_object(generator)
 
         return self.new_record(
             "hkbBlenderGeneratorChild",
             object_id,
-            generator=cmsg.object_id if cmsg else None,
+            generator=generator.object_id if generator else None,
             weight=weight,
             worldFromModelWeight=worldFromModelWeight,
             **kwargs,
@@ -767,6 +973,26 @@ class CommonActionsMixin:
         flags: LayerGeneratorFlags = LayerGeneratorFlags.NONE,
         **kwargs,
     ) -> HkbRecord:
+        """Generator object for playing multiple animations at the same time (e.g. half blends).
+
+        Parameters
+        ----------
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        name : str, optional
+            The name of the new object.
+        layers : list[HkbRecord  |  str], optional
+            Animation layers to activate. See [new_layer_generator_child][].
+        indexOfSyncMasterChild : int, optional
+            The child to use for synchronizing durations if SYNC is true.
+        flags : LayerGeneratorFlags, optional
+            Additional flags for this generator.
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbLayerGenerator record.
+        """
         if layers:
             layers = [self.resolve_object(x).object_id for x in layers]
         else:
@@ -782,7 +1008,7 @@ class CommonActionsMixin:
             **kwargs,
         )
 
-    def new_layer(
+    def new_layer_generator_child(
         self,
         *,
         object_id: str = "<new>",
@@ -798,6 +1024,38 @@ class CommonActionsMixin:
         fadeInOutCurve: BlendCurve = BlendCurve.SMOOTH,
         **kwargs,
     ) -> HkbRecord:
+        """Creates a new animation layer. Should be attached to a LayerGenerator, see [new_layer_generator][].
+
+        Parameters
+        ----------
+        object_id : str, optional
+            The object ID the record should use. Create a new ID if "<new>" is passed.
+        generator : HkbRecord | str, optional
+            The actual animation generator to activate.
+        boneWeights : HkbRecord | str, optional
+            How much each bone of this animation will affect the end result.
+        useMotion : bool, optional
+            Set to true if this animation's world transform should be used (worldFromModel). Typically only active for one layer per LayerGenerator.
+        weight : float, optional
+            How much this layer affects the end result.
+        fadeInDuration : float, optional
+            Time over which this layer gradually becomes activates.
+        fadeOutDuration : float, optional
+            Time over which this layer gradually becomes deactivates.
+        onEventId : Event | str | int, optional
+            An event to switch on this layer.
+        offEventId : Event | str | int, optional
+            An event to switch off this layer.
+        onByDefault : bool, optional
+            Whether this layer should be active when its parent activates.
+        fadeInOutCurve : BlendCurve, optional
+            Curve to use when fading this layer in or out.
+
+        Returns
+        -------
+        HkbRecord
+            The new hkbLayer record.
+        """
         generator = self.resolve_object(generator)
         boneWeights = self.resolve_object(boneWeights)
         onEventId = self.event(onEventId)
@@ -839,7 +1097,22 @@ class CommonActionsMixin:
         # IS_LOCAL_WILDCARD
         # IS_GLOBAL_WILDCARD
         **kwargs,
-    ) -> HkbRecord:
+    ) -> None:
+        """Sets up a wildcard transition for a given statemachine's state, i.e. a way to transition to this state from any other state.
+
+        Parameters
+        ----------
+        statemachine : HkbRecord | str
+            The statemachine to setup the wildcard transition for.
+        toStateId : int
+            ID of the target state.
+        eventId : Event | str | int
+            Event that activates this transition.
+        transition_effect : HkbRecord | str, optional
+            Effect to use when this transition activates. If None will use the [get_default_transition_effect][].
+        flags : TransitionInfoFlags, optional
+            Additional flags for this transition.
+        """
         statemachine = self.resolve_object(statemachine)
         eventId = self.event(eventId)
 
@@ -878,6 +1151,15 @@ class CommonActionsMixin:
         )
 
     def get_default_transition_effect(self) -> HkbRecord:
+        """Returns the most commonly linked CustomTransitionEffect. In Elden Ring and Nightreign this object will be called DefaultTransition.
+
+        Note that for very small behaviors like enemies this may not return what you expect. If in doubt use [TemplateContext.find][] instead.
+
+        Returns
+        -------
+        HkbRecord
+            The most common transition effect object.
+        """
         return self._behavior.get_most_common_object("CustomTransitionEffect")
 
     def create_state_chain(
@@ -890,6 +1172,30 @@ class CommonActionsMixin:
         cmsg_kwargs: dict[str, Any] = None,
         clip_kwargs: dict[str, Any] = None,
     ) -> tuple[HkbRecord, HkbRecord, HkbRecord]:
+        """Creates one of the most common behavior structures in recent FromSoft titles: StateInfo -> CMSG -> ClipGenerator.
+
+        Note that this chain will not be attached. You still have to append it to a statemachine's `states` (see [TemplateContext.array_add][]) and setup a transition (e.g. using [register_wildcard_transition][]).
+
+        Parameters
+        ----------
+        state_id : int
+            ID of the generated StateInfo.
+        animation : Animation | str | int
+            The animation to play.
+        name : str
+            A name to base the new objects' names on.
+        state_kwargs : dict[str, Any], optional
+            Additional attributes for the generated StateInfo.
+        cmsg_kwargs : dict[str, Any], optional
+            Additional attributes for the generated CMSG.
+        clip_kwargs : dict[str, Any], optional
+            Additional attributes for the generated ClipGenerator.
+
+        Returns
+        -------
+        tuple[HkbRecord, HkbRecord, HkbRecord]
+            The new hkbStateInfo, CustomManualSelectorGenerator and hkbClipGenerator records.
+        """
         # ClipGenerator
         if clip_kwargs is None:
             clip_kwargs = {}
@@ -911,6 +1217,6 @@ class CommonActionsMixin:
         state_kwargs.setdefault("name", name)
         state_kwargs.setdefault("generator", cmsg)
 
-        state = self.new_stateinfo(state_id, **state_kwargs)
+        state = self.new_statemachine_state(state_id, **state_kwargs)
 
         return (state, cmsg, clip)

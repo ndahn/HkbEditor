@@ -107,7 +107,7 @@ def run(
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
     )
-    state1 = ctx.new_stateinfo(
+    state1 = ctx.new_statemachine_state(
         stateId=state1_id,
         name=event1.name,
         generator=state1_cmsg,
@@ -174,7 +174,7 @@ def run(
         offsetType=CmsgOffsetType.IDLE_CATEGORY,
         enableScript=False,
     )
-    state2 = ctx.new_stateinfo(
+    state2 = ctx.new_statemachine_state(
         stateId=state2_id,
         name=event2.name,
         generator=state2_cmsg,

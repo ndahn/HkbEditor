@@ -39,7 +39,7 @@ def run(
         name=f"{base_name}_CMSG",
         generators=[clip],
     )
-    state = ctx.new_stateinfo(
+    state = ctx.new_statemachine_state(
         state_id,
         name=base_name,
         generator=cmsg,

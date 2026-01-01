@@ -59,7 +59,7 @@ def run(
     )
     transitioninfo_array = ctx.new_transition_info_array(transitions=[state_transition])
 
-    state = ctx.new_stateinfo(
+    state = ctx.new_statemachine_state(
         state_id,  # TODO Igor has toStateId here?
         name=base_name,
         generator=cmsg,

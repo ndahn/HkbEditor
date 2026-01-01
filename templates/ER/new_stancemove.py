@@ -81,7 +81,7 @@ def run(
             )
             motion_cmsgs.append(cmsg)
 
-        motion_msg = ctx.new_selector(
+        motion_msg = ctx.new_manual_selector(
             "MoveDirection",
             name=f"{name}_motion{suffix}",
             generators=motion_cmsgs,
@@ -104,7 +104,7 @@ def run(
             )
             anim_cmsgs.append(cmsg)
 
-        anim_msg = ctx.new_selector(
+        anim_msg = ctx.new_manual_selector(
             "MoveDirection",
             name=f"{name}_anime{suffix}",
             generators=anim_cmsgs,
