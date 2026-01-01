@@ -529,9 +529,8 @@ class HkbRecord(XmlValueHandler):
             field_val = Handler.new(tagfile, ftype)
             field_elem.append(field_val.element)
 
-            # Note: userData is probably a void pointer and not useful to set
+            # NOTE: userData is probably a void pointer and not useful to set
             # unless you are making a copy of another record
-
 
         if attributes:
             optional = separate_game_specific_attributes(record.type_name, attributes)

@@ -18,7 +18,7 @@ class TemplateContext(CommonActionsMixin):
 
     Templates are python scripts with a `run` function that takes a `TemplateContext` as their first argument. This object should be the main way of modifying the behavior from templates, primarily to give proper support for undo (or rollback in case of errors).
 
-    Note that this class inherits from :py:class:`CommonActionsMixin` and thus provides many convenience functions for common tasks like creating CMSGs and the likes.
+    Note that this class inherits from [CommonActionsMixin][] and thus provides many convenience functions for common tasks like creating CMSGs and the likes.
 
     Raises
     ------
@@ -174,14 +174,14 @@ class TemplateContext(CommonActionsMixin):
         Parameters
         ----------
         query : str
-            The query string. See :py:meth:`hkb.Tagfile.query` for details.
+            The query string. See [hkb_editor.hkb.tagfile.Tagfile.query][] for details.
         start_from : HkbRecord | str
             Only search part of the hierarchy starting at this node.
 
         Returns
         -------
         list[HkbRecord]
-            A list of matching :py:class:`HkbRecord` objects.
+            A list of matching [HkbRecord][] objects.
         """
         return list(self._behavior.query(" ".join(query), search_root=start_from))
 
@@ -191,7 +191,7 @@ class TemplateContext(CommonActionsMixin):
         Parameters
         ----------
         query : str
-            The query string. See :py:meth:`hkb.Tagfile.query` for details.
+            The query string. See [hkb_editor.hkb.tagfile.Tagfile.query][] for details.
         default : Any
             The value to return if no match is found.
         start_from : HkbRecord | str
@@ -205,7 +205,7 @@ class TemplateContext(CommonActionsMixin):
         Returns
         -------
         HkbRecord
-            A matching :py:class:`HkbRecord` object.
+            A matching [HkbRecord][] object.
         """
         try:
             return next(self._behavior.query(" ".join(query), search_root=start_from))
@@ -221,7 +221,7 @@ class TemplateContext(CommonActionsMixin):
         path: str,
         default: Any = None,
     ) -> Any:
-        """Retrieve a value from the specified :py:class:`HkbRecord`.
+        """Retrieve a value from the specified [HkbRecord][].
 
         Parameters
         ----------
@@ -246,7 +246,7 @@ class TemplateContext(CommonActionsMixin):
         return record.get_field(path, default=default, resolve=True)
 
     def set(self, record: HkbRecord | str, **attributes) -> None:
-        """Update a one or more fields of the specified :py:class:`HkbRecord`.
+        """Update a one or more fields of the specified [HkbRecord][].
 
         Parameters
         ----------
@@ -266,7 +266,7 @@ class TemplateContext(CommonActionsMixin):
                 self.logger.debug(f"Updated {path}={value} of {record}")
 
     def delete(self, record: HkbRecord | str) -> HkbRecord:
-        """Delete the specified :py:class:`HkbRecord` from the behavior.
+        """Delete the specified [HkbRecord][] from the behavior.
 
         Parameters
         ----------

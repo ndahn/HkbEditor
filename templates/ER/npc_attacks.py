@@ -15,9 +15,9 @@ def run(
 ):
     """New NPC Attacks
 
-    Creates num_attacks new NPC attack slots starting at aXXX_YYYYYY, where X is the category and Y anim_id_start. For each subsequent attack Y increases by 1. For each additional category X increases by 1.
+    Creates new NPC attack slots starting at aXXX_YYYYYY, where X is the category and Y equals `anim_id_start + anim_id_step * i` and `i` going from 0 to num_attacks (exclusive). The attacks will be associated with the events `W_AttackYYYYYY` and `W_EventYYYYYY` (leading 0s not included).
 
-    For every Y a wildcard transition is created using the default transition effect and a new event called 'W_Attack<Y>'.
+    NOTE that NPC attacks should be in the range from 3000 to 3100. Attacks outside this range need special changes in the HKS to be useful.
 
     Author: FloppyDonuts
 
@@ -27,12 +27,14 @@ def run(
     ----------
     ctx : TemplateContext
         The template context.
-    base_anim_id : int, optional
-        Base animation ID (e.g. 3091 for a000_003091).
+    anim_id_start : int, optional
+        First animation ID to create an attack for.
+    anim_id_step : int, optional
+        How much to increase the animation ID for each subsequent new attack.
     num_attacks : int, optional
         How many new CMSGs to generate.
-    categories : int, optional
-        Categories to create clip generators for. Don't generate clip generators if this is 0.
+    category : int, optional
+        Category to create the clip generators for.
     """
     attack_sm = ctx.find("name=Attack_SM")
     transition_effect = ctx.find("name=DefaultTransition")
@@ -43,11 +45,13 @@ def run(
     ):
         anim = Animation.make_name(category, anim_id)
         name = f"Attack{anim_id}"
-        event = ctx.event(f"W_{name}")
+
+        if not 3000 <= anim_id <= 3099:
+            ctx.logger.warning(f"{name} is outside the typical NPC attack slot range")
 
         if ctx.find(f"animationName={anim}", default=None):
             # Already exists, nothing to do
-            ctx.logger.info(f"Attack {name} already exists")
+            ctx.logger.info(f"{name} already exists")
             pass
         elif cmsg := ctx.find(f"animId={anim_id}", start_from=attack_sm, default=None):
             # CMSG for animId exists, but no clip for this category
@@ -69,7 +73,11 @@ def run(
 
             ctx.array_add(attack_sm, "states", state)
             ctx.register_wildcard_transition(
-                attack_sm, state_id, event, transition_effect=transition_effect
+                attack_sm, state_id, f"W_Attack{anim_id}", transition_effect=transition_effect
+            )
+            # Useful for EMEVD and AI
+            ctx.register_wildcard_transition(
+                attack_sm, state_id, f"W_Event{anim_id}", transition_effect=transition_effect
             )
 
             state_id = state_id + 1

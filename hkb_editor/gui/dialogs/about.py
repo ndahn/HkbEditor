@@ -18,7 +18,7 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
 
     if not dpg.does_item_exist("hkbeditor_icon_ufo"):
         with dpg.texture_registry():
-            icon_ufo = os.path.abspath(os.path.join(".", "doc/ufo.png"))
+            icon_ufo = os.path.abspath(os.path.join(".", "docs/assets/images/ufo.png"))
             w, h, ch, data = dpg.load_image(icon_ufo)
             
             # 250ms? worth it!

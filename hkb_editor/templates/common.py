@@ -101,12 +101,12 @@ class CommonActionsMixin:
     ) -> Variable:
         """Get a variable by name, or create it if it doesn't exist yet.
 
-        Variables are typically used to control behaviors from other subsystems like HKS and TAE. See :py:meth:`bind_attribute` for the most common use case.
+        Variables are typically used to control behaviors from other subsystems like HKS and TAE. See [CommonActionsMixin.bind_variable][] for the most common use case.
 
         Parameters
         ----------
-        name : str
-            The name of the variable. Must not exist yet.
+        variable : str
+            The name of the variable.
         var_type : VariableType, optional
             The type of data that will be stored in the variable.
         range_min : int, optional
@@ -150,7 +150,7 @@ class CommonActionsMixin:
     def event(self, event: Event | str | int, *, create: bool = True) -> Event:
         """Get the event with the specified name, or create it if it doesn't exist yet.
 
-        Events are typically used to trigger transitions between statemachine states. See :py:meth:`new_statemachine_state` for details.
+        Events are typically used to trigger transitions between statemachine states. See [get_next_state_id][] for details.
         TODO mention events.txt
 
         Parameters
@@ -192,7 +192,7 @@ class CommonActionsMixin:
     ) -> Animation:
         """Get the animation with the specified name, or create a new one if it doesn't exist yet.
 
-        Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See :py:meth:`new_cmsg` for details.
+        Animation names must follow the pattern `aXXX_YYYYYY`. Animation names are typically associated with one or more CustomManualSelectorGenerators (CMSG). See [new_cmsg][] for details.
 
         TODO mention animations.txt
 

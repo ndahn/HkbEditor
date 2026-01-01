@@ -1,0 +1,4 @@
+/* Apply a random hue when the 'slate' scheme is active */
+[data-md-color-scheme="slate"] {
+  --md-hue: calc(random() * 360);
+}

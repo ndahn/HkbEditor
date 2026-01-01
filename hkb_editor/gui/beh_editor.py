@@ -1811,7 +1811,7 @@ class BehaviorEditor(BaseEditor):
         self.logger.info(
             "An offline version of the guide can be found inside the doc/ folder"
         )
-        webbrowser.open("https://github.com/ndahn/HkbEditor/blob/main/doc/guide.md")
+        webbrowser.open("https://github.com/ndahn/HkbEditor/blob/main/docs/guide.md")
 
     def close_all_dialogs(self) -> None:
         dialogs = [

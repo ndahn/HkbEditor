@@ -1,0 +1,93 @@
+site_name: HkbEditor
+repo_url: https://github.com/ndahn/HkbEditor
+site_url: https://github.com/ndahn/HkbEditor  # TODO
+site_author: Nikolas Dahn
+site_description: "A graphical editor for Havok behaviors"
+copyright: Nikolas Dahn
+theme:
+  favicon: assets/images/icon.png
+  logo: assets/images/icon.png
+  name: material
+  #custom_dir: docs/overrides
+  font:
+    text: Noto Sans
+  features:
+    - announce.dismiss
+    - content.code.copy
+    - header.autohide
+    - navigation.tabs
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.tabs
+    - navigation.tracking
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+
+extra_css:
+- assets/stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - First Steps: first_steps.md
+  - Behaviors: anatomy.md
+  - HowTo:
+    - Basics: howto/basics.md
+    - Templates: howto/templates.md
+    - Tools:
+      - Event Listener: tools/eventlistener.md
+  - Troubleshooting: troubleshooting.md
+  - API Reference
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+          python:
+            options:
+              docstring_style: numpy
+              show_signature_annotations: true
+              separate_signature: true
+              show_source: false
+              show_symbol_type_heading: true
+              show_symbol_type_toc: true
+              scoped_crossrefs: true
+  - api-autonav:
+      modules: ["hkb_editor"]
+      nav_item_prefix: ""
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      toc_depth: "1-3"
+      permalink: true
+  # Python Markdown Extensions
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tilde
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
