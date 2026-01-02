@@ -1,4 +1,4 @@
-from typing import Any, Type, Literal
+from typing import Any, Type, Literal, Annotated
 from dataclasses import dataclass
 import os
 import ast
@@ -95,6 +95,17 @@ class TemplateContext(CommonActionsMixin):
                     TemplateContext,
                 )
             }
+
+            if type_str.startswith("Annotated["):
+                if "," in type_str:
+                    comma = type_str.index(",")
+                    actual_type = valid[type_str[10:comma]]
+                    extras = "[" + type_str[comma + 1:]
+                    annotations = ast.literal_eval(extras)
+                else:
+                    actual_type = valid[type_str[10:-1]]
+                    annotations = []
+                return Annotated[actual_type, *annotations]
             
             if type_str in valid:
                 return valid[type_str]

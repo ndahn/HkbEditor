@@ -170,7 +170,7 @@ def find_dialog(
         # Way too many options, instead fill the table according to user input
         with dpg.group(horizontal=True):
             dpg.add_input_text(
-                default_value=initial_filter,
+                default_value=initial_filter or "",
                 hint="Filter...",
                 callback=on_filter_update,
                 tag=f"{tag}_filter",

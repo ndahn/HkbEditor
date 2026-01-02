@@ -1,4 +1,4 @@
-from typing import Any, Callable, Type, Literal, get_origin, get_args
+from typing import Any, Callable, Type, Literal, Annotated, get_origin, get_args
 from enum import IntFlag, Enum, Flag
 from functools import partial
 import math
@@ -100,7 +100,8 @@ def create_simple_value_widget(
         callback = new_callback
 
     # The simple types
-    if get_origin(value_type) == Literal:
+    type_origin = get_origin(value_type)
+    if type_origin == Literal:
         choices = get_args(value_type)
         items = [str(c) for c in choices]
 
@@ -145,7 +146,7 @@ def create_simple_value_widget(
             **kwargs,
             user_data=user_data,
         )
-    elif value_type in (type(None), str):
+    elif not type_origin and value_type in (type(None), str):
         dpg.add_input_text(
             label=label,
             default_value=str(default) if default is not None else "",
@@ -201,6 +202,9 @@ def create_value_widget(
         )
     except ValueError:
         pass
+
+    type_origin = get_origin(value_type)
+    type_args = get_args(value_type)
 
     # Common helper types
     if value_type in (Variable, Event, Animation):
@@ -277,7 +281,20 @@ def create_value_widget(
                 dpg.add_text(label)
 
     # Select an object
-    elif value_type == HkbRecord:
+    elif value_type == HkbRecord or (
+        type_origin == Annotated and type_args[0] == HkbRecord
+    ):
+        record_type_id = None
+        record_filter = None
+
+        if type_args:
+            if len(type_args) > 1:
+                record_type_id = behavior.type_registry.find_first_type_by_name(
+                    type_args[1]
+                )
+
+            if len(type_args) > 2:
+                record_filter = type_args[2]
 
         def on_object_selected(sender: str, record: HkbRecord, cb_user_data: Any):
             oid = record.object_id if record else ""
@@ -287,12 +304,15 @@ def create_value_widget(
         def open_object_selector(sender: str, app_data: str, user_data: Any):
             select_object(
                 behavior,
-                None,
+                record_type_id,
                 on_object_selected,
                 include_derived=True,
-                initial_filter="",
+                initial_filter=record_filter,
                 title=f"Select target for {label}",
             )
+
+        if isinstance(default, str):
+            default = next(behavior.query(default), default=None)
 
         with dpg.group(horizontal=True, tag=tag):
             dpg.add_input_text(
