@@ -3,7 +3,7 @@ This section will outline how to actually use HkbEditor to edit your behavior. A
 
 When editing behaviors you should typically rely on making small incremental changes. The most common use cases - registering clips and creating CMSGs - can be found in the *Workflows* menu. To create new hierarchies you would typically start by creating a new target for a pointer (e.g. a new StateInfo for a state machine, or a new entry for a CMSG's generators). 
 
-If you have something more complex in mind, definitely have a look at the [Templates](templates.md).
+If you have something more complex in mind, definitely have a look at the [Templates](../templates/overview.md).
 
 ---
 

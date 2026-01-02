@@ -38,12 +38,17 @@ nav:
   - First Steps: first_steps.md
   - Behaviors: anatomy.md
   - HowTo:
-    - Basics: howto/basics.md
-    - Templates: howto/templates.md
+    - Basics: howto/howto.md
     - Tools:
-      - Event Listener: tools/eventlistener.md
+      - Event Listener: howto/eventlistener.md
+  - Templates:
+    - Overview: templates/overview.md
+    - ER:
+      - Game Event (Player): templates/er/game_event_player.md
   - Troubleshooting: troubleshooting.md
   - API Reference
+
+exclude_docs: "!/templates/"
 
 plugins:
   - search

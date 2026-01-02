@@ -17,9 +17,10 @@ def run(
 ):
     """Game Event (Player)
 
-    Create an animation event that can be triggered from HKS, EMEVD, ESD, objects, etc. This is always a full animation, half blends are not possible. 
+    Create an animation event that can be triggered from HKS, EMEVD, ESD, objects, etc.
 
-    See the [full instructions](https://ndahn.github.io/hkbeditor/templates/game_event_player) for details.
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/game_event_player
 
     Parameters
     ----------
