@@ -44,6 +44,7 @@ nav:
   - Templates:
     - Overview: templates/overview.md
     - ER:
+      - Ash of War: templates/er/ash_of_war.md
       - Game Event (Player): templates/er/game_event_player.md
   - Troubleshooting: troubleshooting.md
   - API Reference
