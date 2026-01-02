@@ -18,7 +18,7 @@ def run(
     backhandsword_anim: Animation = None,
     duelingshield_anim: Animation = None,
 ):
-    """New Usable Item
+    """Usable Item
 
     Creates a new usable item that can be used as a oneshot, for weapon enchants, or both. The item will be used like every other regular item. For weapon buff items, the 'W_ItemWeaponEnchant' (or 'W_ItemWeaponEnchant_Upper') event is responsible.
 

@@ -39,13 +39,12 @@ def run(
 ):
     """Ash of War
 
-    Creates ClipGenerators that are typically used in ashes of war, e.g. for a regular AOW with follow-ups it will register 040000, 040005, 040010, etc. Entries that already exist will be skipped.
-
+    Registers animation clips used in ashes of war. Entries that already exist will be skipped.
+    
     Variations for specific weapon types are handled in HKS. Search for SwordArtsOneShotCategory in your c0000.hks for more details.
 
-    Author: Managarm
-
-    Status: confirmed
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/ash_of_war/
 
     Parameters
     ----------

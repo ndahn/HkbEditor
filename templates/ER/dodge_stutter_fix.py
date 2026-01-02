@@ -13,14 +13,8 @@ def run(
 
     Fixes the dodge stutter issue you get when duplicating dodges using ERClipGenerator.
 
-    Each roll variant has two CMSGs: regular and self-transition, which through their ClipGenerators use the same animation. However, when ERClipGenerator copies the CMSGs, both CMSGs ends up using the same ClipGenerator. The stuttering appears because the same ClipGenerator cannot run multiple times in parallel.
-
-    See PossiblyShiba's tutorial for additional details:
-    https://docs.google.com/document/d/1kWycrniv1i_TxDFkJIXzFWrgKLe8kFbZcpMd2PAVGPo/edit?tab=t.0
-
-    Author: Managarm
-
-    Status: verified
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/dodge_stutter_fix/
 
     Parameters
     ----------

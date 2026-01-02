@@ -20,7 +20,7 @@ def run(
     Create an animation event that can be triggered from HKS, EMEVD, ESD, objects, etc.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/game_event_player
+    https://ndahn.github.io/hkbeditor/templates/game_event_player/
 
     Parameters
     ----------

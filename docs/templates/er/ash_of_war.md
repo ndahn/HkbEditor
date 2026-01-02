@@ -10,7 +10,7 @@ Variations for specific weapon types are handled in HKS. Search for `SwordArtsOn
 
 ---
 
-## Regular AOW
+## Regular
 
 | Slot               | Base ID | [Type Variations](#weapon-type-variations) |
 | ------------------ | ------- | ------------------------------------------ |
@@ -23,7 +23,7 @@ Variations for specific weapon types are handled in HKS. Search for `SwordArtsOn
 
 ---
 
-## Stance AOW
+## Stance
 
 | Slot                     | Base ID | [Type Variations](#weapon-type-variations) |
 | ------------------------ | ------- | ------------------------------------------ |
@@ -53,7 +53,7 @@ Variations for specific weapon types are handled in HKS. Search for `SwordArtsOn
 
 ---
 
-## Charge AOW
+## Charge
 
 | Slot              | Base ID | [Type Variations](#weapon-type-variations) |
 | ----------------- | ------- | ------------------------------------------ |
@@ -70,7 +70,7 @@ Variations for specific weapon types are handled in HKS. Search for `SwordArtsOn
 
 ---
 
-## Shield AOW
+## Shield
 
 | Slot          | Base ID | [Type Variations](#weapon-type-variations) |
 | ------------- | ------- | ------------------------------------------ |
@@ -85,7 +85,7 @@ Variations for specific weapon types are handled in HKS. Search for `SwordArtsOn
 
 ---
 
-## Rolling AOW
+## Rolling
 
 | Slot       | Base ID | [Type Variations](#weapon-type-variations) |
 | ---------- | ------- | ------------------------------------------ |
@@ -119,3 +119,10 @@ Variations for specific weapon types are handled in HKS. Search for `SwordArtsOn
 |                        8 | Small Shield                        | 4800      |
 |                        9 | Backhand Sword                      | 5800      |
 |                       10 | Dueling Shield                      | 5900      |
+
+---
+
+???+ quote
+
+    - Author: Managarm
+    - Status: confirmed

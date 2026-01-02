@@ -25,13 +25,10 @@ def run(
 ):
     """New Jump Attack Type
 
-    Creates an entirely new jump attack, e.g. for adding left-handed jump attacks. The behavior can be activated by setting the JumpAttackForm and JumpAttack_HandCondition variables in the appropriate places.
+    Creates an entirely new jump attack type, e.g. left-handed jump attacks. The behavior can be activated by setting the JumpAttackForm and JumpAttack_HandCondition variables in the appropriate places.
 
-    TODO more details
-
-    Author: Managarm
-
-    Status: wip
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/jump_attack/
 
     Parameters
     ----------

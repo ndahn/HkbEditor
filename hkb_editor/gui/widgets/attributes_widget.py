@@ -320,7 +320,7 @@ class AttributesWidget:
                         self._create_attribute_widget_array_buttons(attribute, path)
 
                 add_lazy_table_tree_node(
-                    label,
+                    f"{label} ({len(attribute)})",
                     lazy_create_array_items,
                     table=self.attributes_table,
                     tag=tag,

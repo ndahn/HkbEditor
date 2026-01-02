@@ -29,3 +29,10 @@ end
 ???+ warning
 
     Don't forget to add an entry to your `action/eventnameid.txt` file. HkbEditor can do this for you - simply run `File -> Update name ID files`.
+
+---
+
+???+ quote
+
+    - Author: FloppyDonuts
+    - Status: hopeful

@@ -45,7 +45,12 @@ nav:
     - Overview: templates/overview.md
     - ER:
       - Ash of War: templates/er/ash_of_war.md
+      - Dodge Stutter Fix: templates/er/dodge_stutter_fix.md
+      - Evasion: templates/er/evasion.md
       - Game Event (Player): templates/er/game_event_player.md
+      #- Gesture: templates/er/gesture.md
+      - Jump: templates/er/jump.md
+      - Jump Attack Type: templates/er/jump_attack.md
   - Troubleshooting: troubleshooting.md
   - API Reference
 

@@ -20,11 +20,12 @@ def run(
 ):
     """New Gesture
 
-    Generates new gesture states for a gesture consisting of a loop start, loop, and loop end. To use the gesture, fire the first event from hks. TODO more info, how to use, loop end, ...
+    IMPORTANT: Work in progress, this will NOT work yet!
 
-    Author: FloppyDonuts
-    
-    Status: untested
+    Generates new gesture states for a gesture consisting of a loop start, loop, and loop end. To use the gesture, fire the event1 from hks.
+
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/gesture/
 
     Parameters
     ----------
@@ -41,14 +42,17 @@ def run(
     anim_end : Animation
         Loop end animation.
     gesture_id : int, optional
-        The gesture ID, corresponds to TAE 400 + X.
+        The gesture ID, corresponds to TAE 300 + X.
     """
+    # TODO this probably needs a rewrite and generalization, as I mixed up regular gestures and event gestures (or did I?)
     gesture_base_name = f"Gesture_{gesture_id:03}"
 
-    # TODO use SM to speed up other searches
-    gesture_sm = ctx.find("name=EventGesture_SM")
-    state1_id = ctx.get_next_state_id(gesture_sm)
+    event_gesture_sm = ctx.find("name=EventGesture_SM")
+    gesture_sm = ctx.find("name=Gesture_SM")
+
+    state1_id = ctx.get_next_state_id(event_gesture_sm)
     state2_id = state1_id + 1
+    transition_effect = ctx.find("name=Duration0_Reset")
 
     # Setup new statemachine state transitions
 
@@ -61,20 +65,20 @@ def run(
     trans1 = ctx.new_transition_info(
         toStateId=state1_id,
         eventId=event1,
-        transition="object9398",  # TODO unknown pointer?
+        transition=transition_effect,
         flags=transition_flags,
     )
 
     trans2 = ctx.new_transition_info(
         toStateId=state2_id,
         eventId=event2,
-        transition="object9398",  # TODO
+        transition=transition_effect,
         flags=transition_flags,
     )
 
     # add states to wildcard_transitions
-    ctx.array_add(gesture_sm, "wildcardTransitions/transitions", trans1)
-    ctx.array_add(gesture_sm, "wildcardTransitions/transitions", trans2)
+    ctx.array_add(event_gesture_sm, "wildcardTransitions/transitions", trans1)
+    ctx.array_add(event_gesture_sm, "wildcardTransitions/transitions", trans2)
 
     ####
     # Start to loop
@@ -144,7 +148,7 @@ def run(
         start_blend01_cmsg,
         weight=gesture_id,
     )
-    blend01_gen = ctx.find("name='GestureLoopStart Blend01'")
+    blend01_gen = ctx.find("name='GestureLoopStart Blend01'", start_from=gesture_sm)
     ctx.array_add(blend01_gen, "children", start_blend01)
 
 
@@ -160,7 +164,7 @@ def run(
         start_blend00_cmsg,
         weight=gesture_id,
     )
-    start_blend00_gen = ctx.find("name='GestureLoopStart Blend00'")
+    start_blend00_gen = ctx.find("name='GestureLoopStart Blend00'", start_from=gesture_sm)
     ctx.array_add(start_blend00_gen, "children", start_blend00)
 
     ####
@@ -199,7 +203,7 @@ def run(
         loop_blend00_cmsg,
         weight=gesture_id,
     )
-    loop_blend00_gen = ctx.find("name='GestureLoop Blend00'")
+    loop_blend00_gen = ctx.find("name='GestureLoop Blend00'", start_from=gesture_sm)
     ctx.array_add(loop_blend00_gen, "children", loop_blend00)
 
     loop_blend02_cmsg = ctx.new_cmsg(
@@ -214,7 +218,7 @@ def run(
         loop_blend02_cmsg,
         weight=gesture_id,
     )
-    loop_blend02_gen = ctx.find("name='GestureLoop Blend02'")
+    loop_blend02_gen = ctx.find("name='GestureLoop Blend02'", start_from=gesture_sm)
     ctx.array_add(loop_blend02_gen, "children", loop_blend02)
 
     # TODO this seems disconnected from the rest, not even a state or dedicated event?
@@ -236,7 +240,7 @@ def run(
         end_blend01_cmsg,
         weight=gesture_id,
     )
-    end_blend01_gen = ctx.find("name='GestureLoopEnd Blend01'")
+    end_blend01_gen = ctx.find("name='GestureLoopEnd Blend01'", start_from=gesture_sm)
     ctx.array_add(end_blend01_gen, "children", end_blend01)
 
     end_blend00_cmsg = ctx.new_cmsg(
@@ -251,5 +255,5 @@ def run(
         end_blend00_cmsg,
         weight=gesture_id,
     )
-    end_blend00_gen = ctx.find("name='GestureLoopEnd Blend00'")
+    end_blend00_gen = ctx.find("name='GestureLoopEnd Blend00'", start_from=gesture_sm   )
     ctx.array_add(end_blend00_gen, "children", end_blend00)

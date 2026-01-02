@@ -8,31 +8,18 @@ from hkb_editor.hkb.hkb_enums import (
 
 def run(
     ctx: TemplateContext,
-    roll_name: str,
-    roll_front_anim: Animation = None,
-    roll_back_anim: Animation = None,
-    roll_left_anim: Animation = None,
-    roll_right_anim: Animation = None,
+    name: str,
+    front_anim: Animation = None,
+    back_anim: Animation = None,
+    left_anim: Animation = None,
+    right_anim: Animation = None,
 ):
-    """Custom Roll
+    """Evasion
     
     Creates a new rolling/evasion animations for players. After running this script you can enable the new rolling animations by modifying the variable "EvasionWeightIndex". 
     
-    If you have not added new rolling animations before, your new roll will be on index 4. Otherwise check the "Rolling_Selector" object to figure out how many other variants already exist. Your new roll will be that number +1. 
-    
-    To enable your new roll, add something as follows in SetWeightIndex() of your c0000.hks:
-    
-    ```
-    -- Adjust speffect ID as needed
-    if env(GetSpEffectID, 123456) == TRUE then 
-        SetVariable("EvasionWeightIndex", 4)
-    end 
-    ```
-
-
-    Author: Shiki
-    
-    Status: untested
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/evasion/
 
     Parameters
     ----------
@@ -55,7 +42,7 @@ def run(
     # Create the new roll
     new_roll_cmsgs = []
     for anim, direction in zip(
-        [roll_front_anim, roll_back_anim, roll_left_anim, roll_right_anim],
+        [front_anim, back_anim, left_anim, right_anim],
         ["Front", "Back", "Left", "Right"],
     ):
         if not anim:
@@ -64,7 +51,7 @@ def run(
         clip = ctx.new_clip(anim)
         cmsg = ctx.new_cmsg(
             anim.anim_id,
-            name=f"{roll_name}{direction}_CMSG",
+            name=f"{name}{direction}_CMSG",
             generators=[clip],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -77,7 +64,7 @@ def run(
 
     new_roll_msg = ctx.new_manual_selector(
         "RollingDirectionIndex",
-        name=f"{roll_name} Selector",
+        name=f"{name} Selector",
         generators=new_roll_cmsgs,
         generatorChangedTransitionEffect=default_transition,
     )
@@ -88,7 +75,7 @@ def run(
     # Self transition
     new_roll_selftrans_cmsgs = []
     for anim, direction in zip(
-        [roll_front_anim, roll_back_anim, roll_left_anim, roll_right_anim],
+        [front_anim, back_anim, left_anim, right_anim],
         ["Front", "Back", "Left", "Right"],
     ):
         if not anim:
@@ -97,7 +84,7 @@ def run(
         clip = ctx.new_clip(anim)
         cmsg = ctx.new_cmsg(
             anim.anim_id,
-            name=f"{roll_name}{direction}_SelfTrans_CMSG",
+            name=f"{name}{direction}_SelfTrans_CMSG",
             generators=[clip],
             offsetType=CmsgOffsetType.IDLE_CATEGORY,
             animeEndEventType=AnimeEndEventType.NONE,
@@ -110,9 +97,12 @@ def run(
 
     new_roll_selftrans_msg = ctx.new_manual_selector(
         "RollingDirectionIndex_SelfTrans",
-        name=f"{roll_name}_Selftrans Selector",
+        name=f"{name}_Selftrans Selector",
         generators=new_roll_selftrans_cmsgs,
     )
 
     roll_selftrans_msg = ctx.find("name=Rolling_Selftrans_Selector", start_from=evasion_sm)
     ctx.array_add(roll_selftrans_msg, "generators", new_roll_selftrans_msg)
+
+    roll_index = len(roll_msg["generators"])
+    ctx.log(f"Index of new evasion {name}: {roll_index}")
