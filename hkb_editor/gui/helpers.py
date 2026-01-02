@@ -312,7 +312,10 @@ def create_value_widget(
             )
 
         if isinstance(default, str):
-            default = next(behavior.query(default), default=None)
+            default = next(behavior.query(default), None)
+        
+        if isinstance(default, HkbRecord):
+            default = default.object_id
 
         with dpg.group(horizontal=True, tag=tag):
             dpg.add_input_text(
