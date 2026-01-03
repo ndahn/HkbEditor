@@ -22,6 +22,10 @@ def run(
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/stance_move_type/
 
+    Author: Managarm
+
+    Status: hopeful
+
     Parameters
     ----------
     ctx : TemplateContext

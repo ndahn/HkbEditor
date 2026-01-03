@@ -1221,3 +1221,52 @@ class CommonActionsMixin:
         state = self.new_statemachine_state(state_id, **state_kwargs)
 
         return (state, cmsg, clip)
+
+
+    def create_blend_chain(
+        self,
+        animation: Animation | str | int,
+        blend_weight: int = 1,
+        cmsg_name: str = None,
+        *,
+        offsetType: CmsgOffsetType = CmsgOffsetType.IDLE_CATEGORY,
+        animeEndEventType: AnimeEndEventType = AnimeEndEventType.NONE,
+        cmsg_kwargs: dict[str, Any] = None,
+    ) -> tuple[HkbRecord, HkbRecord, HkbRecord]:
+        """Creates another common behavior structure, used for e.g. usable items and gestures: BlenderGeneratorChild -> CMSG -> ClipGenerator.
+
+        This setup is typically used with a parametric blend BlenderGenerator, where blend_weight also acts as the ID of the generator. Make sure this ID is an integer and unique within the BlenderGenerator when using this setup!
+
+        Parameters
+        ----------
+        animation : Animation | str | int
+            Animation to use for the clip.
+        blend_weight : int, optional
+            Blend weight of the BlenderGeneratorChild. 
+        cmsg_name : str, optional
+            Name of the CMSG, typically ends with "_CMSG".
+        offsetType : CmsgOffsetType, optional
+            Generator selection mode of the CMSG. Usually there's only one clip attached and this doesn't matter.
+        animeEndEventType : AnimeEndEventType, optional
+            What the CMSG should do once the activated generator finishes.
+
+        Returns
+        -------
+        tuple[HkbRecord, HkbRecord, HkbRecord]
+            The new hkbBlenderGeneratorChild, CustomManualSelectorGenerator, and hkbClipGenerator records.
+        """
+        clip = self.new_clip(animation)
+
+        if cmsg_kwargs is None:
+            cmsg_kwargs = {}
+        cmsg_kwargs.setdefault("name", cmsg_name)
+        cmsg_kwargs.setdefault("generators", [clip])
+        cmsg_kwargs.setdefault("offsetType", offsetType,)
+        cmsg_kwargs.setdefault("animeEndEventType", animeEndEventType,)
+
+        cmsg = self.new_cmsg(animation.anim_id,**cmsg_kwargs)
+        blend = self.new_blender_generator_child(cmsg, weight=blend_weight)
+
+        return (blend, cmsg, clip)
+
+

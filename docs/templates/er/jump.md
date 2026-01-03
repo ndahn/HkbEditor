@@ -1,12 +1,17 @@
-New Jump Type
+# New Jump Type
+
+???+ quote
+
+    - Author: Raster
+    - Status: verified
 
 Creates a new TAE slot for jump animations with support for directional jumps and jump attacks.
+
+If you define an animation for one of the directions it will be the only slot used for this direction. Otherwise the regular slots for this direction are used, taken from the "base_jump". These are in Elden Ring 202020 - 202023 (front, back, left, right). 
 
 ???+ tip
 
     To stay compatible with other jump types your `jump_name` should only be a single letter. Elden Ring uses `N` - neutral, `F` - forward, and `D` - dash.
-
-If you define an animation for one of the directions it will be the only slot used for this direction. Otherwise the regular slots for this direction are used, taken from the "base_jump". These are in Elden Ring 202020 - 202023 (front, back, left, right). 
 
 It is highly recommended to keep jump attacks enabled. If jump attacks are enabled, the new jump behaviors will support all jump attacks already registered for the base jump.
 
@@ -61,8 +66,3 @@ function MyNewJump_onDeactivate()
     act(DisallowAdditiveTurning, FALSE)
 end
 ```
-
-???+ quote
-
-    - Author: Raster
-    - Status: verified

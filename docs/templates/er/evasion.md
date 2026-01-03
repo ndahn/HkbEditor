@@ -1,5 +1,10 @@
 # Evasion
 
+???+ quote
+
+    - Author: Shiki
+    - Status: untested
+
 Creates a new rolling/evasion animations for players. 
 
 If you have not added new rolling animations before, your new roll will be on index `4`. Otherwise check the log output. As an alternative, locate the `Rolling_Selector` object to figure out how many other variants already exist - your new roll will be that number +1. 
@@ -12,9 +17,3 @@ if env(GetSpEffectID, 123456) == TRUE then
     SetVariable("EvasionWeightIndex", <index>)  -- your evasion index!
 end 
 ```
-
-
-???+ quote
-
-    - Author: Shiki
-    - Status: untested

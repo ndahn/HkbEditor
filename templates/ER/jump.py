@@ -38,6 +38,10 @@ def run(
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/jump/
 
+    Author: Raster
+    
+    Status: verified
+
     Parameters
     ----------
     ctx : TemplateContext

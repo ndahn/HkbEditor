@@ -30,6 +30,10 @@ def run(
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/jump_attack/
 
+    Author: Managarm
+    
+    Status: needs testing
+
     Parameters
     ----------
     ctx : TemplateContext

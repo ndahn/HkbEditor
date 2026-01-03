@@ -13,11 +13,16 @@ def run(
     animation: Animation,
     event: Event,
 ):
-    """New Ground Attack
+    """Ground Attack
 
     Creates a new attack slot that can be executed while on the ground.
 
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/sdt/ground_attack/
+
     Author: Igor
+
+    Status: confirmed
 
     Parameters
     ----------

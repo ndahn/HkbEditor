@@ -15,6 +15,10 @@ def run(
 
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/dodge_stutter_fix/
+    
+    Author: Managarm
+    
+    Status: confirmed
 
     Parameters
     ----------

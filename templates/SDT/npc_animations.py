@@ -16,13 +16,18 @@ def run(
     create_attack_event: bool = True,
     create_regular_event: bool = False,
 ):
-    """New NPC Animations
+    """NPC Animations
 
     This template allows you to register in the 3000~3109 range for any enemy. New events can be called by AI and events. Note that this should be used on a c9997.xml behavior.
 
     For every animation generated, two corresponding events are generated: W_Attack<anim_id> and W_Event<anim_id>, where <anim_id> is the animation ID (the Y part in aXXX_YYYYYY minus leading zeros).
 
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/sdt/npc_animations/
+
     Author: Ionian
+
+    Status: confirmed
 
     Parameters
     ----------

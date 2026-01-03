@@ -45,6 +45,10 @@ def run(
 
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/ash_of_war/
+    
+    Author: Managarm
+    
+    Status: confirmed
 
     Parameters
     ----------

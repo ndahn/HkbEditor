@@ -1,5 +1,10 @@
 # Jump Attack
 
+???+ quote
+
+    - Author: Managarm
+    - Status: needs testing
+
 Creates an entirely new jump attack type, e.g. left-handed jump attacks. 
 
 In Elden Ring, jump attacks are layered animations in the `NewJump Statemachine`, where a jump animation serves as a basis and applies root motion, while an optional attack animation can be applied on top without altering the trajectory. This is controlled by a hierarchy of `ManualSelectorGenerators` and enabling additional animation layers.
@@ -29,9 +34,3 @@ Lastly, if you're creating a new jump magic type you need to update these functi
 
 - `ExecJumpMagic`
 - `ExecFallMagic`
-
-
-???+ quote
-
-    - Author: Managarm
-    - Status: needs testing

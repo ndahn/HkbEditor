@@ -21,6 +21,10 @@ def run(
 
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/game_event_player/
+    
+    Author: FloppyDonuts
+    
+    Status: hopeful
 
     Parameters
     ----------

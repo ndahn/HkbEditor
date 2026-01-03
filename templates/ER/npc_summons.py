@@ -10,11 +10,14 @@ from hkb_editor.hkb.hkb_enums import (
 def run(
     ctx: TemplateContext,
 ):
-    """Make NPC Summonable
+    """NPC Summons
 
     Makes an NPC summonable if it isn't already. This will create the BuddyGenerate and BuddyDisappear states in the Master_SM, which are activated by firing W_BuddyGenerate and W_BuddyDisappear (as well as W_Event1830 and W_Event1840).
 
-    Author: FloppyDonuts & Managarm
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/npc_summons/
+
+    Author: FloppyDonuts
 
     Status: confirmed
 

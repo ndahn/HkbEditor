@@ -20,9 +20,12 @@ def run(
 ):
     """Usable Item
 
-    Creates a new usable item that can be used as a oneshot, for weapon enchants, or both. The item will be used like every other regular item. For weapon buff items, the 'W_ItemWeaponEnchant' (or 'W_ItemWeaponEnchant_Upper') event is responsible.
+    Creates a new usable item that can be used as a oneshot, for weapon enchants, or both. The item will be used like every other regular item. For weapon buff items, the `W_ItemWeaponEnchant` (or `W_ItemWeaponEnchant_Upper`) event is responsible.
 
-    Oneshot items will only use the 'normal_use_anim'. Weapon buff items should also specify the 'backhandblade_anim' and 'duelingshield_ainm'. If not specified, the 'normal_use_anim' will be used instead.
+    Oneshot items will only use the `normal_use_anim`. Weapon buff items should also specify the `backhandblade_anim` and `duelingshield_ainm`. If not specified, the `normal_use_anim` will be used instead.
+
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/er/usable_item/
 
     Author: FloppyDonuts
 
@@ -43,32 +46,31 @@ def run(
     duelingshield_anim : Animation, optional
         Animation used when enchanting dueling shields.
     """
-    ####
-    # Self-transition
-    ####
-    selftrans_clip = ctx.new_clip(normal_use_anim)
+    # TODO handle item ID properly
+    item_id = 12345
 
-    selftrans_blend, selftrans_cmsg = ctx.create_blend_chain(
-        selftrans_clip,
+    selftrans_blend, _, selftrans_clip = ctx.create_blend_chain(
         normal_use_anim,
+        item_id,
         name + "_CMSG02",
-        enableScript=False,
-        enableTae=False,
-        offsetType=CmsgOffsetType.IDLE_CATEGORY,
-        animeEndEventType=AnimeEndEventType.NONE,
+        cmsg_kwargs=dict(
+            enableScript=False,
+            enableTae=False,
+        )
     )
     # Item_SM
     # TODO searches can be accelerated by searching from the appropriate statemachine
     selftrans_gen = ctx.find("name=ItemOneshot_SelfTrans type_name=hkbBlenderGenerator")
     ctx.array_add(selftrans_gen, "children", selftrans_blend)
 
-    selftrans_upper_blend, selftrans_upper_cmsg = ctx.create_blend_chain(
-        selftrans_clip,
+    selftrans_upper_blend, _, _ = ctx.create_blend_chain(
         normal_use_anim,
+        item_id,
         name + "_CMSG01",
-        offsetType=CmsgOffsetType.IDLE_CATEGORY,
-        animeEndEventType=AnimeEndEventType.NONE,
-        checkAnimEndSlotNo=1,
+        cmsg_kwargs=dict(
+            checkAnimEndSlotNo=1,
+            generators=[selftrans_clip],
+        ),
     )
     # Item_Upper_SM
     selftrans_upper_gen = ctx.find(
@@ -80,27 +82,27 @@ def run(
     # Oneshot
     ####
     if mode in ("oneshot", "both"):
-        oneshot_clip = ctx.new_clip(normal_use_anim)
-        oneshot_blend, oneshot_cmsg = ctx.create_blend_chain(
-            oneshot_clip,
+        oneshot_blend, _, oneshot_clip = ctx.create_blend_chain(
             normal_use_anim,
+            item_id,
             name + "_CMSG",
-            offsetType=CmsgOffsetType.IDLE_CATEGORY,
-            animeEndEventType=AnimeEndEventType.NONE,
-            enableScript=False,
-            enableTae=False,
+            cmsg_kwargs=dict(
+                enableScript=False,
+                enableTae=False,
+            )
         )
         # Item_SM
         oneshot_gen = ctx.find("name=ItemOneshot type_name=hkbBlenderGenerator")
         ctx.array_add(oneshot_gen, "children", oneshot_blend)
 
-        oneshot_upper_blend, oneshot_upper_cmsg = ctx.create_blend_chain(
-            oneshot_clip,
+        oneshot_upper_blend, _, _ = ctx.create_blend_chain(
             normal_use_anim,
+            item_id,
             name + "_CMSG",
-            offsetType=CmsgOffsetType.IDLE_CATEGORY,
-            animeEndEventType=AnimeEndEventType.NONE,
-            checkAnimEndSlotNo=1,
+            cmsg_kwargs=dict(
+                checkAnimEndSlotNo=1,
+                generators=[oneshot_clip]
+            )
         )
         # Item_Upper_SM
         oneshot_upper_gen = ctx.find(

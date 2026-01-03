@@ -51,6 +51,18 @@ nav:
       #- Gesture: templates/er/gesture.md
       - Jump: templates/er/jump.md
       - Jump Attack Type: templates/er/jump_attack.md
+      - NPC Attack Slots: templates/er/npc_attack_slots.md
+      - NPC Summons: templates/er/npc_summons.md
+      - Rolling Arts Stutter Fix: templates/er/rollingarts_stutter_fix.md
+      - Stance Move Type: templates/er/stance_move_type.md
+      - Throw Attack (Attacker): templates/er/throw_attack_attacker.md
+      - Throw Attack (Victim): templates/er/throw_attack_victim.md
+      #- Usable Item: templates/er/usable_item.md
+      - Weapon Moveset: templates/er/weapon_moveset.md
+    - SDT:
+      - Damage Additive: templates/sdt/damage_additive.md
+      - Ground Attack: templates/sdt/ground_attack.md
+      - NPC Animations: templates/sdt/npc_animations.md
   - Troubleshooting: troubleshooting.md
   - API Reference
 

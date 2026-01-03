@@ -1,12 +1,17 @@
 # Ash of War
 
+???+ quote
+
+    - Author: Managarm
+    - Status: confirmed
+
 Creates ClipGenerators that are typically used in ashes of war, e.g. for a regular AOW with follow-ups it will register 040000, 040005, 040010, etc. Entries that already exist will be skipped.
 
 Variations for specific weapon types are handled in HKS. Search for `SwordArtsOneShotCategory` in your [c0000.hks](https://github.com/ividyon/EldenRingHKS/blob/870d3776d33110049fede8f7282d9f25823e11a4/c0000.hks#L2235) for more details. The tables below will provide details on which IDs are used based on the AOW and weapon type.
 
 ???+ warning
 
-    Note that the game is very inconsistent about which AOW slots actually support weapon type variations. The template will register whichever variations are possible. Otherwise you'll have to check if there is a CMSG with the animation ID you're interested in (e.g. `animId=40215` ).
+    Note that Elden Ring is very inconsistent about which AOW slots actually support weapon type variations. The template will register whichever variations are possible. Otherwise you'll have to check if there is a CMSG with the animation ID you're interested in (e.g. `animId=40215` ).
 
 ---
 
@@ -119,10 +124,3 @@ Variations for specific weapon types are handled in HKS. Search for `SwordArtsOn
 |                        8 | Small Shield                        | 4800      |
 |                        9 | Backhand Sword                      | 5800      |
 |                       10 | Dueling Shield                      | 5900      |
-
----
-
-???+ quote
-
-    - Author: Managarm
-    - Status: confirmed

@@ -22,6 +22,9 @@ def run(
 
     Note that jump attacks will only be registered if right, both, and/or dual are checked.
 
+    Full instructions:
+    https://ndahn.github.io/hkbeditor/templates/er/weapon_moveset/
+
     Author: Managarm
 
     Status: confirmed

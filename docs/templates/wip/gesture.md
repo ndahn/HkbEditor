@@ -1,9 +1,9 @@
 # New Gesture
 
-??? danger
+???+ quote
 
-    This template is not finished yet!
-
+    - Author: FloppyDonuts
+    - Status: wip
 
 Generates new gesture states for a gesture consisting of a start, loop, and end. 
 
@@ -11,8 +11,3 @@ Generates new gesture states for a gesture consisting of a start, loop, and end.
 
     TODO more info, how to use, loop end, ...
 
-
-???+ quote
-
-    - Author: FloppyDonuts
-    - Status: untested
