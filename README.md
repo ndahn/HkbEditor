@@ -2,7 +2,7 @@
 
 This program allows you to edit Havok behavior graphs which are used in several FromSoft games like *Nightreign*, *Elden Ring*, and *Sekiro - Shadows Die Twice*. 
 
-There is now a shiny new documentation page over at [](https://ndahn.github.io/HkbEditor/) :tada:!
+There is now a shiny new documentation page over at [https://ndahn.github.io/HkbEditor/](https://ndahn.github.io/HkbEditor/) :tada:!
 
 ---
 
