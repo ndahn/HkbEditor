@@ -20,7 +20,7 @@ def run(
     Create a game event that can be triggered from HKS, EMEVD, ESD, objects, etc. The new event will be called `W_Event<game_event_id>`.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/game_event_player/
+    https://ndahn.github.io/hkbeditor/templates/er/game_event_player/
     
     Author: FloppyDonuts
     

@@ -20,6 +20,8 @@ def run(
 ):
     """Usable Item
 
+    IMPORTANT: Work in progress, this will NOT work yet!
+
     Creates a new usable item that can be used as a oneshot, for weapon enchants, or both. The item will be used like every other regular item. For weapon buff items, the `W_ItemWeaponEnchant` (or `W_ItemWeaponEnchant_Upper`) event is responsible.
 
     Oneshot items will only use the `normal_use_anim`. Weapon buff items should also specify the `backhandblade_anim` and `duelingshield_ainm`. If not specified, the `normal_use_anim` will be used instead.
@@ -47,6 +49,10 @@ def run(
         Animation used when enchanting dueling shields.
     """
     # TODO handle item ID properly
+    # Items are activated from ExecItem and usually use halfblend tuple definitions from common.hks
+    # Look for Event_ItemElixir and similar
+    # Variable ItemWeaponType is related to weapon buffs
+    # Variable ItemTransformType is related to transformation items
     item_id = 12345
 
     selftrans_blend, _, selftrans_clip = ctx.create_blend_chain(

@@ -28,7 +28,7 @@ def run(
     Creates an entirely new jump attack type, e.g. left-handed jump attacks. The behavior can be activated by setting the `JumpAttackForm` and `JumpAttack_HandCondition` variables in the appropriate places in HKS.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/jump_attack/
+    https://ndahn.github.io/hkbeditor/templates/er/jump_attack/
 
     Author: Managarm
     

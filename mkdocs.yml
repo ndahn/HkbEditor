@@ -27,11 +27,8 @@ theme:
     - search.suggest
   palette:
     - scheme: slate
-      primary: custom
-      accent: custom
-
-extra_css:
-- assets/stylesheets/extra.css
+      primary: amber
+      accent: pink
 
 nav:
   - Home: index.md
@@ -43,6 +40,7 @@ nav:
       - Event Listener: howto/eventlistener.md
   - Templates:
     - Overview: templates/overview.md
+    - Contributing: templates/contributing.md
     - ER:
       - Ash of War: templates/er/ash_of_war.md
       - Dodge Stutter Fix: templates/er/dodge_stutter_fix.md
@@ -112,5 +110,5 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tilde
   - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_index: !!python/name:pymdownx.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg

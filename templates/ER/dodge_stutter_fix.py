@@ -14,7 +14,7 @@ def run(
     Fixes the dodge stutter issue you get when registering dodge animations using ERClipGenerator.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/dodge_stutter_fix/
+    https://ndahn.github.io/hkbeditor/templates/er/dodge_stutter_fix/
     
     Author: Managarm
     

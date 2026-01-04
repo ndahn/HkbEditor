@@ -9,7 +9,7 @@ def run(
     Fixes animation stutter for rolling arts, an issue typically caused by using ERClipGenerator to register these animations.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/rollingarts_stutter_fix/
+    https://ndahn.github.io/hkbeditor/templates/er/rollingarts_stutter_fix/
 
     Author: Kmstr
 

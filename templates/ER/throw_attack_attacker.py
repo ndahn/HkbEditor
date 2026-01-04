@@ -17,7 +17,7 @@ def run(
     Throws and grabs are controlled by the `ThrowParam` table of the regulation.bin. After adding a new attacker throw, create new rows as needed and set the "atkAnimId" field to the animation ID of your `grab_anim` (ignoring the aXXX part, i.e. a000_004170 becomes 4170).
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/throw_attack_attacker/
+    https://ndahn.github.io/hkbeditor/templates/er/throw_attack_attacker/
 
     Author: FloppyDonuts
     

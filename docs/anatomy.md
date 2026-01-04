@@ -9,6 +9,7 @@ Every node in the graph has two things: a unique identifier, e.g. *object1234*, 
     Note that object IDs are **not** stable - they can and will change as you convert between the binary and xml representations.
 
 The type defines which attributes the object has and what their types are. Every attribute consists of a field name and a value. The fundamental attribute types are:
+
 - Integer (*whole numbers*)
 - Float (*decimal numbers*)
 - Boolean (*true/false*)
@@ -60,6 +61,7 @@ In order to bind a variable, right click a bindable attribute and select *Bind V
 Probably what most people will care about, and so of course I put it towards the end :) 
 
 In order to play back an animation a behavior needs 3 things:
+
 - A state to activate
 - An event to activate the state
 - And a *hkbClipGenerator* object
@@ -106,6 +108,7 @@ ExecEventAllBody("W_SwordArtsOneShot")
 You could of course now create a separate generator for every different ash of war, weapon type, and attack and use variables to meticulously decide which animation to play back. But this system will fail in many unintuitive ways - for example if you insert a new animation in between the already existing generators. 
 
 The better way to do this is to use what's called a *CustomManualSelectorGenerator*, or CMSG for short. This object will select a single clip generator from its children based on e.g. the currently equipped ash of war. Other options include selected magic, idle category, weapon type, etc. CMSGs are also responsible for calling HKS functions based on their name. For example, a CMSG called *SwordArtsOneshotComboEnd_CMSG* will also call the following HKS functions (if they exist and *enableScript* is set to true):
+
 - SwordArtsOneshotComboEnd_onActivate
 - SwordArtsOneshotComboEnd_onUpdate
 - SwordArtsOneshotComboEnd_onDeativate

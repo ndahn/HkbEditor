@@ -42,7 +42,9 @@ Inside said folder you will find a few more files and folders, but the one we ar
 ---
 
 ## What goes where
-> For this tutorial I will assume you'll be editing Elden Ring's player character's behavior (c0000). This won't matter in most cases, but a few things like ashes of war (weapon skills) will be called different in other games.
+???+ tip
+
+    For this tutorial I will assume you'll be editing Elden Ring's player character's behavior (c0000). This won't matter in most cases, but a few things like ashes of war (weapon skills) will be called different in other games.
 
 For editing behaviors we'll be using *HkbEditor*, courtesy of yours truely. Open it and select *File -> Open*, then navigate to the .xml file you extracted earlier. Depending on the file size this can take a couple of seconds to load.
 
