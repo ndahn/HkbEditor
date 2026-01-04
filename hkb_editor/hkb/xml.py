@@ -17,7 +17,7 @@ class MutationType(IntEnum):
     STRUCTURE = 2
 
 
-@dataclass
+@dataclass(slots=True)
 class UndoAction:
     id: int
     action_type: MutationType
@@ -267,8 +267,7 @@ class UndoAttrib(dict):
 
 
 class HkbXmlElement(ET.ElementBase):
-    """
-    Custom lxml Element that tracks mutations for undo/redo."""
+    """Custom lxml Element that tracks mutations for undo/redo."""
 
     _undo_stacks: WeakKeyDictionary["HkbXmlElement", UndoStack] = WeakKeyDictionary()
 

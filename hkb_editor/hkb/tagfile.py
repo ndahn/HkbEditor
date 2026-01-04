@@ -492,10 +492,6 @@ class Tagfile:
         return f"object{new_id}"
 
     def add_object(self, record: "HkbRecord", id: str = None) -> str:
-        if record in self.objects.values():
-            # Prevent some shenanigans that could potentially add an object a second time
-            raise ValueError("Cannot add an object that's already part of the tree.")
-        
         if id is None:
             if record.object_id:
                 id = record.object_id
