@@ -14,5 +14,5 @@ COPY user_layout.ini dist\default_layout.ini
 COPY attributes.yaml dist\
 COPY icon.ico dist\
 ROBOCOPY templates dist\templates /E
-ROBOCOPY doc dist\doc /E
+ROBOCOPY docs dist\docs /E
 ROBOCOPY event_listener dist\event_listener hkb_event_listener.dll hkb_event_listener.yaml
