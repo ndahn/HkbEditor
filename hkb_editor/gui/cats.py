@@ -4,7 +4,7 @@ import time
 from dearpygui import dearpygui as dpg
 
 
-variant = "x"
+variant = ""
 
 
 def _load_cats() -> None:
