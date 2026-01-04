@@ -7,7 +7,7 @@
 
 Creates ClipGenerators that are typically used in ashes of war, e.g. for a regular AOW with follow-ups it will register 040000, 040005, 040010, etc. Entries that already exist will be skipped.
 
-[Weapon type variations](#weapon-type-variations) are handled in HKS. Search for `SwordArtsOneShotCategory` in your [c0000.hks](https://github.com/ividyon/EldenRingHKS/blob/870d3776d33110049fede8f7282d9f25823e11a4/c0000.hks#L2235) for more details. The tables below will provide details on which IDs are used based on the AOW slot.
+[Weapon type variations](#weapon-type-variations) are handled in HKS. Search for `SwordArtsOneShotCategory` in your `c0000.hks` for more details. The tables below will provide details on which IDs are used based on the AOW slot.
 
 ---
 

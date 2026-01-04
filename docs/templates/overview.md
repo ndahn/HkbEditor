@@ -3,6 +3,12 @@ Sometimes you have a more complex task that is tedious to do by hand. Maybe you 
 
 ![](../assets/guide/templates-1.png)
 
+???+ tip
+
+    Behaviors almost always involve some HKS. The documentation here will give a short outline of the specifics. Vanilla HKS files can be found at the [community HKS repo](https://github.com/ividyon/EldenRingHKS).
+
+## What is a template?
+
 Templates are small(ish) python scripts that can automate behavior edits. Each template must have a `run()` function which takes a *TemplateContext* object as its first argument. Templates are smart in the way that all additional arguments as well as the docstring are used for generating a dialog. 
 
 The TemplateContext object provides various methods for creating and editing objects, events, variables and animations, create variable bindings, find specific objects, and so on. The API is *mostly* stable, so the best way to learn how to write templates is by looking at the [API documentation](../../reference/hkb_editor/templates/common/#hkb_editor.templates.common.CommonActionsMixin), as well as the already included [templates](https://github.com/ndahn/HkbEditor/tree/main/templates).

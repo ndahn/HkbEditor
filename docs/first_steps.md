@@ -5,6 +5,7 @@
 - [WitchyBND](https://github.com/ividyon/WitchyBND): for unpacking the archive files
 - [HKLib](https://github.com/The12thAvenger/HKLib/): for converting .hkb behavior files to .xml
 - [HkbEditor](https://github.com/ndahn/HkbEditor): for editing the behavior .xml files
+- [c0000.hks](https://github.com/ividyon/EldenRingHKS): often edited to handle behaviors
 
 ???+ tip
 
