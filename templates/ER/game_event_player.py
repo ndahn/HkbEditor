@@ -11,13 +11,13 @@ from hkb_editor.hkb.hkb_enums import (
 
 def run(
     ctx: TemplateContext,
+    animation: Animation,
     game_event_id: int = 70000,
-    animation: Animation = None,
     transition_effect: Annotated[HkbRecord, "hkbTransitionEffect"] = "DefaultTransition",
 ):
     """Game Event (Player)
 
-    Create an animation event that can be triggered from HKS, EMEVD, ESD, objects, etc.
+    Create a game event that can be triggered from HKS, EMEVD, ESD, objects, etc. The new event will be called `W_Event<game_event_id>`.
 
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/game_event_player/

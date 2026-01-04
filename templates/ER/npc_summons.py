@@ -12,7 +12,7 @@ def run(
 ):
     """NPC Summons
 
-    Makes an NPC summonable if it isn't already. This will create the BuddyGenerate and BuddyDisappear states in the Master_SM, which are activated by firing W_BuddyGenerate and W_BuddyDisappear (as well as W_Event1830 and W_Event1840).
+    Makes an NPC summonable if it isn't already. Summons are activated by firing `W_BuddyGenerate` and `W_BuddyDisappear` (or `W_Event1830` and `W_Event1840` for EMEVD and co).
 
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/npc_summons/

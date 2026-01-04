@@ -20,20 +20,18 @@ def run(
     event: Event,
     base_jump: Literal["Jump_N", "Jump_F", "Jump_D"] = "Jump_D",
     enable_jump_attacks: bool = True,
-    jump_front_anim: Animation = None,
-    jump_back_anim: Animation = None,
-    jump_left_anim: Animation = None,
-    jump_right_anim: Animation = None,
+    front_anim: Animation = None,
+    back_anim: Animation = None,
+    left_anim: Animation = None,
+    right_anim: Animation = None,
 ):
-    """New Jump Type
+    """Jump
 
     Creates a new TAE slot for jump animations with support for directional jumps and jump attacks.
 
     To stay compatible with other jump types your `jump_name` should only be a single letter. Elden Ring uses `N` - neutral, `F` - forward, and `D` - dash.
 
-    If you define an animation for one of the directions it will be the only slot used for this direction. Otherwise the regular slots for this direction are used, taken from the "base_jump". These are in Elden Ring 202020 - 202023 (front, back, left, right). 
-    
-    It is highly recommended to keep jump attacks enabled. If jump attacks are enabled, the new jump behaviors will support all jump attacks already registered for the base jump.
+    It is highly recommended to keep jump attacks enabled. The new jump behaviors will support all jump attacks already registered for the base jump.
 
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/jump/
@@ -46,17 +44,21 @@ def run(
     ----------
     ctx : TemplateContext
         The template context.
-    name : str
+    jump_name : str
         Name of your new jump. Will be used for CMSGs, States, etc.
-    jump_name : Literal[f&quot;Jump_N&quot;, &quot;Jump_F&quot;, &quot;Jump_D&quot;], optional
-        The jump behavior to use for unspecified directions.
-    jump_front_anim : Animation, optional
+    event : Event
+        The event to activate your new jump.
+    base_jump : Literal[f&quot;Jump_N&quot;, &quot;Jump_F&quot;, &quot;Jump_D&quot;], optional
+        The jump behavior to base your jump on.
+    enable_jump_attacks : bool, optional
+        Whether to add support for jump attacks and jump magic.
+    front_anim : Animation, optional
         Animation slot to use for forward jumps. Register clips from default slot if not specified.
-    jump_back_anim : Animation, optional
+    back_anim : Animation, optional
         Animation slot to use for backwards jumps. Register clips from default slot if not specified.
-    jump_left_anim : Animation, optional
+    left_anim : Animation, optional
         Animation slot to use for jumps to the left. Register clips from default slot if not specified.
-    jump_right_anim : Animation, optional
+    right_anim : Animation, optional
         Animation slot to use for jumps to the right. Register clips from default slot if not specified.
     """
     jump_sm = ctx.find("name='NewJump StateMachine'")
@@ -228,9 +230,9 @@ def run(
     ####
     if base_jump != "Jump_N":
         # Front
-        if jump_front_anim:
-            jump_front_anim_id = jump_front_anim.anim_id
-            jump_front_clips = [ctx.new_clip(jump_front_anim)]
+        if front_anim:
+            jump_front_anim_id = front_anim.anim_id
+            jump_front_clips = [ctx.new_clip(front_anim)]
         else:
             jump_front_anim_id = 202020
             jump_front_clips = [
@@ -246,9 +248,9 @@ def run(
         )
 
         # Back
-        if jump_back_anim:
-            jump_back_anim_id = jump_back_anim.anim_id
-            jump_back_clips = [ctx.new_clip(jump_back_anim)]
+        if back_anim:
+            jump_back_anim_id = back_anim.anim_id
+            jump_back_clips = [ctx.new_clip(back_anim)]
         else:
             jump_back_anim_id = 202021
             jump_back_clips = [
@@ -264,9 +266,9 @@ def run(
         )
 
         # Left
-        if jump_left_anim:
-            jump_left_anim_id = jump_left_anim.anim_id
-            jump_left_clips = [ctx.new_clip(jump_left_anim)]
+        if left_anim:
+            jump_left_anim_id = left_anim.anim_id
+            jump_left_clips = [ctx.new_clip(left_anim)]
         else:
             jump_left_anim_id = 202022
             jump_left_clips = [
@@ -282,9 +284,9 @@ def run(
         )
 
         # Right
-        if jump_right_anim:
-            jump_right_anim_id = jump_right_anim.anim_id
-            jump_right_clips = [ctx.new_clip(jump_right_anim)]
+        if right_anim:
+            jump_right_anim_id = right_anim.anim_id
+            jump_right_clips = [ctx.new_clip(right_anim)]
         else:
             jump_right_anim_id = 202023
             jump_right_clips = [

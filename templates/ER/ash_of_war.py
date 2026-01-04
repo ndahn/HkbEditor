@@ -41,10 +41,10 @@ def run(
 
     Registers animation clips used in ashes of war. Entries that already exist will be skipped.
     
-    Variations for specific weapon types are handled in HKS. Search for SwordArtsOneShotCategory in your c0000.hks for more details.
+    Variations for specific weapon types are handled in HKS. Note that only some attack slots are setup for weapon type variations, and usually only some of them.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/ash_of_war/
+    https://ndahn.github.io/hkbeditor/templates/er/ash_of_war/
     
     Author: Managarm
     

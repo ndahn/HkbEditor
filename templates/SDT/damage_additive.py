@@ -1,3 +1,4 @@
+from typing import Annotated
 from hkb_editor.templates import *
 from hkb_editor.hkb.hkb_enums import (
     CustomManualSelectorGenerator_AnimeEndEventType as AnimeEndEventType,
@@ -10,10 +11,10 @@ from hkb_editor.hkb.hkb_flags import hkbStateMachine_TransitionInfoArray_Flags a
 def run(
     ctx: TemplateContext,
     base_name: str,
-    origin_state: HkbRecord,  # TODO restrict to StateInfo objects
+    origin_state: Annotated[HkbRecord, "StateMachine::StateInfo"],
     animation: Animation = None,
     event: Event = None,
-    offset_type: int = 15,  # TODO figure out how to use templates in the UI here, e.g. CmsgOffsetType.WEAPON_CATEGORY_RIGHT,
+    offset_type: CmsgOffsetType = CmsgOffsetType.ANIM_ID,
 ):
     """Damage Additive
 

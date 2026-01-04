@@ -23,9 +23,9 @@ def run(
     anim_swingend_idle: Animation = None,
     anim_swingend_high_idle: Animation = None,
 ):
-    """New Jump Attack Type
+    """Jump Attack Type
 
-    Creates an entirely new jump attack type, e.g. left-handed jump attacks. The behavior can be activated by setting the JumpAttackForm and JumpAttack_HandCondition variables in the appropriate places.
+    Creates an entirely new jump attack type, e.g. left-handed jump attacks. The behavior can be activated by setting the `JumpAttackForm` and `JumpAttack_HandCondition` variables in the appropriate places in HKS.
 
     Full instructions:
     https://ndahn.github.io/hkbeditor/templates/jump_attack/
