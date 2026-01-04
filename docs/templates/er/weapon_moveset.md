@@ -236,4 +236,4 @@ Unless otherwise noted, the events for the attack slots listed below are the nam
 
 ???+ note
 
-    I have no clue how jump attacks are handled :) Additional research is required if you want to use these.
+    I have no clue how ride attacks are handled :) Additional research is required if you want to use these.
