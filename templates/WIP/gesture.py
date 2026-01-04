@@ -25,7 +25,7 @@ def run(
     Generates new gesture states for a gesture consisting of a loop start, loop, and loop end. To use the gesture, fire the event1 from hks.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/gesture/
+    https://ndahn.github.io/HkbEditor/templates/er/gesture/
 
     Parameters
     ----------

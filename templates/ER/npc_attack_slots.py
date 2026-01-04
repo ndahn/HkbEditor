@@ -20,7 +20,7 @@ def run(
     NOTE that NPC attacks should be in the range from 3000 to 3100. Attacks outside this range need special changes in the HKS to be useful.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/npc_attack_slots/
+    https://ndahn.github.io/HkbEditor/templates/er/npc_attack_slots/
 
     Author: FloppyDonuts
 

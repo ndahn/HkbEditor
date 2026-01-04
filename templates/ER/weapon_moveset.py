@@ -18,12 +18,10 @@ def run(
 
     Creates ClipGenerators that are typically used in weapon movesets, e.g. for right-handed attacks it will register 030000, 030010, etc. Entries that already exist will be skipped.
 
-    Note that special and warrior attacks will only be registered if right and/or both are checked. The same goes for jump attacks.
-
-    Also note that support for attack variations is highly inconsistent in basegame Elden Ring.
+    Note that special and warrior attacks will only be registered if right and/or both are checked. Jump attacks will only be registered if right, both, and/or dual are checked.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/weapon_moveset/
+    https://ndahn.github.io/HkbEditor/templates/er/weapon_moveset/
 
     Author: Managarm
 

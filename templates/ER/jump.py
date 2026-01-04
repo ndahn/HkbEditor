@@ -34,7 +34,7 @@ def run(
     It is highly recommended to keep jump attacks enabled. The new jump behaviors will support all jump attacks already registered for the base jump.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/jump/
+    https://ndahn.github.io/HkbEditor/templates/er/jump/
 
     Author: Raster
     

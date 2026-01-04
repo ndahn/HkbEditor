@@ -44,7 +44,7 @@ def run(
     Variations for specific weapon types are handled in HKS. Note that only some attack slots are setup for weapon type variations, and usually only some of them.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/ash_of_war/
+    https://ndahn.github.io/HkbEditor/templates/er/ash_of_war/
     
     Author: Managarm
     

@@ -18,7 +18,7 @@ def run(
     Creates a new attack slot that can be executed while on the ground.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/sdt/ground_attack/
+    https://ndahn.github.io/HkbEditor/templates/sdt/ground_attack/
 
     Author: Igor
 

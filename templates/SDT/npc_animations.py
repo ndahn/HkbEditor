@@ -23,7 +23,7 @@ def run(
     For every animation generated, two corresponding events are generated: `W_AttackYYY` and `W_EventYYY`, where YYY is the animation ID (the Y part in aXXX_YYYYYY minus leading zeros).
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/sdt/npc_animations/
+    https://ndahn.github.io/HkbEditor/templates/sdt/npc_animations/
 
     Author: Ionian
 

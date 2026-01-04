@@ -11,12 +11,7 @@ Unless otherwise noted, the events for the attack slots listed below are the nam
 
 ???+ note
     
-    Special and warrior attacks will only be registered if right and/or both are checked.
-
-???+ note
-    
-    Jump attacks will only be registered if right, both, and/or dual are checked.
-
+    Special and warrior attacks will only be registered if right and/or both are checked. Jump attacks will only be registered if right, both, and/or dual are checked.
 
 ---
 

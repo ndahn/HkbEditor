@@ -20,7 +20,7 @@ def run(
     Creates a new behavior for moving while in a stance. Imagine the difference between moving in unsheathe vs. a bear wanting to hug you.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/stance_move_type/
+    https://ndahn.github.io/HkbEditor/templates/er/stance_move_type/
 
     Author: Managarm
 

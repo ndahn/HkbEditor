@@ -21,7 +21,7 @@ def run(
     Creates a transition to add an additive damage animation on top of another one.
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/sdt/damage_additive/
+    https://ndahn.github.io/HkbEditor/templates/sdt/damage_additive/
 
     Author: Igor
 

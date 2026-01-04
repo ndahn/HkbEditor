@@ -167,11 +167,11 @@ class BaseEditor:
             dpg.add_separator()
 
             dpg.add_menu_item(
-                label="Guide",
+                label="HowTo",
                 callback=self.open_guide,
             )
             dpg.add_menu_item(
-                label="HkbEditor",
+                label="About",
                 callback=self.open_about_dialog,
             )
 

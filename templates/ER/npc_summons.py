@@ -15,7 +15,7 @@ def run(
     Makes an NPC summonable if it isn't already. Summons are activated by firing `W_BuddyGenerate` and `W_BuddyDisappear` (or `W_Event1830` and `W_Event1840` for EMEVD and co).
 
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/npc_summons/
+    https://ndahn.github.io/HkbEditor/templates/er/npc_summons/
 
     Author: FloppyDonuts
 

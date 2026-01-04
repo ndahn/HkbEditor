@@ -19,7 +19,7 @@ def run(
     Creates a new rolling/evasion animations for players. After running this script you can enable the new rolling animations by modifying the `EvasionWeightIndex` variable in HKS. 
     
     Full instructions:
-    https://ndahn.github.io/hkbeditor/templates/er/evasion/
+    https://ndahn.github.io/HkbEditor/templates/er/evasion/
 
     Author: Shiki
 
