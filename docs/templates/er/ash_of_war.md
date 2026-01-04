@@ -13,7 +13,7 @@ Creates ClipGenerators that are typically used in ashes of war, e.g. for a regul
 
 ## Regular
 
-| Slot               | Base ID | [Type Variations](#weapon-type-variations) |
+| Description        | Base ID | [Type Variations](#weapon-type-variations) |
 | ------------------ | ------- | ------------------------------------------ |
 | Start              | 040000  | all                                        |
 | Start NoFP         | 040005  | all                                        |
@@ -26,7 +26,7 @@ Creates ClipGenerators that are typically used in ashes of war, e.g. for a regul
 
 ## Stance
 
-| Slot                     | Base ID | [Type Variations](#weapon-type-variations) |
+| Description              | Base ID | [Type Variations](#weapon-type-variations) |
 | ------------------------ | ------- | ------------------------------------------ |
 | Start                    | 040050  | -                                          |
 | Loop Idle                | 040051  | -                                          |
@@ -56,7 +56,7 @@ Creates ClipGenerators that are typically used in ashes of war, e.g. for a regul
 
 ## Charge
 
-| Slot              | Base ID | [Type Variations](#weapon-type-variations) |
+| Description       | Base ID | [Type Variations](#weapon-type-variations) |
 | ----------------- | ------- | ------------------------------------------ |
 | Start             | 040000  | all                                        |
 | Cancel Early      | 040001  | 1, 2, 7, 8, 9                              |
@@ -73,7 +73,7 @@ Creates ClipGenerators that are typically used in ashes of war, e.g. for a regul
 
 ## Shield
 
-| Slot          | Base ID | [Type Variations](#weapon-type-variations) |
+| Description   | Base ID | [Type Variations](#weapon-type-variations) |
 | ------------- | ------- | ------------------------------------------ |
 | Start         | 040040  | 7, 8                                       |
 | Cancel        | 040041  | 7, 8                                       |
@@ -88,17 +88,17 @@ Creates ClipGenerators that are typically used in ashes of war, e.g. for a regul
 
 ## Rolling
 
-| Slot       | Base ID | [Type Variations](#weapon-type-variations) |
-| ---------- | ------- | ------------------------------------------ |
-| Front      | 040080  | -                                          |
-| Back       | 040081  | -                                          |
-| Left       | 040082  | -                                          |
-| Right      | 040083  | -                                          |
-| Sub        | 040084  | -                                          |
-| Front NoFP | 040085  | -                                          |
-| Back NoFP  | 040086  | -                                          |
-| Left NoFP  | 040087  | -                                          |
-| Right NoFP | 040088  | -                                          |
+| Description | Base ID | [Type Variations](#weapon-type-variations) |
+| ----------- | ------- | ------------------------------------------ |
+| Front       | 040080  | -                                          |
+| Back        | 040081  | -                                          |
+| Left        | 040082  | -                                          |
+| Right       | 040083  | -                                          |
+| Sub         | 040084  | -                                          |
+| Front NoFP  | 040085  | -                                          |
+| Back NoFP   | 040086  | -                                          |
+| Left NoFP   | 040087  | -                                          |
+| Right NoFP  | 040088  | -                                          |
 
 ---
 
