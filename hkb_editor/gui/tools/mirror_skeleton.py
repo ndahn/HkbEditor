@@ -14,11 +14,11 @@ from hkb_editor.gui.helpers import add_paragraphs
 from hkb_editor.gui import style
 
 
-def bone_mirror_dialog(
+def skeleton_mirror_dialog(
     skeleton_path: str = None,
     character_path: str = None,
     *,
-    title: str = "Generate Bone Mirror Map",
+    title: str = "Mirror Skeleton",
     tag: str = None,
 ) -> HkbArray:
     if tag in (None, 0, ""):
@@ -275,7 +275,8 @@ To generate the correct left/right pairings, load a Skeleton and hit 'Auto Mirro
 or adjust manually as needed. You can also load pairings from a Character file
 (e.g. Character/c0000.xml from an unpacked behavior).
 
-Note that the object ID and type IDs may differ between characters and games.\
+Full instructions:
+https://ndahn.github.io/HkbEditor/howto/tools/mirror_skeleton/\
 """
         add_paragraphs(instructions, 90, color=style.light_blue)
 
@@ -307,7 +308,7 @@ if __name__ == "__main__":
     dpg.create_context()
     dpg.create_viewport(title="Mirror Skeleton", width=600, height=600)
 
-    dialog = bone_mirror_dialog()
+    dialog = skeleton_mirror_dialog()
     dpg.set_primary_window(dialog, True)
 
     dpg.setup_dearpygui()

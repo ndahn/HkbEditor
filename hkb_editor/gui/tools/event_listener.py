@@ -7,6 +7,9 @@ import re
 from dearpygui import dearpygui as dpg
 from collections import deque
 
+from hkb_editor.gui.helpers import add_paragraphs
+from hkb_editor.gui import style
+
 
 def eventlistener_dialog(*, tag: str = 0) -> str:
     if tag in (0, "", None):
@@ -207,7 +210,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
         )
 
     with dpg.window(
-        min_size=(600, 400),
+        min_size=(640, 480),
         label="Event Listener",
         no_saved_settings=True,
         on_close=close,
@@ -223,7 +226,7 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
 
         with dpg.plot(
             width=-1,
-            height=-25,
+            height=-57,
             no_mouse_pos=True,
             no_menus=True,
             no_box_select=True,
@@ -273,6 +276,11 @@ def eventlistener_dialog(*, tag: str = 0) -> str:
                 callback=update_port,
                 width=100,
             )
+
+        instructions = """\
+https://ndahn.github.io/HkbEditor/howto/tools/event_listener/
+"""
+        add_paragraphs(instructions, 90, color=style.light_blue)
 
     # Start listener
     listener_thread = threading.Thread(target=socket_listener, daemon=True)

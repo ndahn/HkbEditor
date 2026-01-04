@@ -1,3 +1,3 @@
-from .bone_mirror import bone_mirror_dialog
+from .mirror_skeleton import skeleton_mirror_dialog
 from .event_listener import eventlistener_dialog
 from .state_graph_viewer import open_state_graph_viewer

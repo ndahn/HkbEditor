@@ -60,7 +60,7 @@ from .dialogs import (
     search_objects_dialog,
 )
 from .tools import (
-    bone_mirror_dialog,
+    skeleton_mirror_dialog,
     eventlistener_dialog,
     open_state_graph_viewer,
 )
@@ -532,8 +532,8 @@ class BehaviorEditor(BaseEditor):
             #)
 
             dpg.add_menu_item(
-                label="Generate Bone Mirror Map...",
-                callback=self.open_bone_mirror_map_dialog,
+                label="Mirror Skeleton...",
+                callback=self.open_mirror_skeleton_dialog,
             )
 
         # Templates
@@ -1756,14 +1756,14 @@ class BehaviorEditor(BaseEditor):
 
         import_hierarchy(self.beh, xml, on_import)
 
-    def open_bone_mirror_map_dialog(self):
+    def open_mirror_skeleton_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"
         if dpg.does_item_exist(tag):
             dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
-        bone_mirror_dialog(self.loaded_skeleton_path, tag=tag)
+        skeleton_mirror_dialog(self.loaded_skeleton_path, tag=tag)
 
     def verify_behavior(self):
         if self._busy:

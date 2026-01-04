@@ -1,32 +1,9 @@
 # Behaving how you want to
-This section will outline how to actually use HkbEditor to edit your behavior. At this point I assume that you somewhat know what you want to achieve and have understood the basics above.
+This section will outline how to actually use HkbEditor to edit your behavior. At this point I assume that you somewhat know what you want to achieve and have understood the [Behaviors](../anatomy.md) section.
 
 When editing behaviors you should typically rely on making small incremental changes. The most common use cases - registering clips and creating CMSGs - can be found in the *Workflows* menu. To create new hierarchies you would typically start by creating a new target for a pointer (e.g. a new StateInfo for a state machine, or a new entry for a CMSG's generators). 
 
 If you have something more complex in mind, definitely have a look at the [Templates](../templates/overview.md).
-
----
-
-## Saving changes
-Once you're happy with your changes you'll want to save your behavior. Note however that this will save everything as xml. For your changes to take effect you have to repack the `behbnd.dcx` binder.
-
-For Elden Ring and newer, HKLib supports converting back to .hkx, and you should do this to save both on loading times and file size. Unfortunately though, this is right now not supported for older titles like Sekiro or Dark Souls 3. Luckily for us we can use the .xml without conversion (apparently it's inherently supported by Havok). For this to work, edit the `_witchy-bnd4.xml` file WitchyBND created inside the unpacked folder and change the file extension of the *Behaviors/<your-file>.hkx* file to .xml.
-
-Next, you'll have to repack the `behbnd.dcx` binder. Simply right click the folder and use WitchyBND to pack it. 
-
-For titles with HKLib support you can also do this from within HkbEditor. Simply hit *F4* or select *File -> Repack binder* and it will save, convert and repack the behavior.
-
-### Hot reloading
-As most parts of modding, editing behaviors is often an iterative process. To save you some time you can directly reload the character for some of the games (right now only Elden Ring). To do this press *F5* or select *File -> Force game reload*. You know it worked if your character briefly disappears.
-
-### Name ID files
-If you have created new events, variables, or animations, they must also be added in 3 additional files which can be found under `action/{event|variable|animation}nameid.txt`. As these contain entries from ALL NPCs, cutscenes, weapons and so on it is not possible to generate them automatically yet. However, HkbEditor can update them with your additional items by selecting *File -> Update name ID files*. If your mod doesn't include them yet, simply copy them from the extracted game files to your mod folder. 
-
-![](../assets/guide/nameidfiles-1.png)
-
-???+ danger
-
-    Calling events that are not in the `eventnameid.txt` file will usually crash your game!
 
 ---
 
@@ -91,13 +68,23 @@ Cloned hierarchies are also the current approach to merging behaviors. After cop
 
 ---
 
-## Mirrored animations
-HkbEditor also covers some more obscure corner cases. One of them is mirroring skeletons. This is useful when you have an animation and want to flip it left <-> right without editing it. As Fromsoft never uses this, most characters are not properly setup for this. 
+## Saving changes
+Once you're happy with your changes you'll want to save your behavior. Note however that this will save everything as xml. For your changes to take effect you have to repack the `behbnd.dcx` binder.
 
-???+ example
+For Elden Ring and newer, HKLib supports converting back to .hkx, and you should do this to save both on loading times and file size. Unfortunately though, this is right now not supported for older titles like Sekiro or Dark Souls 3. Luckily for us we can use the .xml without conversion (apparently it's inherently supported by Havok). For this to work, edit the `_witchy-bnd4.xml` file WitchyBND created inside the unpacked folder and change the file extension of the *Behaviors/<your-file>.hkx* file to .xml.
 
-    This process requires a `Skeleton.xml` file. To generate it, either use Havok's `FileConvert.exe --xml {Skeleton.hkx} {Skeleton.xml}`, or use *Havok Content Tools*. For the latter, prune all animation data except for the skeleton, then write to platform as XML. If all of this sounds like arcane sorcery, ask around on [*?ServerName?*](https://discord.gg/J5msG6Es) and someone can probably send you the .xml.
+Next, you'll have to repack the `behbnd.dcx` binder. Simply right click the folder and use WitchyBND to pack it. 
 
-In order to fix a character's mirror definitions, select *Workflows -> Generate Bone Mirror Map*. In the new dialog, first load the `Skeleton.xml` file for your character. Then select *Auto Mirror* at the bottom. This will generate a mirrored bone mapping based on the `_L`/`_R` suffixes of the bones. Save the resulting xml to the `Character` folder of your extracted `behbnd.dcx` and convert it back using HKLib. 
+For titles with HKLib support you can also do this from within HkbEditor. Simply hit *F4* or select *File -> Repack binder* and it will save, convert and repack the behavior.
 
-In order to mirror an animation, find the corresponding *hkbClipGenerator* and set the *MIRROR* flag.
+### Hot reloading
+As most parts of modding, editing behaviors is often an iterative process. To save you some time you can directly reload the character for some of the games (right now only Elden Ring). To do this press *F5* or select *File -> Force game reload*. You know it worked if your character briefly disappears.
+
+### Name ID files
+If you have created new events, variables, or animations, they must also be added in 3 additional files which can be found under `action/{event|variable|animation}nameid.txt`. As these contain entries from ALL NPCs, cutscenes, weapons and so on it is not possible to generate them automatically yet. However, HkbEditor can update them with your additional items by selecting *File -> Update name ID files*. If your mod doesn't include them yet, simply copy them from the extracted game files to your mod folder. 
+
+![](../assets/guide/nameidfiles-1.png)
+
+???+ danger
+
+    Calling events that are not in the `eventnameid.txt` file will usually crash your game!

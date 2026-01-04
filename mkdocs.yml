@@ -32,12 +32,13 @@ theme:
 
 nav:
   - Home: index.md
-  - First Steps: first_steps.md
   - Behaviors: anatomy.md
   - HowTo:
-    - Basics: howto/howto.md
+    - First Steps: howto/first_steps.md
+    - Basic Use: howto/basics.md
     - Tools:
-      - Event Listener: howto/eventlistener.md
+      - Event Listener: howto/tools/event_listener.md
+      - Mirror Skeleton: howto/tools/mirror_skeleton.md
   - Templates:
     - Overview: templates/overview.md
     - Contributing: templates/contributing.md

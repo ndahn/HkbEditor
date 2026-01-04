@@ -21,6 +21,6 @@ Any fired events that match the filters from the config file will be printed to 
 
 Once you start the game you may also be able to spot a short message saying that events will now be published at the configured address (`127.0.0.1:27072` by default). HkbEditor has a tool to visualize these events over time called which you can find under *Tools -> Event Listener*.
 
-![](../assets/guide/eventlistener.png)
+![](../../assets/guide/eventlistener.png)
 
 By default the listener will listen to UDP port 27072. The visualization is somewhat basic right now, but can help with some more complex behaviors. More features will be added in future versions (and maybe on request).
