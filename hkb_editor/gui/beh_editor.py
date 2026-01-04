@@ -1092,6 +1092,12 @@ class BehaviorEditor(BaseEditor):
             dpg.add_separator()
 
             # Copy & attach menus
+            dpg.add_selectable(
+                label="Insert Selector",
+                callback=lambda s, a, u: self._insert_selector(u),
+                user_data=node,
+            )
+
             make_copy_menu(obj)
             self._create_attach_menu(node)
 
@@ -1119,6 +1125,49 @@ class BehaviorEditor(BaseEditor):
                 callback=lambda s, a, u: self.add_pinned_object(u),
                 user_data=obj,
             )
+
+    def _insert_selector(self, node: Node) -> None:
+        parent = next(self.canvas.graph.predecessors(node.id), None)
+        if not parent:
+            self.logger.warning("Node has no parent in current graph")
+            return
+
+        parent_record = self.beh.objects[parent]
+        parent_ptr: HkbPointer
+        for _, parent_ptr in parent_record.find_fields_by_type(HkbPointer):
+            if parent_ptr.get_value() == node.id:
+                target = parent_ptr.get_target()
+                break
+        else:
+            self.logger.warning("Could not locate child node in parent")
+            return
+
+        msg_type = self.beh.type_registry.find_first_type_by_name("hkbManualSelectorGenerator")
+        if msg_type not in self.beh.type_registry.get_compatible_types(parent_ptr.subtype_id):
+            self.logger.warning("Parent pointer is incompatible with hkbManualSelectorGenerator")
+            return
+
+        def on_object_created(sender: str, selector: HkbRecord, user_data: Any):
+            with self.beh.transaction():
+                selector["generators"].append(target)
+                parent_ptr.set_value(selector)
+
+            # This is a bit ugly, but so is adding more stuff to new_object
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                self.add_pinned_object(selector.object_id)
+
+            self.regenerate()
+
+        create_object_dialog(
+            self.beh,
+            self.alias_manager,
+            on_object_created,
+            allowed_types=[msg_type],
+            include_derived_types=True,
+            selected_type_id=msg_type,
+            title="Insert Selector",
+        )
 
     def _delete_node(self, node: Node) -> None:
         record = self.beh.objects.get(node.id)

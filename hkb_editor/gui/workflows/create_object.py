@@ -30,6 +30,9 @@ def create_object_dialog(
     record: HkbRecord = None
 
     if allowed_types:
+        if isinstance(allowed_types, str):
+            allowed_types = [allowed_types]
+            
         record_types = []
 
         for tp in allowed_types:
