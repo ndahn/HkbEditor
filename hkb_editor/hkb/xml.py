@@ -308,14 +308,15 @@ class HkbXmlElement(ET.ElementBase):
             old_text = self.text
 
             def undo():
-                super(HkbXmlElement, self).text = old_text
+                super(HkbXmlElement, __class__).text.__set__(self, old_text)
 
             def redo():
-                super(HkbXmlElement, self).text = value
+                super(HkbXmlElement, __class__).text.__set__(self, value)
 
             undo_stack.record(MutationType.TEXT, undo, redo)
 
-        type(self).text.fset(self, value)
+        # lxml is implemented in C and uses a "getset_descriptor" which works slightly different
+        super(HkbXmlElement, __class__).text.__set__(self, value)
 
     @property
     def tail(self) -> str:
@@ -328,14 +329,14 @@ class HkbXmlElement(ET.ElementBase):
             old_tail = self.tail
 
             def undo():
-                super(HkbXmlElement, self).tail = old_tail
+                super(HkbXmlElement, __class__).text.__set__(self, old_tail)
 
             def redo():
-                super(HkbXmlElement, self).tail = value
+                super(HkbXmlElement, __class__).text.__set__(self, value)
 
             undo_stack.record(MutationType.TEXT, undo, redo)
 
-        type(self).tail.fset(self, value)
+        super(HkbXmlElement, __class__).text.__set__(self, value)
 
     def set(self, key: str, value: str):
         undo_stack = self.undo_stack
@@ -534,7 +535,11 @@ def make_subelement(parent: ET.Element, tag: str, **kwargs) -> HkbXmlElement:
 
 def xml_from_str(xml: str, undo: bool = False) -> HkbXmlElement:
     tree = ET.fromstring(xml, parser=_get_xml_parser())
-    root = tree.getroot()
+    if hasattr(tree, "getroot"):
+        root = tree.getroot()
+    else:
+        root = tree.getroottree().getroot()
+
     if undo:
         HkbXmlElement._undo_stacks[root] = UndoStack()
     return root
