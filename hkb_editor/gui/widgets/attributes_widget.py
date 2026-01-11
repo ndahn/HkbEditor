@@ -62,6 +62,9 @@ from hkb_editor.gui.helpers import (
 from hkb_editor.gui import style
 
 
+_undefined = object()
+
+
 class AttributesWidget:
     def __init__(
         self,
@@ -96,7 +99,9 @@ class AttributesWidget:
         self.logger = logging.getLogger()
         self.attributes_table = None
 
-        self.widget_to_attribute: dict[str, tuple[str, tuple[XmlValueHandler, str, bool]]] = {}
+        self.widget_to_attribute: dict[
+            str, tuple[str, tuple[XmlValueHandler, str, bool]]
+        ] = {}
         self.selected_attribute = None
 
         # Hover explanations for attributes
@@ -207,8 +212,7 @@ class AttributesWidget:
 
         with dpg.item_handler_registry(tag=self.tag + "_item_handler_registry"):
             dpg.add_item_clicked_handler(
-                button=dpg.mvMouseButton_Right,
-                callback=on_click
+                button=dpg.mvMouseButton_Right, callback=on_click
             )
 
         self._create_attribute_menu()
@@ -237,6 +241,37 @@ class AttributesWidget:
         for path in revealed:
             self.reveal_attribute(path)
 
+    def _get_attribute_label(self, attribute: XmlValueHandler, path: str) -> tuple[str, tuple[int, int, int]]:
+        label = self.alias_manager.get_attribute_alias(self.record, path)
+        if label is None:
+            label = path.rsplit("/", maxsplit=1)[-1]
+            label_color = style.white
+        else:
+            label_color = style.green
+
+        if (
+            self.record.type_name == "hkbStateMachine::TransitionInfoArray"
+            and path.startswith("transitions:")
+            and "/" not in path
+        ):
+            state_id = self.record.get_field(path + "/toStateId", resolve=True)
+            
+            # Get the StateInfo name associated with this transition
+            # sm_typeid = self.tagfile.type_registry.find_first_type_by_name("hkbStateMachine")
+            # parent_sm = next(self.tagfile.find_hierarchy_parents_for(self.record, sm_typeid))
+            # states: HkbArray[HkbPointer] = parent_sm["states"].get_value()
+            # for ptr in states:
+            #     state = ptr.get_target()
+            #     if state and state["stateId"].get_value() == state_id:
+            #         state_name = state["name"].get_value()
+            #         label = f"{label} ({state_name})"
+            #         # Unfortunately, color can't be set for dpg tree_nodes
+            #         #label_color = style.light_blue
+
+            label = f"{label} (-> {state_id})"
+
+        return (label, label_color)
+
     def _create_attribute_widget(
         self,
         attribute: XmlValueHandler,
@@ -248,12 +283,7 @@ class AttributesWidget:
         widget = tag
         is_simple = isinstance(attribute, (HkbString, HkbFloat, HkbInteger, HkbBool))
 
-        label = self.alias_manager.get_attribute_alias(self.record, path)
-        if label is None:
-            label = path.split("/", maxsplit=1)[-1]
-            label_color = style.white
-        else:
-            label_color = style.green
+        label, label_color = self._get_attribute_label(attribute, path)
 
         def create_label():
             dpg.add_text(label, color=label_color)
@@ -694,7 +724,7 @@ class AttributesWidget:
                     def on_enum_change(sender: str, new_value: str, val: HkbInteger):
                         int_value = enum[new_value].value
                         ui_repr = enum[new_value].name
-                        self._update_attribute(sender, (int_value, ui_repr), val)
+                        self._update_attribute(sender, int_value, val, ui_repr)
 
                     dpg.add_combo(
                         [e.name for e in enum],
@@ -824,14 +854,21 @@ class AttributesWidget:
             tag=self.tag + "_attribute_menu",
         ):
             dpg.add_text(
-                "", color=style.light_grey, tag=self.tag + "_attribute_menu_label",
+                "",
+                color=style.light_grey,
+                tag=self.tag + "_attribute_menu_label",
             )
             dpg.add_text(
-                "", color=style.light_grey, tag=self.tag + "_attribute_menu_type",
+                "",
+                color=style.light_grey,
+                tag=self.tag + "_attribute_menu_type",
             )
-            dpg.add_text("", tag=self.tag + "_attribute_menu_extra",)
+            dpg.add_text(
+                "",
+                tag=self.tag + "_attribute_menu_extra",
+            )
 
-            dpg.add_separator()
+            dpg.add_separator(tag=self.tag + "_attribute_menu_separator_copypaste")
 
             # Copy & paste
             dpg.add_selectable(
@@ -861,45 +898,14 @@ class AttributesWidget:
                 tag=self.tag + "_attribute_menu_paste",
             )
 
-            dpg.add_selectable(
-                label="Delete",
-                callback=self._delete_array_item,
-                tag=self.tag + "_attribute_menu_delete",
-            )
-
-            # HkbPointers
-            dpg.add_separator()
+            # Attribute actions
+            dpg.add_separator(tag=self.tag + "_attribute_menu_separator_attribute")
 
             dpg.add_selectable(
-                label="New Object",
-                callback=self._create_object_for_pointer,
-                tag=self.tag + "_attribute_menu_new_object",
-            )
-
-            dpg.add_menu(
-                label="Pinned Object",
-                tag=self.tag + "_attribute_menu_pinned_objects",
-            )
-
-            dpg.add_selectable(
-                label="Clone Hierarchy",
-                callback=self._paste_hierarchy,
-                tag=self.tag + "_attribute_menu_clone_hierarchy",
-            )
-
-            dpg.add_selectable(
-                label="Jump to", 
-                callback=self._jump,
-                tag=self.tag + "_attribute_menu_jump",
-            )
-            dpg.add_selectable(
-                label="Find same", 
+                label="Find same",
                 callback=self._search_attribute,
                 tag=self.tag + "_attribute_menu_search",
             )
-
-            # Bindable attributes
-            dpg.add_separator()
 
             dpg.add_selectable(
                 label="Bind Variable",
@@ -912,6 +918,54 @@ class AttributesWidget:
                 callback=self._unbind_variable,
                 tag=self.tag + "_attribute_menu_clear_binding",
             )
+
+            # Array manipulation
+            dpg.add_separator(tag=self.tag + "_attribute_menu_separator_hkbarray")
+
+            dpg.add_selectable(
+                label="Move Up",
+                callback=self._move_array_item_up,
+                tag=self.tag + "_attribute_menu_array_move_up",
+            )
+
+            dpg.add_selectable(
+                label="Move Down",
+                callback=self._move_array_item_down,
+                tag=self.tag + "_attribute_menu_array_move_down",
+            )
+
+            dpg.add_selectable(
+                label="Delete",
+                callback=self._delete_array_item,
+                tag=self.tag + "_attribute_menu_array_delete",
+            )
+
+            # HkbPointers
+            dpg.add_separator(tag=self.tag + "_attribute_menu_separator_hkbpointer")
+
+            dpg.add_selectable(
+                label="New Object",
+                callback=self._create_object_for_pointer,
+                tag=self.tag + "_attribute_menu_new_object",
+            )
+
+            dpg.add_menu(
+                label="From Pinned Object",
+                tag=self.tag + "_attribute_menu_pinned_objects",
+            )
+
+            dpg.add_selectable(
+                label="Clone Hierarchy",
+                callback=self._paste_hierarchy,
+                tag=self.tag + "_attribute_menu_clone_hierarchy",
+            )
+
+            dpg.add_selectable(
+                label="Jump to",
+                callback=self._jump,
+                tag=self.tag + "_attribute_menu_jump",
+            )
+
 
     def _open_attribute_menu(
         self,
@@ -988,18 +1042,26 @@ class AttributesWidget:
             dpg.hide_item(self.tag + "_attribute_menu_clear_binding")
 
         if ":" in label:
-            dpg.show_item(self.tag + "_attribute_menu_delete")
+            dpg.show_item(self.tag + "_attribute_menu_array_move_up")
+            dpg.show_item(self.tag + "_attribute_menu_array_move_down")
+            dpg.show_item(self.tag + "_attribute_menu_array_delete")
+        else:
+            dpg.hide_item(self.tag + "_attribute_menu_array_move_up")
+            dpg.hide_item(self.tag + "_attribute_menu_array_move_down")
+            dpg.hide_item(self.tag + "_attribute_menu_array_delete")
 
         if isinstance(attribute, HkbPointer):
             dpg.show_item(self.tag + "_attribute_menu_new_object")
             dpg.show_item(self.tag + "_attribute_menu_clone_hierarchy")
 
             if self.get_pinned_objects_callback:
-                dpg.delete_item(self.tag + "_attribute_menu_pinned_objects", children_only=True)
+                dpg.delete_item(
+                    self.tag + "_attribute_menu_pinned_objects", children_only=True
+                )
 
                 def set_target(sender: str, app_data: bool, oid: str):
                     self._set_pointer_target(sender, oid, None)
-                
+
                 pinned = self.get_pinned_objects_callback()
                 for item in pinned:
                     dpg.add_menu_item(
@@ -1025,18 +1087,19 @@ class AttributesWidget:
         if tuple(dpg.get_item_pos(self.tag + "_attribute_menu")) == (0, 0):
             mouse_pos = dpg.get_mouse_pos()
             dpg.set_item_pos(self.tag + "_attribute_menu", mouse_pos)
-        
+
         self.selected_attribute = (widget, path, attribute)
         dpg.show_item(self.tag + "_attribute_menu")
 
     # Internal callbacks
     def _update_attribute(
-        self, sender: str, new_value: Any | tuple[Any, Any], handler: XmlValueHandler
+        self, sender: str, new_value: Any, handler: XmlValueHandler, ui_repr: Any = _undefined
     ) -> None:
-        if isinstance(new_value, tuple):
-            new_value, ui_repr = new_value
-        else:
-            ui_repr = new_value
+        if ui_repr is _undefined:
+            if isinstance(new_value, XmlValueHandler):
+                ui_repr = new_value.get_value()
+            else:
+                ui_repr = new_value
 
         old_value = handler.get_value()
         handler.set_value(new_value)
@@ -1047,8 +1110,9 @@ class AttributesWidget:
         if sender and dpg.does_item_exist(sender):
             try:
                 dpg.set_value(sender, ui_repr)
-            except Exception:
-                self.logger.error(f"dpg: set_value failed ({sender}, {ui_repr})")
+            except Exception as e:
+                self.logger.error(f"dpg: set_value failed: {e}")
+                raise e
 
     def _cut_value(self, sender: str, app_data: Any, user_data: Any) -> None:
         # deselect the selectable
@@ -1120,30 +1184,64 @@ class AttributesWidget:
             except Exception as e:
                 self.logger.error(f"Paste value to {path} failed: {e}")
 
+    def _move_array_item(self, sender: str, offset: int) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+            
+        if offset == 0:
+            return
+
+        widget, path, attribute = self.selected_attribute
+        array_path, old_idx = path.rsplit(":", maxsplit=1)
+        old_idx = int(old_idx)
+        new_idx = old_idx + offset
+        array: HkbArray = self.record.get_field(array_path)
+
+        new_idx = max(0, min(len(array) - 1, new_idx))
+        if new_idx == old_idx:
+            return
+
+        value = array.get_value()
+        value.insert(new_idx, value.pop(old_idx))
+        self.logger.info(f"Moved {self.record.object_id}/{path} from {old_idx} to {new_idx}")
+        self._update_attribute(widget, value, array, dpg.get_value(widget))
+        self.regenerate()
+
+        if self.on_graph_changed and isinstance(attribute, HkbPointer):
+            self.on_graph_changed()
+
+    def _move_array_item_up(self, sender) -> None:
+        self._move_array_item(sender, -1)
+
+    def _move_array_item_down(self, sender) -> None:
+        self._move_array_item(sender, +1)
+        
     def _delete_array_item(self, sender) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        _, path, attribute = self.selected_attribute
+        widget, path, attribute = self.selected_attribute
         array_path, index = path.rsplit(":", maxsplit=1)
         index = int(index)
         array: HkbArray = self.record.get_field(array_path)
 
-        with self.tagfile.transaction():
-            array.pop(index)
-            self.logger.info(f"Removed {self.record.object_id}/{path}")
-            self._update_attribute(sender, None, attribute)
+        value = array.get_value()
+        old_value = value.pop(index)
+        self.logger.info(f"Removed {self.record.object_id}/{path}")
+        self._update_attribute(widget, value, array, dpg.get_value(widget))
 
         if index == 0 or index == len(array) - 1:
             dpg.delete_item(f"{self.tag}_attribute_{path}")
         else:
             self.regenerate()
 
-        if self.on_graph_changed and isinstance(attribute, HkbPointer):
+        if self.on_graph_changed and isinstance(old_value, HkbPointer):
             self.on_graph_changed()
 
     # Menu callbacks
-    def _set_pointer_target(self, sender: str, new_object: HkbRecord | str, user_data: Any):
+    def _set_pointer_target(
+        self, sender: str, new_object: HkbRecord | str, user_data: Any
+    ):
         if isinstance(new_object, HkbRecord):
             new_object = new_object.object_id
 
@@ -1152,7 +1250,6 @@ class AttributesWidget:
 
         if self.on_graph_changed:
             self.on_graph_changed()
-
 
     def _create_object_for_pointer(self, sender: str) -> None:
         # deselect the selectable

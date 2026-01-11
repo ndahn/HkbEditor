@@ -899,28 +899,29 @@ class BehaviorEditor(BaseEditor):
             (node, style.blue),
         ]
 
+        # Check if there is an event associated with this StateInfo
         name = obj.get_field("name", None, resolve=True)
+        
+        if obj.type_name == "hkbStateMachine::StateInfo":
+            name = f"{name} ({obj['stateId'].get_value()})"
+
+            sm = self.beh.objects[self.canvas.root]
+            transitions: HkbArray[HkbRecord] = sm.get_field(
+                "wildcardTransitions/transitions", None
+            )
+            # Not all statemachines have wildcard transitions (just root maybe?)
+            if transitions:
+                state_id = obj["stateId"].get_value()
+                for trans in transitions:
+                    if trans["toStateId"].get_value() == state_id:
+                        event_id = trans["eventId"].get_value()
+                        if event_id >= 0:
+                            event = self.beh.get_event(event_id)
+                            lines.insert(0, (f"<{event}>", style.green))
+
+                        break
+
         if name:
-            # Check if there is an event associated with this StateInfo
-            if obj.type_name == "hkbStateMachine::StateInfo":
-                name = f"{name} ({obj['stateId'].get_value()})"
-
-                sm = self.beh.objects[self.canvas.root]
-                transitions: HkbArray[HkbRecord] = sm.get_field(
-                    "wildcardTransitions/transitions", None
-                )
-                # Not all statemachines have wildcard transitions (just root maybe?)
-                if transitions:
-                    state_id = obj["stateId"].get_value()
-                    for trans in transitions:
-                        if trans["toStateId"].get_value() == state_id:
-                            event_id = trans["eventId"].get_value()
-                            if event_id >= 0:
-                                event = self.beh.get_event(event_id)
-                                lines.insert(0, (f"<{event}>", style.green))
-
-                            break
-
             lines.insert(0, (name, style.yellow))
 
         return lines
