@@ -1312,13 +1312,20 @@ class BehaviorEditor(BaseEditor):
 
         if not sm:
             # No active statemachine yet
+            self.canvas.clear()
+            self.attributes_widget.clear()
             return
-
+        
         root_id = sm.object_id
+        self.canvas.set_graph(self.get_graph(root_id))
+
         selected = self.selected_node
-        self._on_root_selected("", True, root_id)
         if selected and selected.id in self.canvas.graph:
+            # Will lead to on_node_selected, which regenerates the attributes widget
+            # TODO this is a mess, merge base_editor with this class
             self.canvas.select(selected)
+        else:
+            self.attributes_widget.clear()
 
     def clear_attributes(self):
         self.attributes_widget.clear()

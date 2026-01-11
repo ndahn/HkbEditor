@@ -156,8 +156,9 @@ class HkbFloat(XmlValueHandler):
         if self.tagfile.floats_use_commas:
             str_value = str_value.replace(".", ",")
 
-        self.element.set("dec", str_value)
-        self.element.set("hex", self.float_to_ieee754(value))
+        with self.element.undo_stack.transaction():
+            self.element.set("dec", str_value)
+            self.element.set("hex", self.float_to_ieee754(value))
 
     def __float__(self) -> float:
         return self.get_value()
@@ -385,8 +386,10 @@ class HkbArray(XmlValueHandler, Generic[T]):
             index = len(self) + index
 
         child = self.element[index]
-        self.element.remove(child)
-        self._count -= 1
+
+        with self.element.undo_stack.transaction():
+            self.element.remove(child)
+            self._count -= 1
 
     def _verify_compatible(self, value: T) -> None:
         if value.type_id == self.element_type_id:
@@ -436,14 +439,15 @@ class HkbArray(XmlValueHandler, Generic[T]):
         for v in values:
             self._verify_compatible(v)
 
-        # Can't use clear as it would remove the attributes as well
-        for child in list(self.element):
-            self.element.remove(child)
+        with self.element.undo_stack.transaction():
+            # Can't use clear as it would remove the attributes as well
+            for child in list(self.element):
+                self.element.remove(child)
 
-        for v in values:
-            self.element.append(v.element)
+            for v in values:
+                self.element.append(v.element)
 
-        self._count = len(values)
+            self._count = len(values)
 
     def index(self, value: T | Any) -> int:
         if isinstance(value, XmlValueHandler):
@@ -477,8 +481,10 @@ class HkbArray(XmlValueHandler, Generic[T]):
             self._verify_compatible(value)
 
         value = self._wrap_value(value)
-        self.element.append(value.element)
-        self._count += 1
+
+        with self.element.undo_stack.transaction():
+            self.element.append(value.element)
+            self._count += 1
 
         return value
 
@@ -490,8 +496,10 @@ class HkbArray(XmlValueHandler, Generic[T]):
             self._verify_compatible(value)
 
         value = self._wrap_value(value)
-        self.element.insert(index, value.element)
-        self._count += 1
+
+        with self.element.undo_stack.transaction():
+            self.element.insert(index, value.element)
+            self._count += 1
 
     def pop(self, index: int) -> T:
         ret = self[index]
@@ -520,29 +528,30 @@ class HkbRecord(XmlValueHandler):
         record = HkbRecord(tagfile, record_elem, type_id, object_id)
 
         # Make sure the xml subtree contains all required fields
-        for fname, ftype in tagfile.type_registry.get_field_types(type_id).items():
-            field_elem = HkbXmlElement.new("field", name=fname)
-            record_elem.append(field_elem)
+        with record_elem.undo_stack.transaction():
+            for fname, ftype in tagfile.type_registry.get_field_types(type_id).items():
+                field_elem = HkbXmlElement.new("field", name=fname)
+                record_elem.append(field_elem)
 
-            # Handler.new will create all expected fields for the subelement
-            Handler = get_value_handler(tagfile.type_registry, ftype)
-            field_val = Handler.new(tagfile, ftype)
-            field_elem.append(field_val.element)
+                # Handler.new will create all expected fields for the subelement
+                Handler = get_value_handler(tagfile.type_registry, ftype)
+                field_val = Handler.new(tagfile, ftype)
+                field_elem.append(field_val.element)
 
-            # NOTE: userData is probably a void pointer and not useful to set
-            # unless you are making a copy of another record
+                # NOTE: userData is probably a void pointer and not useful to set
+                # unless you are making a copy of another record
 
-        if attributes:
-            optional = separate_game_specific_attributes(record.type_name, attributes)
-            
-            for path, val in attributes.items():
-                record.set_field(path, val)
-
-            for path, val in optional.items():
-                try:
+            if attributes:
+                optional = separate_game_specific_attributes(record.type_name, attributes)
+                
+                for path, val in attributes.items():
                     record.set_field(path, val)
-                except KeyError:
-                    pass
+
+                for path, val in optional.items():
+                    try:
+                        record.set_field(path, val)
+                    except KeyError:
+                        pass
 
         return record
 
@@ -596,9 +605,10 @@ class HkbRecord(XmlValueHandler):
             raise ValueError(f"Expected HkbRecord or Mapping, but got {values}")
 
         # values may have extra or missing values, so we go from our known fields
-        for field in self._fields.keys():
-            if field in values:
-                self[field] = values[field]
+        with self.element.undo_stack.transaction():
+            for field in self._fields.keys():
+                if field in values:
+                    self[field] = values[field]
 
     @property
     def fields(self) -> Iterator[str]:

@@ -65,9 +65,10 @@ class BaseEditor:
         self.selected_node = node
 
         # Update the attributes panel
-        self.clear_attributes()
         if node:
             self._update_attributes(node)
+        else:
+            self.clear_attributes()
 
     def create_app_menu(self):
         self._create_file_menu()

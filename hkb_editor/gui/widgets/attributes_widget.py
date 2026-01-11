@@ -42,7 +42,8 @@ from .table_tree import (
     add_lazy_table_tree_node,
     get_row_node_item,
     set_foldable_row_status,
-    is_row_visible,
+    is_foldable_row_expanded,
+    
 )
 from .rotation_knob import RotationKnob
 from hkb_editor.gui.workflows.bind_attribute import (
@@ -115,12 +116,15 @@ class AttributesWidget:
         self._setup_content()
 
     def set_record(self, record: HkbRecord) -> None:
-        self.clear()
-        self.tagfile = record.tagfile
-        self.record = record
+        if record == self.record:
+            self.regenerate()
+        else:
+            self.clear()
+            self.tagfile = record.tagfile
+            self.record = record
 
-        if record:
-            self._update_attributes()
+            if record:
+                self._rebuild_attributes()
 
     def set_title(self, title: str) -> None:
         if not title or self.hide_title:
@@ -217,7 +221,7 @@ class AttributesWidget:
 
         self._create_attribute_menu()
 
-    def _update_attributes(self) -> None:
+    def _rebuild_attributes(self) -> None:
         self.set_title(f"{self.record.object_id} ({self.record.type_name})")
 
         # Columns will be hidden if header_row=False and no rows exist initially
@@ -232,11 +236,20 @@ class AttributesWidget:
                 self._create_attribute_widget(val, key)
 
     def regenerate(self):
-        # TODO we need to collect the paths that are currently revealed somehow
         revealed = []
 
+        for path, _ in self.record.find_fields_by_type(HkbRecord):
+            path_tag = f"{self.tag}_attribute_{path}"
+            if dpg.does_item_exist(path_tag) and is_foldable_row_expanded(path_tag):
+                revealed.append(path)
+
+        for path, _ in self.record.find_fields_by_type(HkbArray):
+            path_tag = f"{self.tag}_attribute_{path}"
+            if dpg.does_item_exist(path_tag) and is_foldable_row_expanded(path_tag):
+                revealed.append(path)
+
         self.clear()
-        self._update_attributes()
+        self._rebuild_attributes()
 
         for path in revealed:
             self.reveal_attribute(path)
@@ -472,14 +485,10 @@ class AttributesWidget:
             self._update_attribute(
                 sender, target.object_id if target else None, pointer
             )
+            self.regenerate()
 
-            # If the binding set pointer changed we should regenerate all attribute widgets
-            vbs_type_id = self.tagfile.type_registry.find_first_type_by_name(
-                "hkbVariableBindingSet"
-            )
-            if pointer.type_id == vbs_type_id:
-                self.regenerate()
-                self.reveal_attribute(path)
+            if self.on_graph_changed:
+                self.on_graph_changed()
 
         def open_pointer_dialog():
             select_object(
@@ -1247,6 +1256,7 @@ class AttributesWidget:
 
         widget, _, attribute = self.selected_attribute
         self._update_attribute(widget, new_object, attribute)
+        self.regenerate()
 
         if self.on_graph_changed:
             self.on_graph_changed()
@@ -1314,7 +1324,7 @@ class AttributesWidget:
                 self.on_graph_changed()
 
             self.clear()
-            self._update_attributes()
+            self._rebuild_attributes()
             self.reveal_attribute(path)
 
         widget, path, _ = self.selected_attribute

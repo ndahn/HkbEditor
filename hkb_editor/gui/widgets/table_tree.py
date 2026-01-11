@@ -5,6 +5,7 @@ import dearpygui.dearpygui as dpg
 
 INDENT_STEP = 14  # actually depends on font size
 _foldable_row_sentinel = object()
+_lazy_node_sentinel = object()
 
 
 def is_foldable_row(row: str) -> bool:
@@ -24,6 +25,24 @@ def is_foldable_row_leaf(row: str) -> bool:
 
     return False
 
+
+def is_lazy_foldable(row: str) -> bool:
+    if not is_foldable_row(row):
+        return False
+
+    node = get_row_node_item(row)
+    user_data = dpg.get_item_user_data(node)
+
+    if not isinstance(user_data, tuple):
+        return False
+
+    return (user_data[0] == _lazy_node_sentinel)
+
+
+def is_foldable_row_expanded(row: str) -> bool:
+    node = get_row_node_item(row)
+    return dpg.get_value(node)
+    
 
 def get_row_level(row: str, default: int = 0) -> bool:
     data = dpg.get_item_user_data(row)
@@ -166,46 +185,16 @@ def set_foldable_row_status(row: str, expanded: bool) -> None:
     if not is_foldable_row(row) or is_foldable_row_leaf(row):
         return
 
-    selectable = get_row_selectable_item(row)
-    # Will be toggled by the click function
-    dpg.set_value(selectable, not expanded)
-    # We basically simulate a click on the selectable
-    _on_row_clicked(selectable, expanded, dpg.get_item_user_data(selectable))
-
-
-def _on_row_clicked(sender, value, user_data):
-    # Make sure it happens quickly and without flickering
-    with dpg.mutex():
-        # We don't want to highlight the selectable as "selected"
-        dpg.set_value(sender, False)
-
-        table, row, callback, cb_user_data = user_data
-        _, root_level, node, _ = dpg.get_item_user_data(row)
-        is_leaf = node is None
-        is_expanded = not dpg.get_value(node)
-
-        # Toggle the node's "expanded" status
-        if not is_leaf:
-            dpg.set_value(node, is_expanded)
-
-        if callback:
-            callback(row, is_leaf or is_expanded, cb_user_data)
-
-        # All children *beyond* this level (but not on this level) will be hidden
-        hide_level = 10000 if is_expanded else root_level
-
-        for child_row in get_foldable_child_rows(table, row):
-            _, child_level, child_node, _ = dpg.get_item_user_data(child_row)
-
-            if child_level <= root_level:
-                break
-
-            if child_level > hide_level:
-                dpg.hide_item(child_row)
-            else:
-                dpg.show_item(child_row)
-                if child_node is not None:
-                    hide_level = 10000 if dpg.get_value(child_node) else child_level
+    # We basically simulate a click on the item controlling the row
+    if is_lazy_foldable(row):
+        node = get_row_node_item(row)
+        dpg.set_value(node, expanded)
+        _on_lazy_node_clicked(node, expanded, dpg.get_item_user_data(node)),
+    else:
+        selectable = get_row_selectable_item(row)
+        # Will be toggled again by the click function
+        dpg.set_value(selectable, not expanded)
+        _on_row_clicked(selectable, expanded, dpg.get_item_user_data(selectable))
 
 
 @contextmanager
@@ -304,38 +293,78 @@ def add_lazy_table_tree_node(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-    def fold_unfold_attributes(
-        tree_node_row: str,
-        expanded: bool,
-        user_data: Any,
-    ):
-        anchor = get_next_foldable_row_sibling(table, tree_node_row)
-        indent_level = get_row_level(tree_node_row) + 1
-
-        if expanded:
-            with apply_row_indent(table, indent_level, tree_node_row, until=anchor):
-                content_callback(anchor)
-        else:
-            child_rows = list(get_foldable_child_rows(table, tree_node_row))
-
-            until = anchor
-            if isinstance(until, str):
-                until = dpg.get_alias_id(anchor)
-
-            for child_row in child_rows:
-                if until != 0 and child_row == until:
-                    break
-
-                dpg.delete_item(child_row)
-
+    
     with table_tree_node(
         label,
         table=table,
         folded=True,
         tag=tag,
-        callback=fold_unfold_attributes,
+        callback=_on_lazy_node_clicked,
         before=before,
+        user_data=(_lazy_node_sentinel, table, content_callback),
     ) as node:
         pass
 
     return node
+
+
+def _on_row_clicked(sender, value, user_data):
+    # Make sure it happens quickly and without flickering
+    with dpg.mutex():
+        # We don't want to highlight the selectable as "selected"
+        dpg.set_value(sender, False)
+
+        table, row, callback, cb_user_data = user_data
+        _, root_level, node, _ = dpg.get_item_user_data(row)
+        is_leaf = node is None
+        is_expanded = not dpg.get_value(node)
+
+        # Toggle the node's "expanded" status
+        if not is_leaf:
+            dpg.set_value(node, is_expanded)
+
+        if callback:
+            callback(row, is_leaf or is_expanded, cb_user_data)
+
+        # All children *beyond* this level (but not on this level) will be hidden
+        hide_level = 10000 if is_expanded else root_level
+
+        for child_row in get_foldable_child_rows(table, row):
+            _, child_level, child_node, _ = dpg.get_item_user_data(child_row)
+
+            if child_level <= root_level:
+                break
+
+            if child_level > hide_level:
+                dpg.hide_item(child_row)
+            else:
+                dpg.show_item(child_row)
+                if child_node is not None:
+                    hide_level = 10000 if dpg.get_value(child_node) else child_level
+
+
+def _on_lazy_node_clicked(
+    tree_node_row: str,
+    expanded: bool,
+    user_data: tuple,
+):
+    _, table, content_callback = user_data
+
+    anchor = get_next_foldable_row_sibling(table, tree_node_row)
+    indent_level = get_row_level(tree_node_row) + 1
+
+    if expanded:
+        with apply_row_indent(table, indent_level, tree_node_row, until=anchor):
+            content_callback(anchor)
+    else:
+        child_rows = list(get_foldable_child_rows(table, tree_node_row))
+
+        until = anchor
+        if isinstance(until, str):
+            until = dpg.get_alias_id(anchor)
+
+        for child_row in child_rows:
+            if until != 0 and child_row == until:
+                break
+
+            dpg.delete_item(child_row)
