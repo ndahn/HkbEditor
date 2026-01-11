@@ -156,7 +156,7 @@ class HkbFloat(XmlValueHandler):
         if self.tagfile.floats_use_commas:
             str_value = str_value.replace(".", ",")
 
-        with self.element.undo_stack.transaction():
+        with self.element.try_transaction():
             self.element.set("dec", str_value)
             self.element.set("hex", self.float_to_ieee754(value))
 
@@ -387,7 +387,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
 
         child = self.element[index]
 
-        with self.element.undo_stack.transaction():
+        with self.element.try_transaction():
             self.element.remove(child)
             self._count -= 1
 
@@ -439,7 +439,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
         for v in values:
             self._verify_compatible(v)
 
-        with self.element.undo_stack.transaction():
+        with self.element.try_transaction():
             # Can't use clear as it would remove the attributes as well
             for child in list(self.element):
                 self.element.remove(child)
@@ -482,7 +482,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
 
         value = self._wrap_value(value)
 
-        with self.element.undo_stack.transaction():
+        with self.element.try_transaction():
             self.element.append(value.element)
             self._count += 1
 
@@ -497,7 +497,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
 
         value = self._wrap_value(value)
 
-        with self.element.undo_stack.transaction():
+        with self.element.try_transaction():
             self.element.insert(index, value.element)
             self._count += 1
 
@@ -528,30 +528,29 @@ class HkbRecord(XmlValueHandler):
         record = HkbRecord(tagfile, record_elem, type_id, object_id)
 
         # Make sure the xml subtree contains all required fields
-        with record_elem.undo_stack.transaction():
-            for fname, ftype in tagfile.type_registry.get_field_types(type_id).items():
-                field_elem = HkbXmlElement.new("field", name=fname)
-                record_elem.append(field_elem)
+        for fname, ftype in tagfile.type_registry.get_field_types(type_id).items():
+            field_elem = HkbXmlElement.new("field", name=fname)
+            record_elem.append(field_elem)
 
-                # Handler.new will create all expected fields for the subelement
-                Handler = get_value_handler(tagfile.type_registry, ftype)
-                field_val = Handler.new(tagfile, ftype)
-                field_elem.append(field_val.element)
+            # Handler.new will create all expected fields for the subelement
+            Handler = get_value_handler(tagfile.type_registry, ftype)
+            field_val = Handler.new(tagfile, ftype)
+            field_elem.append(field_val.element)
 
-                # NOTE: userData is probably a void pointer and not useful to set
-                # unless you are making a copy of another record
+            # NOTE: userData is probably a void pointer and not useful to set
+            # unless you are making a copy of another record
 
-            if attributes:
-                optional = separate_game_specific_attributes(record.type_name, attributes)
-                
-                for path, val in attributes.items():
+        if attributes:
+            optional = separate_game_specific_attributes(record.type_name, attributes)
+            
+            for path, val in attributes.items():
+                record.set_field(path, val)
+
+            for path, val in optional.items():
+                try:
                     record.set_field(path, val)
-
-                for path, val in optional.items():
-                    try:
-                        record.set_field(path, val)
-                    except KeyError:
-                        pass
+                except KeyError:
+                    pass
 
         return record
 
@@ -605,7 +604,7 @@ class HkbRecord(XmlValueHandler):
             raise ValueError(f"Expected HkbRecord or Mapping, but got {values}")
 
         # values may have extra or missing values, so we go from our known fields
-        with self.element.undo_stack.transaction():
+        with self.element.try_transaction():
             for field in self._fields.keys():
                 if field in values:
                     self[field] = values[field]

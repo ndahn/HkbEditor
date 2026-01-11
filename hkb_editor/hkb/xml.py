@@ -285,6 +285,16 @@ class HkbXmlElement(ET.ElementBase):
         root = self.getroottree().getroot()
         return HkbXmlElement._undo_stacks.get(root)
 
+    @contextmanager
+    def try_transaction(self):
+        undo = self.undo_stack
+        if undo:
+            with undo.transaction() as t:
+                yield t
+        else:
+            # The element is not part of an xml tree, so there is no undo stack it could use
+            yield
+
     @property
     def attrib(self):
         """Incurs slight overhead as it wraps the actual element's attrib dict in a class that tracks mutations. Consider using get and set instead. It is discouraged to keep references to the returned dict. Accessing the same dict instance before and after an undo/redo operation may result in undefined behavior."""
