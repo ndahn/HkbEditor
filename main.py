@@ -7,7 +7,7 @@ from dearpygui import dearpygui as dpg
 import pyperclip
 
 from hkb_editor.gui import BehaviorEditor
-from hkb_editor.gui.base_editor import get_default_layout_path, get_custom_layout_path
+from hkb_editor.gui.beh_editor import get_default_layout_path, get_custom_layout_path
 from hkb_editor.gui.style import setup_styles
 
 

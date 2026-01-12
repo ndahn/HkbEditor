@@ -1,4 +1,5 @@
 from typing import Any
+import sys
 import os
 from ast import literal_eval
 import logging
@@ -50,14 +51,15 @@ except (ImportError, AttributeError) as e:
 
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
-from .base_editor import BaseEditor, Node
+from .widgets.graph_widget import GraphWidget, GraphLayout, Node
 from .widgets.attributes_widget import AttributesWidget
 from .widgets.graphmap import GraphMap  # TODO
 from .dialogs import (
     about_dialog,
     open_file_dialog,
+    save_file_dialog, 
     edit_simple_array_dialog,
-    search_objects_dialog,
+    search_objects_dialog, 
 )
 from .tools import (
     skeleton_mirror_dialog,
@@ -81,7 +83,16 @@ from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
 
 
-class BehaviorEditor(BaseEditor):
+
+def get_default_layout_path():
+    return os.path.join(os.path.dirname(sys.argv[0]), "default_layout.ini")
+
+
+def get_custom_layout_path():
+    return os.path.join(os.path.dirname(sys.argv[0]), "user_layout.ini")
+
+
+class BehaviorEditor:
     def __init__(self, tag: str | int = 0):
         # Setup the root logger first before calling super, which will instantiate
         # a new logger
@@ -102,7 +113,20 @@ class BehaviorEditor(BaseEditor):
         self.chr_reloader = None
         self.config: Config = load_config()
 
-        super().__init__(tag)
+        if tag in (0, None, ""):
+            tag = dpg.generate_uuid()
+
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.tag: str = tag
+        self.roots_table: str = None
+        self.canvas: GraphWidget = None
+        self.attributes_table: str = None
+        self.loaded_file: str = None
+        self.last_save: float = 0.0
+        self.selected_roots: set[str] = set()
+        self.selected_node: Node = None
+
+        self._setup_content()
 
         about = about_dialog(
             no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup"
@@ -163,6 +187,15 @@ class BehaviorEditor(BaseEditor):
             "Behavior HKX": "*.hkx",
             "DCX Binder": "*.behbnd.dcx",
         }
+
+    def file_open(self):
+        ret = open_file_dialog(
+            default_dir=os.path.dirname(self.loaded_file or ""),
+            filetypes=self.get_supported_file_extensions(),
+        )
+
+        if ret:
+            self._do_load_from_file(ret)
 
     def _do_load_from_file(self, file_path: str):
         if not os.path.isfile(file_path):
@@ -247,6 +280,25 @@ class BehaviorEditor(BaseEditor):
             raise e
         finally:
             dpg.delete_item(loading_screen)
+
+    def file_save(self):
+        self._do_write_to_file(self.loaded_file)
+        self.last_save = time()
+
+    def file_save_as(self) -> bool:
+        ret = save_file_dialog(
+            default_dir=os.path.dirname(self.loaded_file or ""),
+            default_file=os.path.basename(self.loaded_file or ""),
+            filetypes=self.get_supported_file_extensions(),
+        )
+
+        if ret:
+            self._do_write_to_file(ret)
+            self.loaded_file = ret
+            self.last_save = time()
+            return True
+
+        return False
 
     def _do_write_to_file(self, file_path):
         if self._busy:
@@ -568,9 +620,78 @@ class BehaviorEditor(BaseEditor):
             )
 
         dpg.add_separator()
-        self._create_dpg_menu()
+
+        with dpg.menu(label="Help"):
+            with dpg.menu(label="dearpygui"):
+                dpg.add_menu_item(
+                    label="Show About", callback=lambda: dpg.show_tool(dpg.mvTool_About)
+                )
+                dpg.add_menu_item(
+                    label="Show Metrics", callback=lambda: dpg.show_tool(dpg.mvTool_Metrics)
+                )
+                dpg.add_menu_item(
+                    label="Show Documentation",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Doc),
+                )
+                dpg.add_menu_item(
+                    label="Show Debug", callback=lambda: dpg.show_tool(dpg.mvTool_Debug)
+                )
+                dpg.add_menu_item(
+                    label="Show Style Editor",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Style),
+                )
+                dpg.add_menu_item(
+                    label="Show Font Manager",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Font),
+                )
+                dpg.add_menu_item(
+                    label="Show Item Registry",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_ItemRegistry),
+                )
+                dpg.add_menu_item(
+                    label="Show Stack Tool",
+                    callback=lambda: dpg.show_tool(dpg.mvTool_Stack),
+                )
+
+            dpg.add_separator()
+
+            dpg.add_menu_item(
+                label="HowTo",
+                callback=self.open_guide,
+            )
+            dpg.add_menu_item(
+                label="About",
+                callback=self.open_about_dialog,
+            )
 
         self._regenerate_recent_files_menu()
+
+    def _save_app_layout(self):
+        path = get_custom_layout_path()
+        dpg.save_init_file(path)
+        self.logger.info(f"Saved custom layout to {path}")
+
+    def _restore_default_app_layout(self):
+        default_layout = get_default_layout_path()
+        user_layout = get_custom_layout_path()
+
+        if os.path.isfile(user_layout):
+            shutil.move(get_custom_layout_path(), get_custom_layout_path() + ".old")
+
+        # Replace the user layout with the default
+        shutil.move(default_layout, user_layout)
+
+        with dpg.window(
+            label="Layout Restored",
+            modal=True,
+            autosize=True,
+            min_size=(100, 50),
+            no_saved_settings=True,
+            on_close=lambda: dpg.delete_item(wnd),
+        ) as wnd:
+            dpg.add_text("Layout restored - restart to apply!")
+            dpg.add_separator()
+            dpg.add_button(label="Okay", callback=lambda: dpg.delete_item(wnd))
 
     def _update_config(self, sender: str) -> None:
         alias = dpg.get_item_alias(sender)
@@ -728,23 +849,91 @@ class BehaviorEditor(BaseEditor):
         with dpg.handler_registry():
             dpg.add_key_press_handler(dpg.mvKey_None, callback=self._on_key_press)
 
+    def _on_resize(self):
+        cw, ch = dpg.get_item_rect_size(f"{self.tag}_canvas_window")
+        dpg.set_item_width(self.canvas.tag, cw)
+        dpg.set_item_height(self.canvas.tag, ch)
+
     def _setup_content(self) -> None:
-        super()._setup_content()
+        with dpg.viewport_menu_bar():
+            self.create_app_menu()
 
-        # Replace the standard table with our more complex widget
-        dpg.delete_item(f"{self.tag}_attributes_table_container")
-
-        with dpg.child_window(border=False, parent=f"{self.tag}_attributes_window"):
-            self.attributes_widget = AttributesWidget(
-                self.alias_manager,
-                jump_callback=self.jump_to_object,
-                search_attribute_callback=self.search_attribute,
-                on_graph_changed=self.regenerate,
-                on_value_changed=self._on_value_modified,
-                pin_object_callback=self.add_pinned_object,
-                get_pinned_objects_callback=self.get_pinned_objects,
-                tag=f"{self.tag}_attributes_widget",
+        # Roots
+        with dpg.window(
+            label="Root Nodes",
+            autosize=True,
+            no_close=True,
+            no_scrollbar=True,
+            tag=f"{self.tag}_roots_window",
+        ):
+            dpg.add_input_text(
+                hint="Filter",
+                callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
+                user_data=f"{self.tag}_roots_table",
+                tag=f"{self.tag}_roots_filter",
+                width=-1,
             )
+            dpg.add_separator()
+            # Tables are more flexible with item design and support filtering
+            with dpg.table(
+                delay_search=True,
+                no_host_extendX=True,
+                header_row=False,
+                # policy=dpg.mvTable_SizingFixedFit,
+                scrollY=True,
+                tag=f"{self.tag}_roots_table",
+            ) as self.roots_table:
+                dpg.add_table_column(label="Name")
+
+        # Canvas
+        with dpg.window(
+            label="Graph",
+            autosize=True,
+            no_close=True,
+            no_scrollbar=True,
+            tag=f"{self.tag}_canvas_window",
+        ):
+            self.canvas = GraphWidget(
+                None,
+                GraphLayout(),
+                on_node_selected=self.on_node_selected,
+                node_menu_func=self.open_node_menu,
+                get_node_frontpage=self.get_node_frontpage,
+                tag=f"{self.tag}_canvas",
+            )
+
+        # Attributes panel
+        with dpg.window(
+            label="Attributes",
+            autosize=True,
+            no_close=True,
+            no_scrollbar=True,
+            tag=f"{self.tag}_attributes_window",
+        ):
+            dpg.add_input_text(
+                hint="Filter",
+                tag=f"{self.tag}_attribute_filter",
+                callback=lambda s, a, u: dpg.set_value(u, dpg.get_value(s)),
+                user_data=None,  # see below
+                width=-1,
+            )
+            dpg.add_separator()
+
+            # Child window is needed to fix table sizing
+            with dpg.child_window(border=False):
+                self.attributes_widget = AttributesWidget(
+                    self.alias_manager,
+                    jump_callback=self.jump_to_object,
+                    search_attribute_callback=self.search_attribute,
+                    on_graph_changed=self.regenerate,
+                    on_value_changed=self._on_value_modified,
+                    pin_object_callback=self.add_pinned_object,
+                    get_pinned_objects_callback=self.get_pinned_objects,
+                    tag=f"{self.tag}_attributes_widget",
+                )
+
+        dpg.set_viewport_resize_callback(self._on_resize)
+        dpg.set_frame_callback(2, self._on_resize)
 
         # Update the input box for filtering the table
         self.attributes_table = self.attributes_widget._attributes_table
@@ -780,6 +969,50 @@ class BehaviorEditor(BaseEditor):
             dpg.add_item_clicked_handler(
                 button=dpg.mvMouseButton_Right, callback=self.open_pin_menu
             )
+
+    def _on_root_selected(self, sender: str, selected: bool, root_id: str):
+        # NOTE for now we don't allow deselecting SMs
+        selected = True
+        dpg.set_value(f"{self.tag}_root_{root_id}_selectable", True)
+
+        # Rebuild the graph even if the root_id is already selected
+        self.canvas.clear()
+        self.clear_attributes()
+        self.selected_node = None
+
+        # For now we only allow one root to be selected
+        for other in self.get_root_ids():
+            self.selected_roots.discard(other)
+            tag = f"{self.tag}_root_{other}_selectable"
+            if other != root_id and dpg.does_item_exist(tag):
+                dpg.set_value(tag, False)
+
+        if selected:
+            self.selected_roots.add(root_id)
+            graph: nx.DiGraph = self.get_graph(root_id)
+            self.canvas.set_graph(graph)
+        else:
+            if root_id in self.selected_roots:
+                self.selected_roots.remove(root_id)
+            self.canvas.set_graph(None)
+
+    def _update_roots(self) -> None:
+        dpg.delete_item(self.roots_table, children_only=True, slot=1)
+
+        # Columns will be hidden if header_row=False and no rows exist initially
+        for col in dpg.get_item_children(self.roots_table, slot=0):
+            dpg.show_item(col)
+
+        root_ids = self.get_root_ids()
+        for root_id in root_ids:
+            label = self.get_node_frontpage_short(root_id)
+            with dpg.table_row(filter_key=label, parent=self.roots_table):
+                dpg.add_selectable(
+                    label=label,
+                    user_data=root_id,
+                    callback=self._on_root_selected,
+                    tag=f"{self.tag}_root_{root_id}_selectable",
+                )
 
     def get_pinned_objects(self) -> list[str]:
         ret = []
@@ -929,6 +1162,15 @@ class BehaviorEditor(BaseEditor):
     def get_node_frontpage_short(self, node_id: str) -> str:
         return self.beh.objects[node_id]["name"].get_value()
 
+    def on_node_selected(self, node: Node | str) -> None:
+        self.selected_node = node
+
+        # Update the attributes panel
+        if node:
+            self._update_attributes(node)
+        else:
+            self.clear_attributes()
+    
     def _create_attach_menu(self, node: Node):
 
         def get_target_type_id(obj: XmlValueHandler):
@@ -1886,3 +2128,15 @@ class BehaviorEditor(BaseEditor):
 
         for dlg in dialogs:
             dpg.delete_item(f"{self.tag}{dlg}")
+
+    def open_about_dialog(self) -> None:
+        tag = f"{self.tag}_about_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        about_dialog(tag=tag)
+        
+        dpg.split_frame()
+        center_window(tag)
