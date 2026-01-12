@@ -747,7 +747,7 @@ class BehaviorEditor(BaseEditor):
             )
 
         # Update the input box for filtering the table
-        self.attributes_table = self.attributes_widget.attributes_table
+        self.attributes_table = self.attributes_widget._attributes_table
         dpg.set_item_user_data(f"{self.tag}_attribute_filter", self.attributes_table)
 
         # Pinned objects

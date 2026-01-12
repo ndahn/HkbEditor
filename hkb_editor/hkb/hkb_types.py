@@ -782,7 +782,8 @@ class HkbRecord(XmlValueHandler):
                         for i, item in enumerate(field):
                             item_path = f"{field_path}:{i}"
                             yield (item_path, item)
-                    elif element_type == HkbRecord:
+                    
+                    if element_type in (HkbRecord, HkbArray):
                         for i, item in enumerate(field):
                             item_path = f"{field_path}:{i}"
                             todo.append((item, item_path))

@@ -185,6 +185,9 @@ def set_foldable_row_status(row: str, expanded: bool) -> None:
     if not is_foldable_row(row) or is_foldable_row_leaf(row):
         return
 
+    if is_foldable_row_expanded(row) == expanded:
+        return
+
     # We basically simulate a click on the item controlling the row
     if is_lazy_foldable(row):
         node = get_row_node_item(row)

@@ -5,7 +5,7 @@ import yaml
 import logging
 import re
 from enum import IntFlag
-from lxml import etree as ET
+from dataclasses import dataclass
 from dearpygui import dearpygui as dpg
 import pyperclip
 
@@ -43,7 +43,6 @@ from .table_tree import (
     get_row_node_item,
     set_foldable_row_status,
     is_foldable_row_expanded,
-    
 )
 from .rotation_knob import RotationKnob
 from hkb_editor.gui.workflows.bind_attribute import (
@@ -63,7 +62,12 @@ from hkb_editor.gui.helpers import (
 from hkb_editor.gui import style
 
 
-_undefined = object()
+@dataclass(slots=True)
+class _Attribute:
+    attribute: XmlValueHandler
+    path: str
+    widget: str
+    simple: bool
 
 
 class AttributesWidget:
@@ -85,25 +89,23 @@ class AttributesWidget:
         if tag in (None, 0, ""):
             tag = dpg.generate_uuid()
 
+        self.tag = str(tag)
         self.alias_manager = alias_manager
         self.tagfile: Tagfile = None
         self.record: HkbRecord = None
-        self.on_graph_changed = on_graph_changed
-        self.on_value_changed = on_value_changed
-        self.jump_callback = jump_callback
-        self.search_attribute_callback = search_attribute_callback
-        self.pin_object_callback = pin_object_callback
-        self.get_pinned_objects_callback = get_pinned_objects_callback
-        self.hide_title = hide_title
-        self.tag = str(tag)
-
         self.logger = logging.getLogger()
-        self.attributes_table = None
 
-        self.widget_to_attribute: dict[
-            str, tuple[str, tuple[XmlValueHandler, str, bool]]
-        ] = {}
-        self.selected_attribute = None
+        self._on_graph_changed = on_graph_changed
+        self._on_value_changed = on_value_changed
+        self._jump_callback = jump_callback
+        self._search_attribute_callback = search_attribute_callback
+        self._pin_object_callback = pin_object_callback
+        self._get_pinned_objects_callback = get_pinned_objects_callback
+        self._hide_title = hide_title
+
+        self._attribute_info: dict[str, _Attribute] = {}
+        self._selected_attribute_info: _Attribute = None
+        self._attributes_table = None
 
         # Hover explanations for attributes
         expl_file = os.path.join(os.path.dirname(sys.argv[0]), "attributes.yaml")
@@ -127,15 +129,16 @@ class AttributesWidget:
                 self._rebuild_attributes()
 
     def set_title(self, title: str) -> None:
-        if not title or self.hide_title:
+        if not title or self._hide_title:
             dpg.hide_item(f"{self.tag}_attributes_title")
         else:
             dpg.set_value(f"{self.tag}_attributes_title", title)
             dpg.show_item(f"{self.tag}_attributes_title")
 
     def clear(self) -> None:
+        self._attribute_info.clear()
         self.set_title("Attributes")
-        dpg.delete_item(self.attributes_table, children_only=True, slot=1)
+        dpg.delete_item(self._attributes_table, children_only=True, slot=1)
 
     def reveal_attribute(self, path: str) -> None:
         subpath = ""
@@ -205,14 +208,14 @@ class AttributesWidget:
                 policy=dpg.mvTable_SizingFixedFit,
                 header_row=False,
                 tag=f"{self.tag}_attributes_table",
-            ) as self.attributes_table:
+            ) as self._attributes_table:
                 dpg.add_table_column(label="Value", width_stretch=True)
                 dpg.add_table_column(label="Key", width_fixed=True)
 
         def on_click(sender, app_data):
             # app_data contains (slot, item_id)
-            widget = dpg.get_item_alias(app_data[1])
-            self._open_attribute_menu(widget)
+            path = dpg.get_item_user_data(app_data[1])
+            self._open_attribute_menu(path)
 
         with dpg.item_handler_registry(tag=self.tag + "_item_handler_registry"):
             dpg.add_item_clicked_handler(
@@ -222,16 +225,17 @@ class AttributesWidget:
         self._create_attribute_menu()
 
     def _rebuild_attributes(self) -> None:
+        self.clear()
         self.set_title(f"{self.record.object_id} ({self.record.type_name})")
 
         # Columns will be hidden if header_row=False and no rows exist initially
-        for col in dpg.get_item_children(self.attributes_table, slot=0):
+        for col in dpg.get_item_children(self._attributes_table, slot=0):
             dpg.show_item(col)
 
         for key, val in self.record.get_value().items():
             with dpg.table_row(
                 filter_key=key,
-                parent=self.attributes_table,
+                parent=self._attributes_table,
             ):
                 self._create_attribute_widget(val, key)
 
@@ -239,22 +243,34 @@ class AttributesWidget:
         revealed = []
 
         for path, _ in self.record.find_fields_by_type(HkbRecord):
-            path_tag = f"{self.tag}_attribute_{path}"
-            if dpg.does_item_exist(path_tag) and is_foldable_row_expanded(path_tag):
+            attr = self._attribute_info.get(path)
+            if (
+                attr
+                and dpg.does_item_exist(attr.widget)
+                and is_foldable_row_expanded(attr.widget)
+            ):
                 revealed.append(path)
 
         for path, _ in self.record.find_fields_by_type(HkbArray):
-            path_tag = f"{self.tag}_attribute_{path}"
-            if dpg.does_item_exist(path_tag) and is_foldable_row_expanded(path_tag):
+            attr = self._attribute_info.get(path)
+            if (
+                attr
+                and dpg.does_item_exist(attr.widget)
+                and is_foldable_row_expanded(attr.widget)
+            ):
                 revealed.append(path)
 
-        self.clear()
         self._rebuild_attributes()
+
+        # Need to reveal the parent attributes before children can be revealed
+        revealed.sort(key=len)
 
         for path in revealed:
             self.reveal_attribute(path)
 
-    def _get_attribute_label(self, attribute: XmlValueHandler, path: str) -> tuple[str, tuple[int, int, int]]:
+    def _get_attribute_label(
+        self, attribute: XmlValueHandler, path: str
+    ) -> tuple[str, tuple[int, int, int]]:
         label = self.alias_manager.get_attribute_alias(self.record, path)
         if label is None:
             label = path.rsplit("/", maxsplit=1)[-1]
@@ -268,7 +284,7 @@ class AttributesWidget:
             and "/" not in path
         ):
             state_id = self.record.get_field(path + "/toStateId", resolve=True)
-            
+
             # Get the StateInfo name associated with this transition
             # sm_typeid = self.tagfile.type_registry.find_first_type_by_name("hkbStateMachine")
             # parent_sm = next(self.tagfile.find_hierarchy_parents_for(self.record, sm_typeid))
@@ -317,7 +333,7 @@ class AttributesWidget:
             add_lazy_table_tree_node(
                 label,
                 lazy_create_record_attributes,
-                table=self.attributes_table,
+                table=self._attributes_table,
                 tag=tag,
                 before=before,
             )
@@ -330,7 +346,7 @@ class AttributesWidget:
                 "hkVector4f",
             ):
                 with table_tree_leaf(
-                    table=self.attributes_table,
+                    table=self._attributes_table,
                     tag=tag,
                     before=before,
                 ):
@@ -341,7 +357,7 @@ class AttributesWidget:
                 "hkQuaternionf",
             ):
                 with table_tree_leaf(
-                    table=self.attributes_table,
+                    table=self._attributes_table,
                     tag=tag,
                     before=before,
                 ):
@@ -356,7 +372,7 @@ class AttributesWidget:
                         )
 
                     with table_tree_leaf(
-                        table=self.attributes_table,
+                        table=self._attributes_table,
                         tag=f"{tag}_arraybuttons",
                         before=anchor,
                     ):
@@ -365,7 +381,7 @@ class AttributesWidget:
                 add_lazy_table_tree_node(
                     f"{label} ({len(attribute)})",
                     lazy_create_array_items,
-                    table=self.attributes_table,
+                    table=self._attributes_table,
                     tag=tag,
                     before=before,
                 )
@@ -373,7 +389,7 @@ class AttributesWidget:
 
         elif isinstance(attribute, HkbPointer):
             with table_tree_leaf(
-                table=self.attributes_table,
+                table=self._attributes_table,
                 tag=tag,
                 before=before,
             ):
@@ -389,7 +405,7 @@ class AttributesWidget:
 
             if FieldFlags:
                 with table_tree_leaf(
-                    table=self.attributes_table,
+                    table=self._attributes_table,
                     before=before,
                 ):
                     self._create_attribute_widget_flags(
@@ -399,13 +415,14 @@ class AttributesWidget:
                     is_simple = False
             else:
                 with table_tree_leaf(
-                    table=self.attributes_table,
+                    table=self._attributes_table,
                     before=before,
                 ):
                     self._create_attribute_widget_simple(attribute, path, tag)
                     create_label()
 
-        self.widget_to_attribute[widget] = (attribute, path, is_simple)
+        self._attribute_info[path] = _Attribute(attribute, path, tag, is_simple)
+        dpg.set_item_user_data(widget, path)
         dpg.bind_item_handler_registry(widget, self.tag + "_item_handler_registry")
 
         if is_simple:
@@ -487,8 +504,8 @@ class AttributesWidget:
             )
             self.regenerate()
 
-            if self.on_graph_changed:
-                self.on_graph_changed()
+            if self._on_graph_changed:
+                self._on_graph_changed()
 
         def open_pointer_dialog():
             select_object(
@@ -631,10 +648,12 @@ class AttributesWidget:
                 self.tagfile.type_registry, array.element_type_id
             )
             if Handler in (HkbRecord, HkbPointer):
-                if self.on_graph_changed:
-                    self.on_graph_changed()
+                if self._on_graph_changed:
+                    self._on_graph_changed()
 
-            dpg.delete_item(f"{self.tag}_attribute_{path}:{idx}")
+            item_path = f"{path}:{len(array) - 1}"
+            attr = self._attribute_info[item_path]
+            dpg.delete_item(attr.widget)
 
         def append_item() -> None:
             subtype = array.element_type_id
@@ -648,7 +667,6 @@ class AttributesWidget:
                 path,
             )
 
-            idx = len(array)
             array.append(new_item)
 
             # TODO doesn't work for some reason
@@ -660,7 +678,7 @@ class AttributesWidget:
             # )
 
             self.regenerate()
-            self.reveal_attribute(f"{path}:{idx}")
+            self.reveal_attribute(f"{path}:{len(array) - 1}")
 
         with dpg.group(horizontal=True, tag=tag) as button_group:
             # Deleting from the end doesn't require index updates,
@@ -932,6 +950,12 @@ class AttributesWidget:
             dpg.add_separator(tag=self.tag + "_attribute_menu_separator_hkbarray")
 
             dpg.add_selectable(
+                label="Insert",
+                callback=self._insert_array_item,
+                tag=self.tag + "_attribute_menu_insert_array_item",
+            )
+
+            dpg.add_selectable(
                 label="Move Up",
                 callback=self._move_array_item_up,
                 tag=self.tag + "_attribute_menu_array_move_up",
@@ -975,20 +999,18 @@ class AttributesWidget:
                 tag=self.tag + "_attribute_menu_jump",
             )
 
-
-    def _open_attribute_menu(
-        self,
-        widget: str,
-    ):
-        attribute, path, is_simple = self.widget_to_attribute[widget]
+    def _open_attribute_menu(self, path: str):
+        attribute = self._attribute_info.get(path)
+        if not attribute:
+            return
 
         label = path.split("/", maxsplit=1)[-1]
-        type_name = self.tagfile.type_registry.get_name(attribute.type_id)
+        type_name = self.tagfile.type_registry.get_name(attribute.attribute.type_id)
 
         dpg.set_value(self.tag + "_attribute_menu_label", label)
         dpg.set_value(self.tag + "_attribute_menu_type", f"<{type_name}>")
 
-        if is_simple:
+        if attribute.simple:
             bound_attributes = get_bound_attributes(self.tagfile, self.record)
             bound_var_idx = bound_attributes.get(path, -1)
 
@@ -1002,7 +1024,7 @@ class AttributesWidget:
 
             elif isinstance(self.tagfile, HavokBehavior):
                 if is_event_attribute(self.record, path):
-                    idx = attribute.get_value()
+                    idx = attribute.attribute.get_value()
                     name = (
                         self.tagfile.get_event(idx, "<invalid>")
                         if idx >= 0
@@ -1012,7 +1034,7 @@ class AttributesWidget:
                     extra_color = style.green
 
                 elif is_variable_attribute(self.record, path):
-                    idx = attribute.get_value()
+                    idx = attribute.attribute.get_value()
                     name = (
                         self.tagfile.get_variable_name(idx, "<invalid>")
                         if idx >= 0
@@ -1022,7 +1044,7 @@ class AttributesWidget:
                     extra_color = style.green
 
                 elif is_animation_attribute(self.record, path):
-                    idx = attribute.get_value()
+                    idx = attribute.attribute.get_value()
                     name = (
                         self.tagfile.get_animation(idx, "<invalid>")
                         if idx >= 0
@@ -1059,11 +1081,11 @@ class AttributesWidget:
             dpg.hide_item(self.tag + "_attribute_menu_array_move_down")
             dpg.hide_item(self.tag + "_attribute_menu_array_delete")
 
-        if isinstance(attribute, HkbPointer):
+        if isinstance(attribute.attribute, HkbPointer):
             dpg.show_item(self.tag + "_attribute_menu_new_object")
             dpg.show_item(self.tag + "_attribute_menu_clone_hierarchy")
 
-            if self.get_pinned_objects_callback:
+            if self._get_pinned_objects_callback:
                 dpg.delete_item(
                     self.tag + "_attribute_menu_pinned_objects", children_only=True
                 )
@@ -1071,7 +1093,7 @@ class AttributesWidget:
                 def set_target(sender: str, app_data: bool, oid: str):
                     self._set_pointer_target(sender, oid, None)
 
-                pinned = self.get_pinned_objects_callback()
+                pinned = self._get_pinned_objects_callback()
                 for item in pinned:
                     dpg.add_menu_item(
                         label=item,
@@ -1083,7 +1105,7 @@ class AttributesWidget:
 
                 dpg.show_item(self.tag + "_attribute_menu_pinned_objects")
 
-            if self.jump_callback:
+            if self._jump_callback:
                 dpg.show_item(self.tag + "_attribute_menu_jump")
         else:
             dpg.hide_item(self.tag + "_attribute_menu_new_object")
@@ -1097,37 +1119,71 @@ class AttributesWidget:
             mouse_pos = dpg.get_mouse_pos()
             dpg.set_item_pos(self.tag + "_attribute_menu", mouse_pos)
 
-        self.selected_attribute = (widget, path, attribute)
+        self._selected_attribute_info = attribute
         dpg.show_item(self.tag + "_attribute_menu")
 
     # Internal callbacks
     def _update_attribute(
-        self, sender: str, new_value: Any, handler: XmlValueHandler, ui_repr: Any = _undefined
+        self,
+        sender: str,
+        new_value: Any,
+        handler: XmlValueHandler,
+        ui_repr: Any = None,
     ) -> None:
-        if ui_repr is _undefined:
-            if isinstance(new_value, XmlValueHandler):
-                ui_repr = new_value.get_value()
-            else:
-                ui_repr = new_value
-
         old_value = handler.get_value()
         handler.set_value(new_value)
 
-        if self.on_value_changed:
-            self.on_value_changed(sender, handler, (old_value, new_value))
+        if ui_repr is None:
+            ui_repr = handler.get_value()
+
+        if self._on_value_changed:
+            self._on_value_changed(sender, handler, (old_value, new_value))
 
         if sender and dpg.does_item_exist(sender):
             try:
-                dpg.set_value(sender, ui_repr)
+                todo = [sender]
+                while todo:
+                    widget = todo.pop()
+                    if not dpg.does_item_exist(widget):
+                        continue
+
+                    dpg_type = dpg.get_item_type(widget)
+                    if (
+                        dpg_type
+                        in (
+                            "mvAppItemType::mvInputText",
+                            "mvAppItemType::mvInputInt",
+                            "mvAppItemType::mvInputFloat",
+                            "mvAppItemType::mvInputDouble",
+                            "mvAppItemType::mvCheckbox",
+                            "mvAppItemType::mvCombo",
+                        )
+                        and dpg.is_item_visible(widget)
+                        and "bindable_attribute" not in dpg.get_item_alias(widget)
+                    ):
+                        if dpg_type == "mvAppItemType::mvCombo":
+                            items: list[str] = dpg.get_item_configuration(widget)[
+                                "items"
+                            ]
+                            if isinstance(ui_repr, int):
+                                ui_repr = items[ui_repr]
+                            else:
+                                ui_repr = items.index(str(ui_repr))
+
+                        dpg.set_value(widget, ui_repr)
+                        break
+                    else:
+                        todo.extend(dpg.get_item_children(widget, 1))
             except Exception as e:
-                self.logger.error(f"dpg: set_value failed: {e}")
+                self.logger.error(f"dpg.set_value failed: {e}")
                 raise e
 
     def _cut_value(self, sender: str, app_data: Any, user_data: Any) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, _, attribute = self.selected_attribute
+        attribute = self._selected_attribute_info.attribute
+        widget = self._selected_attribute_info.widget
         val = dpg.get_value(widget)
 
         try:
@@ -1146,15 +1202,14 @@ class AttributesWidget:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget = self.selected_attribute[0]
-        val = dpg.get_value(widget)
-        self._copy_value_to_clipboard(val)
+        value = self._selected_attribute_info.attribute.get_value()
+        self._copy_value_to_clipboard(value)
 
     def _copy_value_xml(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        attribute = self.selected_attribute[2]
+        attribute = self._selected_attribute_info.attribute
         val = attribute.xml().strip().strip("\n")
         self._copy_value_to_clipboard(val)
 
@@ -1162,14 +1217,16 @@ class AttributesWidget:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        path = self.selected_attribute[1]
+        path = self._selected_attribute_info.path
         self._copy_value_to_clipboard(path)
 
     def _paste_value(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, attribute = self.selected_attribute
+        attribute = self._selected_attribute_info.attribute
+        path = self._selected_attribute_info.path
+        widget = self._selected_attribute_info.widget
         data = pyperclip.paste()
 
         # Clipboard contains an XML object
@@ -1188,64 +1245,135 @@ class AttributesWidget:
             try:
                 self._update_attribute(widget, new_value, attribute)
 
-                if isinstance(attribute, HkbPointer) and self.on_graph_changed:
-                    self.on_graph_changed()
+                if isinstance(attribute, HkbPointer) and self._on_graph_changed:
+                    self._on_graph_changed()
             except Exception as e:
                 self.logger.error(f"Paste value to {path} failed: {e}")
 
     def _move_array_item(self, sender: str, offset: int) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
-            
+
         if offset == 0:
             return
 
-        widget, path, attribute = self.selected_attribute
-        array_path, old_idx = path.rsplit(":", maxsplit=1)
+        attribute = self._selected_attribute_info.attribute
+        orig_path = self._selected_attribute_info.path
+        widget = self._selected_attribute_info.widget
+
+        base_path, old_idx = orig_path.rsplit(":", maxsplit=1)
         old_idx = int(old_idx)
         new_idx = old_idx + offset
-        array: HkbArray = self.record.get_field(array_path)
+        array: HkbArray = self.record.get_field(base_path)
 
         new_idx = max(0, min(len(array) - 1, new_idx))
         if new_idx == old_idx:
             return
 
-        value = array.get_value()
-        value.insert(new_idx, value.pop(old_idx))
-        self.logger.info(f"Moved {self.record.object_id}/{path} from {old_idx} to {new_idx}")
-        self._update_attribute(widget, value, array, dpg.get_value(widget))
+        new_value = array.get_value()
+        old_value = new_value.pop(old_idx)
+        new_value.insert(new_idx, old_value)
+        self.logger.info(
+            f"Moved {self.record.object_id}/{orig_path} from {old_idx} to {new_idx}"
+        )
+        self._update_attribute(widget, new_value, array)
+
+        # Update the attribute paths so that the correct attributes will be revealed in regenerate
+        start, end = (new_idx, old_idx) if new_idx < old_idx else (old_idx, new_idx)
+        temp_attrs = {}
+        for i in range(start, end + 1):
+            old_path = f"{base_path}:{i}"
+            if old_path in self._attribute_info:
+                temp_attrs[i] = self._attribute_info.pop(old_path)
+
+        for i in range(start, end + 1):
+            if i == old_idx:
+                new_i = new_idx
+            elif new_idx < old_idx:
+                new_i = i + 1
+            else:
+                new_i = i - 1
+
+            if i in temp_attrs:
+                self._attribute_info[f"{base_path}:{new_i}"] = temp_attrs[i]
+
+        new_path = f"{base_path}:{new_idx}"
+        self._selected_attribute_info.path = new_path
+
         self.regenerate()
 
-        if self.on_graph_changed and isinstance(attribute, HkbPointer):
-            self.on_graph_changed()
+        if self._on_graph_changed and isinstance(attribute, HkbPointer):
+            self._on_graph_changed()
 
     def _move_array_item_up(self, sender) -> None:
         self._move_array_item(sender, -1)
 
     def _move_array_item_down(self, sender) -> None:
         self._move_array_item(sender, +1)
-        
+
+    def _insert_array_item(self, sender) -> None:
+        # deselect the selectable
+        dpg.set_value(sender, False)
+
+        path = self._selected_attribute_info.path
+        widget = self._selected_attribute_info.widget
+        base_path, index = path.rsplit(":", maxsplit=1)
+        index = int(index)
+        array: HkbArray = self.record.get_field(base_path)
+
+        new_item = array.get_item_wrapper().new(array.tagfile, array.element_type_id)
+        value: list = array.get_value()
+        value.insert(index, new_item)
+        self.logger.info(
+            f"Inserted new item into {self.record.object_id}/{path} at {index}"
+        )
+        self._update_attribute(widget, value, array)
+
+        # Update the paths for correct attribute reveal
+        for i in range(len(array) - 1, index, -1):
+            old_path = f"{base_path}:{i-1}"
+            new_path = f"{base_path}:{i}"
+            attr = self._attribute_info[old_path]
+            attr.path = new_path
+            self._attribute_info[new_path] = attr
+
+        # Remove the old attribute entry for index, which has moved to i+1
+        del self._attribute_info[f"{base_path}:{index}"]
+
+        # Pointers will be initialized empty, so we don't have to regenerate the full graph yet
+        self.regenerate()
+
     def _delete_array_item(self, sender) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        widget, path, attribute = self.selected_attribute
-        array_path, index = path.rsplit(":", maxsplit=1)
+        path = self._selected_attribute_info.path
+        widget = self._selected_attribute_info.widget
+        base_path, index = path.rsplit(":", maxsplit=1)
         index = int(index)
-        array: HkbArray = self.record.get_field(array_path)
+        array: HkbArray = self.record.get_field(base_path)
 
         value = array.get_value()
         old_value = value.pop(index)
         self.logger.info(f"Removed {self.record.object_id}/{path}")
-        self._update_attribute(widget, value, array, dpg.get_value(widget))
+        self._update_attribute(widget, value, array)
 
-        if index == 0 or index == len(array) - 1:
-            dpg.delete_item(f"{self.tag}_attribute_{path}")
-        else:
-            self.regenerate()
+        # Update the paths for correct attribute reveal
+        for i in range(index + 1, len(array)):
+            old_path = f"{base_path}:{i}"
+            new_path = f"{base_path}:{i-1}"
+            attr = self._attribute_info[old_path]
+            attr.path = new_path
+            self._attribute_info[new_path] = attr
 
-        if self.on_graph_changed and isinstance(old_value, HkbPointer):
-            self.on_graph_changed()
+        # Remove the old last attribute entry, which has moved to i-1
+        del self._attribute_info[f"{base_path}:{len(array)}"]
+
+        # Indices and paths will have changed
+        self.regenerate()
+
+        if self._on_graph_changed and isinstance(old_value, HkbPointer):
+            self._on_graph_changed()
 
     # Menu callbacks
     def _set_pointer_target(
@@ -1254,12 +1382,13 @@ class AttributesWidget:
         if isinstance(new_object, HkbRecord):
             new_object = new_object.object_id
 
-        widget, _, attribute = self.selected_attribute
+        attribute = self._selected_attribute_info.attribute
+        widget = self._selected_attribute_info.widget
         self._update_attribute(widget, new_object, attribute)
         self.regenerate()
 
-        if self.on_graph_changed:
-            self.on_graph_changed()
+        if self._on_graph_changed:
+            self._on_graph_changed()
 
     def _create_object_for_pointer(self, sender: str) -> None:
         # deselect the selectable
@@ -1268,7 +1397,8 @@ class AttributesWidget:
         # Late import to avoid cyclic import
         from ..workflows.create_object import create_object_dialog
 
-        _, path, attribute = self.selected_attribute
+        attribute = self._selected_attribute_info.attribute
+        path = self._selected_attribute_info.path
         current = attribute.get_target()
         selected_type = None
         if current:
@@ -1290,19 +1420,20 @@ class AttributesWidget:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        attribute = self.selected_attribute[2]
+        attribute = self._selected_attribute_info.attribute
         oid = attribute.get_value()
         if not oid or oid == "object0":
             return
 
-        self.jump_callback(oid)
+        self._jump_callback(oid)
 
     def _search_attribute(self, sender: str) -> None:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        _, path, attribute = self.selected_attribute
-        self.search_attribute_callback(path, attribute)
+        attribute = self._selected_attribute_info.attribute
+        path = self._selected_attribute_info.path
+        self._search_attribute_callback(path, attribute)
 
     def _bind_variable(self, sender: str):
         # deselect the selectable
@@ -1314,25 +1445,25 @@ class AttributesWidget:
             if data is None:
                 return
 
-            path = self.selected_attribute[1]
-
             # No need to call set_bindable_attribute_state since we'll rebuild the
             # attribute widgets anyways
 
             # If a new binding set was created the graph will change
-            if self.on_graph_changed:
-                self.on_graph_changed()
+            if self._on_graph_changed:
+                self._on_graph_changed()
 
             self.clear()
             self._rebuild_attributes()
-            self.reveal_attribute(path)
+            self.reveal_attribute(self._selected_attribute_info.path)
 
-        widget, path, _ = self.selected_attribute
+        path = self._selected_attribute_info.path
+        widget = self._selected_attribute_info.widget
+
         select_variable_to_bind(
             self.tagfile,
             self.record,
-            widget,
             path,
+            widget,
             on_binding_established,
         )
 
@@ -1340,7 +1471,7 @@ class AttributesWidget:
         # deselect the selectable
         dpg.set_value(sender, False)
 
-        path = self.selected_attribute[1]
+        path = self._selected_attribute_info.path
         util = CommonActionsMixin(self.tagfile)
         util.clear_variable_binding(self.record, path)
 
@@ -1364,12 +1495,12 @@ class AttributesWidget:
             ]
             self.logger.info(f"Cloned hierarchy of {len(new_objects)} elements")
 
-            if hierarchy.pin_objects and self.pin_object_callback:
+            if hierarchy.pin_objects and self._pin_object_callback:
                 for obj in new_objects:
-                    self.pin_object_callback(obj)
+                    self._pin_object_callback(obj)
 
-            if self.on_graph_changed:
-                self.on_graph_changed()
+            if self._on_graph_changed:
+                self._on_graph_changed()
 
-        path = self.selected_attribute[1]
+        path = self._selected_attribute_info.path
         paste_hierarchy(self.tagfile, xml, self.record, path, on_hierarchy_merged)
