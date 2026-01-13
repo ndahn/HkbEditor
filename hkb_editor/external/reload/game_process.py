@@ -359,7 +359,7 @@ class ChrReloader:
 
 def detect_game_config() -> GameConfig:
     """
-    Detect which game configuration to use based on running processes.
+    Detect which game configuration to use based on running processes. However, this will not detect the game version.
     
     Returns:
         GameConfig: The first configuration that matches a running process.
