@@ -41,7 +41,7 @@ from hkb_editor.external import (
 )
 
 try:
-    from hkb_editor.external.reload import ChrReloader
+    from hkb_editor.external.reload import ChrReloader, detect_game_config
 except (ImportError, AttributeError) as e:
     # Not available on non-Windows systems
     ChrReloader = None
@@ -354,7 +354,8 @@ class BehaviorEditor:
         try:
             if not self.chr_reloader:
                 if ChrReloader:
-                    self.chr_reloader = ChrReloader()
+                    game_config = detect_game_config()
+                    self.chr_reloader = ChrReloader(game_config)
                 else:
                     self.logger.error("ChrReloader is not available")
                     return
@@ -362,6 +363,7 @@ class BehaviorEditor:
             self.chr_reloader.reload_character(chr)
         except Exception as e:
             self.logger.error(f"Reloading {chr} failed: {e}")
+            self.chr_reloader = None
         finally:
             dpg.delete_item(loading)
             self._busy = False
