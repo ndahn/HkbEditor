@@ -1462,8 +1462,8 @@ class AttributesWidget:
         select_variable_to_bind(
             self.tagfile,
             self.record,
-            path,
             widget,
+            path,
             on_binding_established,
         )
 
