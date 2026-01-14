@@ -257,6 +257,10 @@ class BehaviorEditor:
             self.config.save()
             self._regenerate_recent_files_menu()
 
+            # Save an initial backup that won't be overwritten on save
+            if self.config.save_backups:
+                shutil.copy(self.beh.file, self.beh.file + ".session_backup")
+
             # Fix anything that was amiss in previous versions
             fix_variable_defaults(self.beh)
 
@@ -309,7 +313,7 @@ class BehaviorEditor:
 
         try:
             if self.config.save_backups:
-                shutil.copy(self.beh.file, self.beh.file + ".bak")
+                shutil.copy(self.beh.file, self.beh.file + ".backup")
 
             self.beh.save_to_file(file_path)
             self.logger.info(f"Saved to {file_path}")
