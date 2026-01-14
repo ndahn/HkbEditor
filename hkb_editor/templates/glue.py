@@ -1,7 +1,6 @@
 from typing import Any
 import sys
 import os
-import logging
 import ast
 import importlib.util
 from docstring_parser import parse as parse_doc

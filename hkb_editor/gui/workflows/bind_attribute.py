@@ -32,7 +32,7 @@ def bindable_attribute(
             )
             dpg.bind_item_theme(dpg.last_item(), style.bound_attribute_theme)
 
-            with dpg.group(tag=f"{tag}_unbound") as g:
+            with dpg.group(tag=f"{tag}_unbound"):
                 # We yield the tag this binder can be referred to by, but elements will still be
                 # added to the "unbound" group
                 yield tag
@@ -48,7 +48,7 @@ def get_variable_binding_set(behavior: HavokBehavior, record: HkbRecord) -> HkbR
         # TODO we could create a specialized VariableBindingSet subclass
         binding_ptr: HkbPointer = record["variableBindingSet"]
         return behavior.objects[binding_ptr.get_value()]
-    except (AttributeError, KeyError) as e:
+    except (AttributeError, KeyError):
         return None
 
 

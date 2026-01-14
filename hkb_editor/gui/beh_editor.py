@@ -626,32 +626,32 @@ class BehaviorEditor:
         with dpg.menu(label="Help"):
             with dpg.menu(label="dearpygui"):
                 dpg.add_menu_item(
-                    label="Show About", callback=lambda: dpg.show_tool(dpg.mvTool_About)
+                    label="About", callback=lambda: dpg.show_tool(dpg.mvTool_About)
                 )
                 dpg.add_menu_item(
-                    label="Show Metrics", callback=lambda: dpg.show_tool(dpg.mvTool_Metrics)
+                    label="Metrics", callback=lambda: dpg.show_tool(dpg.mvTool_Metrics)
                 )
                 dpg.add_menu_item(
-                    label="Show Documentation",
+                    label="Documentation",
                     callback=lambda: dpg.show_tool(dpg.mvTool_Doc),
                 )
                 dpg.add_menu_item(
-                    label="Show Debug", callback=lambda: dpg.show_tool(dpg.mvTool_Debug)
+                    label="Debug", callback=lambda: dpg.show_tool(dpg.mvTool_Debug)
                 )
                 dpg.add_menu_item(
-                    label="Show Style Editor",
+                    label="Style Editor",
                     callback=lambda: dpg.show_tool(dpg.mvTool_Style),
                 )
                 dpg.add_menu_item(
-                    label="Show Font Manager",
+                    label="Font Manager",
                     callback=lambda: dpg.show_tool(dpg.mvTool_Font),
                 )
                 dpg.add_menu_item(
-                    label="Show Item Registry",
+                    label="Item Registry",
                     callback=lambda: dpg.show_tool(dpg.mvTool_ItemRegistry),
                 )
                 dpg.add_menu_item(
-                    label="Show Stack Tool",
+                    label="Stack Tool",
                     callback=lambda: dpg.show_tool(dpg.mvTool_Stack),
                 )
 
