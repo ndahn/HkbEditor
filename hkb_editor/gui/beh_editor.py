@@ -1144,11 +1144,14 @@ class BehaviorEditor:
         if obj.type_name == "hkbStateMachine::StateInfo":
             name = f"{name} ({obj['stateId'].get_value()})"
 
-            sm = self.beh.objects[self.canvas.root]
+            # Assume the immediate parent of a state is always a statemachine
+            sm_id = next(self.canvas.graph.predecessors(obj.object_id))
+            sm = self.beh.objects[sm_id]
             transitions: HkbArray[HkbRecord] = sm.get_field(
                 "wildcardTransitions/transitions", None
             )
-            # Not all statemachines have wildcard transitions (just root maybe?)
+
+            # Not all statemachines have wildcard transitions
             if transitions:
                 state_id = obj["stateId"].get_value()
                 for trans in transitions:
