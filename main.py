@@ -20,7 +20,7 @@ def main():
         handlers=[
             logging.FileHandler(logfile),
             logging.StreamHandler(),
-        ]
+        ],
     )
     _logger = logging.getLogger(__name__)
 
@@ -46,18 +46,22 @@ def main():
     if not os.path.isfile(default_layout):
         _logger.error("Layout not found")
     else:
-         if not os.path.isfile(user_layout):
+        if not os.path.isfile(user_layout):
             shutil.copy(default_layout, user_layout)
             _logger.info("Copied default layout to user layout")
 
     dpg.configure_app(docking=True, docking_space=True, init_file=user_layout)
-    dpg.create_viewport(title="HkbEditor", small_icon="icon.ico", large_icon="doc/iconx.png")
+    dpg.create_viewport(
+        title="HkbEditor",
+        small_icon="icon.ico",
+        large_icon="doc/iconx.png",
+        disable_close=True,
+    )
 
     setup_styles()
-    with dpg.window() as main_window:
-        app = BehaviorEditor("hkbeditor")
-
-    dpg.set_primary_window(main_window, True)
+    app = BehaviorEditor("hkbeditor")
+    dpg.set_exit_callback(app.exit_app)
+    dpg.set_primary_window(app.main_window, True)
 
     dpg.setup_dearpygui()
     dpg.show_viewport()

@@ -150,6 +150,7 @@ def check_nameid_files(behavior: HavokBehavior, root_logger: logging.Logger) -> 
         logger.warning("Could not get folder of name ID files")
         return
 
+    # TODO doesn't quite seem to work yet
     def check_nameidfile_contents(file_path: Path, values: list[str]):
         line_pattern = re.compile(r"([0-9]+)\s*=\s*\"(.+)\"")
         registered = set()

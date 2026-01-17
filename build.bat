@@ -1,6 +1,7 @@
 @echo off
 CALL "%userprofile%\miniforge3\Scripts\activate.bat"
 CALL conda activate hkbeditor
+pip install pyinstaller
 
 REM "=== RUNNING PYINSTALLER ==="
 IF EXIST dist RMDIR /S /Q dist

@@ -126,12 +126,14 @@ class BehaviorEditor:
         self.selected_roots: set[str] = set()
         self.selected_node: Node = None
 
-        self._setup_content()
+        with dpg.window() as self.main_window:
+            self._setup_content()
 
         about = about_dialog(
             no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup"
         )
         dpg.set_frame_callback(dpg.get_frame_count() + 1, lambda: center_window(about))
+        
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
         if severity < self.min_notification_severity:
@@ -396,9 +398,14 @@ class BehaviorEditor:
             dpg.delete_item(loading)
             self._busy = False
 
-    def exit_app(self):
+    def exit_app(self):        
+        if not self.beh or not self.beh.can_undo():
+            self._do_exit()
+            return
+
         with dpg.window(
             label="Exit?",
+            autosize=True,
             modal=True,
             no_saved_settings=True,
             on_close=lambda: dpg.delete_item(wnd),
@@ -413,11 +420,16 @@ class BehaviorEditor:
             dpg.add_separator()
 
             with dpg.group(horizontal=True):
-                dpg.add_button(label="Exit", callback=dpg.stop_dearpygui)
+                dpg.add_button(label="Exit", callback=self._do_exit)
                 dpg.add_button(label="Cancel", callback=lambda: dpg.delete_item(wnd))
 
         dpg.split_frame()
         center_window(wnd)
+    
+    def _do_exit(self):
+        dpg.stop_dearpygui()
+        dpg.destroy_context()
+        sys.exit(0)
 
     def undo(self) -> None:
         if self.beh.undo() is None:
