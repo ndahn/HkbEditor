@@ -260,7 +260,7 @@ class BehaviorEditor:
             self._regenerate_recent_files_menu()
 
             # Save an initial backup that won't be overwritten on save
-            if self.config.save_backups:
+            if self.config.session_backup:
                 shutil.copy(self.beh.file, self.beh.file + ".session_backup")
 
             # Fix anything that was amiss in previous versions
@@ -398,8 +398,9 @@ class BehaviorEditor:
             dpg.delete_item(loading)
             self._busy = False
 
-    def exit_app(self):        
+    def exit_app(self):
         if not self.beh or not self.beh.can_undo():
+            # Nothing was loaded or no changes have been made
             self._do_exit()
             return
 
@@ -621,6 +622,7 @@ class BehaviorEditor:
                 default_value=self.config.invert_zoom,
                 callback=self._update_config,
                 tag=f"{self.tag}_config_invert_zoom",
+                user_data="invert_zoom",
             )
             dpg.add_menu_item(
                 label="Single Branch Mode",
@@ -628,6 +630,7 @@ class BehaviorEditor:
                 default_value=self.config.single_branch_mode,
                 callback=self._update_config,
                 tag=f"{self.tag}_config_single_branch_mode",
+                user_data="single_branch_mode",
             )
             dpg.add_menu_item(
                 label="Save Backups",
@@ -635,7 +638,23 @@ class BehaviorEditor:
                 default_value=self.config.save_backups,
                 callback=self._update_config,
                 tag=f"{self.tag}_config_save_backups",
+                user_data="save_backups",
             )
+            dpg.add_menu_item(
+                label="Session Backup",
+                check=True,
+                default_value=self.config.session_backup,
+                callback=self._update_config,
+                tag=f"{self.tag}_config_session_backup",
+                user_data="session_backup",
+            )
+            # NOTE intentionally not exposed as I don't want to deal with updating it at runtime
+            # dpg.add_input_int(
+            #     label="Undo History",
+            #     default_value=self.config.undo_history,
+            #     callback=self._update_config,
+            #     tag=f"{self.tag}_config_undo_history",
+            # )
 
         dpg.add_separator()
 
@@ -711,14 +730,11 @@ class BehaviorEditor:
             dpg.add_separator()
             dpg.add_button(label="Okay", callback=lambda: dpg.delete_item(wnd))
 
-    def _update_config(self, sender: str) -> None:
-        alias = dpg.get_item_alias(sender)
-        key = alias[len(f"{self.tag}_config_") :]
+    def _update_config(self, sender: str, app_data: Any, config_key: str) -> None:
+        if not hasattr(self.config, config_key):
+            raise ValueError(f"Unknown config key {config_key}")
 
-        if not hasattr(self.config, key):
-            raise ValueError(f"Unknown config key {key}")
-
-        setattr(self.config, key, dpg.get_value(sender))
+        setattr(self.config, config_key, app_data)
         self.config.save()
 
     def _regenerate_recent_files_menu(self) -> None:

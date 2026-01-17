@@ -15,6 +15,8 @@ class Config:
     invert_zoom: bool = False
     single_branch_mode: bool = True
     save_backups: bool = True
+    session_backup: bool = True
+    undo_history: int = 100
 
     def add_recent_file(self, file_path: str) -> None:
         file_path = path.normpath(path.abspath(file_path))

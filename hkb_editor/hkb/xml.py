@@ -26,7 +26,7 @@ class UndoAction:
 
 
 class UndoStack:
-    def __init__(self, max_size: int = 50):
+    def __init__(self, max_size: int = 100):
         self._undos: deque[UndoAction] = deque(maxlen=max_size)
         self._redos: deque[UndoAction] = deque(maxlen=max_size)
         self._action_id = 0
@@ -544,6 +544,8 @@ def make_subelement(parent: ET.Element, tag: str, **kwargs) -> HkbXmlElement:
 
 
 def xml_from_str(xml: str, undo: bool = False) -> HkbXmlElement:
+    from hkb_editor.external import get_config
+
     tree = ET.fromstring(xml, parser=_get_xml_parser())
     if hasattr(tree, "getroot"):
         root = tree.getroot()
@@ -551,15 +553,17 @@ def xml_from_str(xml: str, undo: bool = False) -> HkbXmlElement:
         root = tree.getroottree().getroot()
 
     if undo:
-        HkbXmlElement._undo_stacks[root] = UndoStack()
+        HkbXmlElement._undo_stacks[root] = UndoStack(get_config().undo_history)
     return root
 
 
 def xml_from_file(path: str, undo: bool = False) -> HkbXmlElement:
+    from hkb_editor.external import get_config
+
     tree = ET.parse(path, parser=_get_xml_parser())
     root = tree.getroot()
     if undo:
-        HkbXmlElement._undo_stacks[root] = UndoStack()
+        HkbXmlElement._undo_stacks[root] = UndoStack(get_config().undo_history)
     return root
 
 
