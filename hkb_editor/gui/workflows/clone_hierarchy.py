@@ -102,7 +102,7 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
         # Element types need to be remapped, too. Pointers on the other hand are okay since they
         # don't save their subtype in the xml.
         array: HkbArray
-        for _, array in obj.find_fields_by_type(HkbArray):
+        for _, array in obj.find_fields_by_class(HkbArray):
             type_map[array.element_type_id] = array.element_type_name
 
         todo.extend(hierarchy_graph.successors(oid))
@@ -403,7 +403,7 @@ def paste_children(
 
         source_obj: HkbRecord = results.objects[root_id].original
         root_children = set()
-        for _, ptr in source_obj.find_fields_by_type(HkbPointer):
+        for _, ptr in source_obj.find_fields_by_class(HkbPointer):
             if ptr.is_set():
                 root_children.add(ptr.get_value())
 
@@ -600,7 +600,7 @@ def find_conflicts(
                 # they can be resolved properly. Pointers don't need fixing since they don't
                 # save their subtype in the xml.
                 array: HkbArray
-                for path, _ in obj.find_fields_by_type(HkbArray):
+                for path, _ in obj.find_fields_by_class(HkbArray):
                     array = tmp.get_field(path, None)
                     if array:
                         array.element_type_id = results.type_map[
@@ -675,7 +675,7 @@ def resolve_conflicts(
 
             if other.action in (MergeAction.NEW, MergeAction.IGNORE):
                 ptr: HkbPointer
-                for _, ptr in other.result.find_fields_by_type(HkbPointer):
+                for _, ptr in other.result.find_fields_by_class(HkbPointer):
                     if ptr.get_value() == object_id:
                         return True
 
@@ -776,7 +776,7 @@ def resolve_conflicts(
             continue
 
         ptr: HkbPointer
-        for _, ptr in obj.find_fields_by_type(HkbPointer):
+        for _, ptr in obj.find_fields_by_class(HkbPointer):
             target_id = ptr.get_value()
             if not target_id:
                 continue

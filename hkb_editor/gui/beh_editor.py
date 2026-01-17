@@ -399,7 +399,7 @@ class BehaviorEditor:
             self._busy = False
 
     def exit_app(self):
-        if not self.beh or not self.beh.can_undo():
+        if not self.beh or (not self.beh.can_undo() and not self.beh.can_redo()):
             # Nothing was loaded or no changes have been made
             self._do_exit()
             return
@@ -1342,7 +1342,7 @@ class BehaviorEditor:
 
             # Pointers
             ptr: HkbPointer
-            for path, ptr in obj.find_fields_by_type(HkbPointer):
+            for path, ptr in obj.find_fields_by_class(HkbPointer):
                 if ":" in path.rsplit("/", maxsplit=1)[-1]:
                     # A path like abc/def:0 means we found a pointer inside a pointer array
                     continue
@@ -1353,7 +1353,7 @@ class BehaviorEditor:
 
             # Arrays
             array: HkbArray
-            for path, array in obj.find_fields_by_type(HkbArray):
+            for path, array in obj.find_fields_by_class(HkbArray):
                 if array.is_pointer_array:
                     add_attach_menu_items(node, path, array)
 
@@ -1414,7 +1414,7 @@ class BehaviorEditor:
 
         parent_record = self.beh.objects[parent]
         parent_ptr: HkbPointer
-        for _, parent_ptr in parent_record.find_fields_by_type(HkbPointer):
+        for _, parent_ptr in parent_record.find_fields_by_class(HkbPointer):
             if parent_ptr.get_value() == node.id:
                 target = parent_ptr.get_target()
                 break
@@ -1507,7 +1507,7 @@ class BehaviorEditor:
                 first_parent = parent_id
 
             parent = self.beh.objects[parent_id]
-            for path, ptr in parent.find_fields_by_type(HkbPointer):
+            for path, ptr in parent.find_fields_by_class(HkbPointer):
                 if ptr.get_value() == object_id:
                     index_match = re.match(r"^(.*):([0-9]+)$", path)
                     if index_match:

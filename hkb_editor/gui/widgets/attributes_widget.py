@@ -242,7 +242,7 @@ class AttributesWidget:
     def regenerate(self):
         revealed = []
 
-        for path, _ in self.record.find_fields_by_type(HkbRecord):
+        for path, _ in self.record.find_fields_by_class(HkbRecord):
             attr = self._attribute_info.get(path)
             if (
                 attr
@@ -251,7 +251,7 @@ class AttributesWidget:
             ):
                 revealed.append(path)
 
-        for path, _ in self.record.find_fields_by_type(HkbArray):
+        for path, _ in self.record.find_fields_by_class(HkbArray):
             attr = self._attribute_info.get(path)
             if (
                 attr

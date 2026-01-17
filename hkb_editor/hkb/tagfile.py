@@ -269,7 +269,7 @@ class Tagfile:
             for idx, node_id in enumerate(path[:-1]):
                 obj: HkbRecord = self.objects[node_id]
                 next_node = path[idx + 1]
-                for attr_path, ptr in obj.find_fields_by_type(HkbPointer):
+                for attr_path, ptr in obj.find_fields_by_class(HkbPointer):
                     if ptr.get_value() == next_node:
                         chain.append(attr_path)
                         break
@@ -364,7 +364,7 @@ class Tagfile:
             record = self.objects[xmlrecord.get("id")]
             ptr: HkbPointer
 
-            for path, ptr in record.find_fields_by_type(HkbPointer):
+            for path, ptr in record.find_fields_by_class(HkbPointer):
                 if ptr.get_value() == object_id:
                     yield (record, path, ptr)
 

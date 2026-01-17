@@ -89,8 +89,8 @@ class HkbInteger(XmlValueHandler):
 
         # No endianness since the int is stored as a string
         format = tagfile.type_registry.get_format(type_id)
-        self.signed = (format & 0x200 != 0)
-        self.byte_size = (format >> 10)
+        self.signed = format & 0x200 != 0
+        self.byte_size = format >> 10
 
         super().__init__(tagfile, element, type_id)
 
@@ -132,14 +132,14 @@ class HkbFloat(XmlValueHandler):
             raise ValueError(f"Invalid element <{element.tag}>")
 
         # Not needed/relevant for now
-        #format = tagfile.type_registry.get_format(type_id)
+        # format = tagfile.type_registry.get_format(type_id)
         # Only matters when reading from the hex representation
-        #self.bigendian = (format & 0x100 != 0)
+        # self.bigendian = (format & 0x100 != 0)
         # Guessed, only have 1525253 to go off right now
         # See https://github.com/The12thAvenger/HKLib/blob/main/HKLib.Serialization/hk2018/Xml/FormatHandlers/FloatFormatHandler.cs#L39
-        #self.size = (format >> 12) & 0xf
+        # self.size = (format >> 12) & 0xf
         # 23: float, 52: double
-        #self.mantissa_bits = format >> 16
+        # self.mantissa_bits = format >> 16
 
         super().__init__(tagfile, element, type_id)
 
@@ -242,14 +242,18 @@ class HkbPointer(XmlValueHandler):
         return val
 
     def set_value(
-        self, value: "HkbPointer | HkbRecord | str", *, must_exist: bool = True, verify: bool = True,
+        self,
+        value: "HkbPointer | HkbRecord | str",
+        *,
+        must_exist: bool = True,
+        verify: bool = True,
     ) -> None:
         oid = None
-        
+
         if isinstance(value, (HkbRecord, HkbPointer)) and not self.will_accept(value):
             raise ValueError(
-                    f"{self.type_name} does not accept value of type {value.type_name}"
-                ) 
+                f"{self.type_name} does not accept value of type {value.type_name}"
+            )
 
         if value is None:
             oid = None
@@ -304,7 +308,9 @@ class HkbArray(XmlValueHandler, Generic[T]):
             elem_type_id = tagfile.type_registry.get_subtype(temp_type)
             temp_type = tagfile.type_registry.get_parent(temp_type)
 
-        elem = HkbXmlElement.new("array", count=str(len(items)), elementtypeid=elem_type_id)
+        elem = HkbXmlElement.new(
+            "array", count=str(len(items)), elementtypeid=elem_type_id
+        )
         elem.extend(item.element for item in items)
 
         return HkbArray(tagfile, elem, type_id)
@@ -323,7 +329,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
         self.max_size = format >> 8
 
         super().__init__(tagfile, element, type_id)
-        self.is_pointer_array = (self.get_item_wrapper() == HkbPointer)
+        self.is_pointer_array = self.get_item_wrapper() == HkbPointer
 
     @property
     def element_type_id(self) -> str:
@@ -542,7 +548,7 @@ class HkbRecord(XmlValueHandler):
 
         if attributes:
             optional = separate_game_specific_attributes(record.type_name, attributes)
-            
+
             for path, val in attributes.items():
                 record.set_field(path, val)
 
@@ -559,7 +565,7 @@ class HkbRecord(XmlValueHandler):
         self, tagfile: Tagfile, type_id: str, xml: HkbXmlElement, object_id: str = None
     ) -> "HkbRecord":
         obj = HkbRecord.new(tagfile, type_id, object_id=object_id)
-        
+
         if xml.tag != "record":
             xml = xml.find("record")
 
@@ -748,19 +754,16 @@ class HkbRecord(XmlValueHandler):
 
         return ret
 
-    def find_fields_by_type(
-        self,
-        field_type: T,
-        *,
-        delve_arrays: bool = True,
+    def find_fields_by_class(
+        self, field_class: T, *, recurse: bool = True
     ) -> Generator[tuple[str, T], None, None]:
-        todo: list[tuple[HkbRecord, str]] = [(self, "")]
 
-        while todo:
-            rec, current_path = todo.pop()
+        def delve_record(
+            rec: HkbRecord, current_path: str
+        ) -> Generator[tuple[str, T], None, None]:
             if not rec:
-                # Record arrays might contain null-pointers
-                continue
+                # Arrays might contain null-pointers
+                return
 
             for field_name in rec.fields:
                 field = rec[field_name]
@@ -769,24 +772,34 @@ class HkbRecord(XmlValueHandler):
                 )
 
                 # Check the field itself first
-                if isinstance(field, field_type):
+                if isinstance(field, field_class):
                     yield (field_path, field)
 
-                # Check if the field has children
+                # Check children
                 if isinstance(field, HkbRecord):
-                    todo.append((field, field_path))
+                    yield from delve_record(field, field_path)
+                elif recurse and isinstance(field, HkbArray):
+                    yield from delve_array(field, field_path)
 
-                elif delve_arrays and isinstance(field, HkbArray):
-                    element_type = field.get_item_wrapper()
-                    if element_type == field_type:
-                        for i, item in enumerate(field):
-                            item_path = f"{field_path}:{i}"
-                            yield (item_path, item)
-                    
-                    if element_type in (HkbRecord, HkbArray):
-                        for i, item in enumerate(field):
-                            item_path = f"{field_path}:{i}"
-                            todo.append((item, item_path))
+        def delve_array(
+            array: HkbArray, array_path: str
+        ) -> Generator[tuple[str, T], None, None]:
+            for i, item in enumerate(array):
+                item_path = f"{array_path}:{i}"
+
+                # Yield matching items
+                if isinstance(item, field_class):
+                    yield (item_path, item)
+
+                # Recurse into records
+                if isinstance(item, HkbRecord):
+                    yield from delve_record(item, item_path)
+
+                # Recurse into nested arrays
+                elif isinstance(item, HkbArray):
+                    yield from delve_array(item, item_path)
+
+        yield from delve_record(self, "")
 
     def __getitem__(self, name: str) -> XmlValueHandler:
         ftype = self.get_field_type(name)
@@ -840,7 +853,7 @@ def get_value_handler(
     }
 
     format = type_registry.get_format(type_id)
-    tp = format_map[format & 0xf]
+    tp = format_map[format & 0xF]
 
     if tp is None:
         raise TypeError(f"Don't know how to handle type_id {type_id} (format={format})")
