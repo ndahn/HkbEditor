@@ -122,7 +122,7 @@ class BehaviorEditor:
         self.canvas: GraphWidget = None
         self.attributes_table: str = None
         self.loaded_file: str = None
-        self.last_save: float = 0.0
+        self.last_save_undo_id: int = -1
         self.selected_roots: set[str] = set()
         self.selected_node: Node = None
 
@@ -270,7 +270,7 @@ class BehaviorEditor:
             dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
 
             self.loaded_file = file_path
-            self.last_save = 0.0
+            self.last_save_undo_id = -1
             self.canvas.clear()
             self._update_roots()
 
@@ -289,7 +289,7 @@ class BehaviorEditor:
 
     def file_save(self):
         self._do_write_to_file(self.loaded_file)
-        self.last_save = time()
+        self.last_save_undo_id = self.beh.top_undo_id()
 
     def file_save_as(self) -> bool:
         ret = save_file_dialog(
@@ -301,7 +301,7 @@ class BehaviorEditor:
         if ret:
             self._do_write_to_file(ret)
             self.loaded_file = ret
-            self.last_save = time()
+            self.last_save = self.beh.top_undo_id()
             return True
 
         return False
@@ -411,12 +411,10 @@ class BehaviorEditor:
             no_saved_settings=True,
             on_close=lambda: dpg.delete_item(wnd),
         ) as wnd:
-            if self.last_save == 0.0:
-                dpg.add_text("You have not saved yet. Exit anyways?")
+            if self.last_save_undo_id != self.beh.top_undo_id():
+                dpg.add_text("You have unsaved changes. Exit anyways?")
             else:
-                dpg.add_text(
-                    f"It has been {self.last_save:.0f}s since your last save. Exit?"
-                )
+                dpg.add_text("Are you sure you want to exit?")
 
             dpg.add_separator()
 
