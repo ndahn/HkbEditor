@@ -1281,6 +1281,7 @@ class CommonActionsMixin:
         event: Event | str = None,
         transition_effect: HkbRecord | str = None,
         copy_transition_effect: bool = False,
+        flags: TransitionInfoFlags = 3584,
     ) -> HkbRecord:
         """Add a state to a statemachine and setup a wildcard transition for it.
 
@@ -1297,7 +1298,9 @@ class CommonActionsMixin:
         transition_effect : HkbRecord | str, optional
             The transition effect to use for the wildcard transition.
         copy_transition_effect : bool, optional
-            If True and a transition effect is provided, a copy of the effect is created with a new name based on the event's name (which is how FS often does it). 
+            If True and a transition effect is provided, a copy of the effect is created with a new name based on the event's name (which is how FS often does it).
+        flags : TransitionInfoFlags, optional
+            Flags of the transition.
 
         Returns
         -------
@@ -1321,7 +1324,11 @@ class CommonActionsMixin:
                 )
 
             self.register_wildcard_transition(
-                statemachine, state_id, event, transition_effect=transition_effect
+                statemachine,
+                state_id,
+                event,
+                transition_effect=transition_effect,
+                flags=flags,
             )
 
         return state

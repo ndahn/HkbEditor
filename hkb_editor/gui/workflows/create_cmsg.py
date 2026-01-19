@@ -11,8 +11,8 @@ from hkb_editor.hkb.hkb_enums import (
 from hkb_editor.hkb.hkb_flags import (
     hkbStateMachine_TransitionInfoArray_Flags as TransitionInfoFlags,
 )
-from hkb_editor.templates.common import CommonActionsMixin
-from hkb_editor.gui.dialogs import select_event, select_animation, select_object
+from hkb_editor.templates.common import CommonActionsMixin, Event, Animation
+from hkb_editor.gui.dialogs import select_object
 from hkb_editor.gui.helpers import (
     center_window,
     create_flag_checkboxes,
@@ -47,8 +47,31 @@ def create_cmsg_dialog(
         tag = f"create_cmsg_dialog_{dpg.generate_uuid()}"
 
     util = CommonActionsMixin(behavior)
-    types = behavior.type_registry
-    transition_effect: HkbRecord = None
+    sm_type = behavior.type_registry.find_first_type_by_name("hkbStateMachine")
+    statemachines = list(behavior.find_objects_by_type(sm_type))
+
+    if active_statemachine_id:
+        default_sm = behavior.objects[active_statemachine_id]
+    else:
+        default_sm = statemachines[0]
+
+    values = {
+        "statemachine": default_sm["name"].get_value(),
+        "base_name": "",
+        "animation": "",
+        "event": "",
+        "playback_mode": PlaybackMode.SINGLE_PLAY,
+        "animation_end_event_type": AnimeEndEventType.NONE,
+        "offset_type": OffsetType.IDLE_CATEGORY,
+        "enable_tae": True,
+        "enable_script": True,
+        "transition_effect": None,
+        "copy_transition_effect": True,
+        "transition_flags": 3584,
+    }
+
+    def on_value_change(sender: str, value: Any, key: Any):
+        values[key] = value
 
     def show_warning(msg: str) -> None:
         dpg.set_value(f"{tag}_notification", msg)
@@ -59,56 +82,46 @@ def create_cmsg_dialog(
         dpg.hide_item(f"{tag}_notification")
 
         # No need to verify, okay should be disabled when values are invalid
-        statemachine_val: str = dpg.get_value(f"{tag}_statemachine")
-        base_name: str = dpg.get_value(f"{tag}_base_name")
-        animation_val: str = dpg.get_value(f"{tag}_animation")
-        event_val: str = dpg.get_value(f"{tag}_event")
-        playback_mode_val: str = dpg.get_value(f"{tag}_playback_mode")
-        animation_end_event_type_val: str = dpg.get_value(
-            f"{tag}_animation_end_event_type"
-        )
-        offset_type_val: str = dpg.get_value(f"{tag}_offset_type")
-        enable_tae: bool = dpg.get_value(f"{tag}_enable_tae")
-        enable_script: bool = dpg.get_value(f"{tag}_enable_script")
+        statemachine_val: HkbRecord = values["statemachine"]
+        base_name: str = values["base_name"]
+        animation: Animation = values["animation"]
+        event: Event = values["event"]
+        playback_mode_val: str = values["playback_mode"]
+        animation_end_event_type_val: str = values["animation_end_event_type"]
+        offset_type_val: str = values["offset_type"]
+        enable_tae: bool = values["enable_tae"]
+        enable_script: bool = values["enable_script"]
+        transition_effect: HkbRecord = values["transition_effect"]
+        copy_transition_effect: bool = values["copy_transition_effect"]
+        transition_flags: TransitionInfoFlags = values["transition_flags"]
+
+        playback_mode = PlaybackMode[playback_mode_val]
+        animation_end_event_type = AnimeEndEventType[animation_end_event_type_val]
+        offset_type = OffsetType[offset_type_val]
+
+        if not statemachine_val:
+            show_warning("Statemachine not set")
+            return
 
         if not base_name:
             show_warning("Base name not set")
             return
 
-        if not animation_val:
+        if not animation:
             show_warning("Animation not set")
             return
 
-        if not event_val:
+        if not event:
             show_warning("Event not set")
             return
-
-        # Resolve values
-        statemachine_type = types.find_first_type_by_name("hkbStateMachine")
-        statemachine_id = next(
-            behavior.query(f"type_id={statemachine_type} name={statemachine_val}")
-        ).object_id
-        statemachine = behavior.objects[statemachine_id]
-
-        # Must be unique within the statemachine
+        
+        statemachine = next(behavior.query(f"name='{statemachine_val}' type_name=hkbStateMachine"))
         new_state_id = util.get_next_state_id(statemachine)
 
-        cmsg_name = base_name
-        if base_name.endswith("_CMSG"):
-            base_name = base_name[:-5]
-        if not cmsg_name.endswith("_CMSG"):
-            cmsg_name += "_CMSG"
-
         with behavior.transaction():
-            playback_mode = PlaybackMode[playback_mode_val].value
-            animation_end_event_type = AnimeEndEventType[
-                animation_end_event_type_val
-            ].value
-            offset_type = OffsetType[offset_type_val].value
-
             state, cmsg, clip = util.create_state_chain(
                 new_state_id,
-                animation_val,
+                animation,
                 base_name,
                 cmsg_kwargs={
                     "animeEndEventType": animation_end_event_type,
@@ -122,14 +135,14 @@ def create_cmsg_dialog(
             util.add_wildcard_state(
                 statemachine,
                 state,
-                event_val,
+                event,
                 transition_effect=transition_effect,
+                copy_transition_effect=copy_transition_effect,
+                flags=transition_flags.value,
             )
 
         callback(dialog, (state, cmsg, clip), user_data)
         dpg.delete_item(dialog)
-
-    dialog_values = {}
 
     # Dialog content
     with dpg.window(
@@ -142,102 +155,79 @@ def create_cmsg_dialog(
         tag=tag,
     ) as dialog:
         # Statemachine
-        sm_type = types.find_first_type_by_name("hkbStateMachine")
-        statemachines = list(behavior.find_objects_by_type(sm_type))
-
-        if active_statemachine_id:
-            default_sm = behavior.objects[active_statemachine_id]
-        else:
-            default_sm = statemachines[0]
-
-        def on_value_change(sender: str, value: Any, user_data: Any):
-            dialog_values[sender] = value
-
         create_value_widget(
             behavior,
-            Annotated[HkbRecord, "hkbStateMachine"],
+            str,
             "Statemachine",
             on_value_change,
-            default=default_sm.object_id,
+            default=values["statemachine"],
+            choices=[sm["name"].get_value() for sm in statemachines],
+            user_data="statemachine",
             tag=f"{tag}_statemachine",
         )
         with dpg.tooltip(dpg.last_item()):
             dpg.add_text("The StateMachine the CMSG will be linked to")
 
         # Base name
-        dpg.add_input_text(
-            default_value="",
-            label="Base Name",
+        create_value_widget(
+            behavior, 
+            str,
+            "Base Name",
+            on_value_change,
+            default=values["base_name"],
+            user_data="base_name",
             tag=f"{tag}_base_name",
         )
         with dpg.tooltip(dpg.last_item()):
             dpg.add_text("Used for the CMSG, ClipGenerator and TransitionInfo")
 
         # CMSG event
-        with dpg.group(horizontal=True):
-
-            def on_event_selected(sender: str, event_id: int, user_data: Any):
-                event_name = behavior.get_event(event_id)
-                dpg.set_value(f"{tag}_event", event_name)
-
-            dpg.add_input_text(
-                default_value="",
-                tag=f"{tag}_event",
-            )
-            with dpg.tooltip(dpg.last_item()):
-                dpg.add_text("Used to activate the new state from HKS")
-
-            dpg.add_button(
-                arrow=True,
-                direction=dpg.mvDir_Right,
-                callback=lambda: select_event(
-                    behavior, on_event_selected, allow_clear=False
-                ),
-            )
-
-            dpg.add_text("CMSG Event")
+        create_value_widget(
+            behavior,
+            Event,
+            "Event",
+            on_value_change,
+            default=values["event"],
+            user_data="event",
+            tag=f"{tag}_event",
+        )
+        with dpg.tooltip(dpg.last_item()):
+            dpg.add_text("Used to activate the new state from HKS")
 
         # CMSG offset type
-        dpg.add_combo(
-            [e.name for e in OffsetType],
-            default_value=OffsetType.IDLE_CATEGORY.name,
-            label="Offset Type",
+        create_value_widget(
+            behavior,
+            OffsetType,
+            "Offset Type",
+            on_value_change,
+            default=values["offset_type"],
+            user_data="offset_type",
             tag=f"{tag}_offset_type",
         )
-
-        with dpg.tooltip(dpg.last_container()):
+        with dpg.tooltip(dpg.last_item()):
             dpg.add_text("How the CMSG picks the clip to activate")
 
         # ClipGenerator animation
-        with dpg.group(horizontal=True):
-
-            def on_animation_selected(sender: str, animation_id: int, user_data: Any):
-                animation_name = behavior.get_animation(animation_id)
-                dpg.set_value(f"{tag}_animation", animation_name)
-
-            dpg.add_input_text(
-                default_value="",
-                hint="aXXX_YYYYYY",
-                tag=f"{tag}_animation",
-            )
-            with dpg.tooltip(dpg.last_item()):
-                dpg.add_text("Animation ID the ClipGenerator uses")
-
-            dpg.add_button(
-                arrow=True,
-                direction=dpg.mvDir_Right,
-                callback=lambda: select_animation(
-                    behavior, on_animation_selected, allow_clear=False
-                ),
-            )
-
-            dpg.add_text("Clip Animation")
+        create_value_widget(
+            behavior,
+            Animation,
+            "Animation",
+            on_value_change,
+            default=values["animation"],
+            user_data="animation",
+            tag=f"{tag}_animation",
+        )
+        with dpg.tooltip(dpg.last_item()):
+            dpg.add_text("Animation ID the ClipGenerator uses")
 
         # Clip playback mode
-        dpg.add_combo(
-            [e.name for e in PlaybackMode],
-            default_value=PlaybackMode.SINGLE_PLAY.name,
-            label="Playback Mode",
+        create_value_widget(
+            behavior,
+            PlaybackMode,
+            "Playback Mode",
+            on_value_change,
+            default=values["playback_mode"],
+            user_data="playback_mode",
             tag=f"{tag}_playback_mode",
         )
 
@@ -245,88 +235,86 @@ def create_cmsg_dialog(
 
         with dpg.tree_node(label="Advanced"):
             # AnimeEndEventType
-            dpg.add_combo(
-                [e.name for e in AnimeEndEventType],
-                default_value=AnimeEndEventType.NONE.name,
-                label="Animation End Event Type",
-                tag=f"{tag}_animation_end_event_type",
+            create_value_widget(
+                behavior,
+                AnimeEndEventType,
+                "Animation End Action",
+                on_value_change,
+                default=values["animation_end_event_type"],
+                user_data="animation_end_event_type",
+                tag=f"{tag}_animation_end_event_type"
             )
-
-            with dpg.tooltip(dpg.last_container()):
+            with dpg.tooltip(dpg.last_item()):
                 dpg.add_text("What to do when the animation ends")
 
             # CMSG enable TAE
-            dpg.add_checkbox(
-                label="Enable TAE", default_value=True, tag=f"{tag}_enable_tae"
+            create_value_widget(
+                behavior,
+                bool,
+                "Enable TAE",
+                on_value_change,
+                default=values["enable_tae"],
+                user_data="enable_tae",
+                tag=f"{tag}_enable_tae",
             )
-
-            with dpg.tooltip(dpg.last_container()):
+            with dpg.tooltip(dpg.last_item()):
                 dpg.add_text("Whether the CMSG should use the TAE")
 
             # CMSG enable script
-            dpg.add_checkbox(
-                label="Enable Script", default_value=True, tag=f"{tag}_enable_script"
+            create_value_widget(
+                behavior,
+                bool,
+                "Enable Script",
+                on_value_change,
+                default=values["enable_script"],
+                user_data="enable_script",
+                tag=f"{tag}_enable_script",
             )
-
-            with dpg.tooltip(dpg.last_container()):
+            with dpg.tooltip(dpg.last_item()):
                 dpg.add_text(
                     "Whether the CMSG should call HKS functions (onUpdate and co.)"
                 )
 
             # Transition effect
-            with dpg.group(horizontal=True):
-
-                def on_transition_selected(
-                    sender: str, transition: HkbRecord, user_data: Any
-                ):
-                    nonlocal transition_effect
-                    transition_effect = transition
-                    name = transition["name"].get_value() if transition else ""
-                    dpg.set_value(f"{tag}_transition_effect", name)
-
-                transition_effect_type_id = (
-                    behavior.type_registry.find_first_type_by_name(
-                        "hkbTransitionEffect"
-                    )
-                )
-
-                default_transition = util.get_default_transition_effect()
-
-                dpg.add_input_text(
-                    readonly=True,
-                    default_value=(
-                        default_transition["name"].get_value()
-                        if default_transition
-                        else ""
-                    ),
-                    tag=f"{tag}_transition_effect",
-                )
-                dpg.add_button(
-                    arrow=True,
-                    direction=dpg.mvDir_Right,
-                    callback=lambda s, a, u: select_object(
-                        behavior,
-                        transition_effect_type_id,
-                        on_transition_selected,
-                    ),
-                )
-                dpg.add_text("Transition Effect")
-
-            with dpg.tooltip(dpg.last_container()):
+            create_value_widget(
+                behavior,
+                Annotated[HkbRecord, "hkbTransitionEffect"],
+                "Transition Effect",
+                on_value_change,
+                default=values["transition_effect"],
+                user_data="transition_effect",
+                tag=f"{tag}_transition_effect",
+            )
+            with dpg.tooltip(dpg.last_item()):
                 dpg.add_text(
                     "Decides how animations are blended when transitioning to the new state"
                 )
 
+            # Make copy of transition effect
+            create_value_widget(
+                behavior,
+                bool,
+                "Copy Transition Effect",
+                on_value_change,
+                default=values["copy_transition_effect"],
+                user_data="copy_transition_effect",
+                tag=f"{tag}_copy_transition_effect",
+            )
+            with dpg.tooltip(dpg.last_item()):
+                dpg.add_text(
+                    "Make a copy of the transition effect instead of reusing it"
+                )
+
             # TransitionInfo flags
             with dpg.tree_node(label="Transition Flags"):
-                with dpg.tooltip(dpg.last_container()):
-                    dpg.add_text("Flags of the new wildcard transition")
-
-                create_flag_checkboxes(
+                create_value_widget(
+                    behavior,
                     TransitionInfoFlags,
-                    None,
-                    base_tag=f"{tag}_transition_flags",
-                    active_flags=3584,
+                    "Transition Flags",
+                    on_value_change,
+                    default=values["transition_flags"],
+                    user_data="transition_flags",
+                    tag=f"{tag}_transition_flags",
                 )
 
         dpg.add_spacer(height=3)
