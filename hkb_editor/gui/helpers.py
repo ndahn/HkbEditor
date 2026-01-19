@@ -320,9 +320,10 @@ def create_value_widget(
         with dpg.group(horizontal=True, tag=tag):
             dpg.add_input_text(
                 # readonly=True,
-                default_value=default if default is not None else "",
+                default_value=str(default) if default is not None else "",
                 tag=f"{tag}_input_helper",
             )
+            dpg.bind_item_theme(dpg.last_item(), style.pointer_attribute_theme)
             dpg.add_button(
                 arrow=True,
                 direction=dpg.mvDir_Right,

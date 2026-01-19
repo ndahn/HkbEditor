@@ -589,7 +589,7 @@ class CommonActionsMixin:
             Related to nightfarer animation layers, only present in Nightreign.
         kwargs : dict, optional
             Additional attributes for the record.
-        
+
         Returns
         -------
         HkbRecord
@@ -758,8 +758,8 @@ class CommonActionsMixin:
         enable: bool = True,
         **kwargs,
     ) -> HkbRecord:
-        """Create a new statemachine state. 
-        
+        """Create a new statemachine state.
+
         Every statemachine can have only one state active at a time. However, it is possible to have multiple statemachines active by using layered animations (e.g. blending or half blends, see [new_blender_generator][] and [new_layer_generator][]).
 
         FromSoft usually uses wildcard transitions, i.e. every state can transition to any state within the same statemachine with no prior conditions. However, states may also define dedicated transitions to other states.
@@ -1086,71 +1086,6 @@ class CommonActionsMixin:
     # Some typical tasks
     ###
 
-    def register_wildcard_transition(
-        self,
-        statemachine: HkbRecord | str,
-        toStateId: int,
-        eventId: Event | str | int,
-        *,
-        transition_effect: HkbRecord | str = None,
-        flags: TransitionInfoFlags = 3584,
-        # ALLOW_SELF_TRANSITION_BY_TRANSITION_FROM_ANY_STATE,
-        # IS_LOCAL_WILDCARD
-        # IS_GLOBAL_WILDCARD
-        **kwargs,
-    ) -> None:
-        """Sets up a wildcard transition for a given statemachine's state, i.e. a way to transition to this state from any other state.
-
-        Parameters
-        ----------
-        statemachine : HkbRecord | str
-            The statemachine to setup the wildcard transition for.
-        toStateId : int
-            ID of the target state.
-        eventId : Event | str | int
-            Event that activates this transition.
-        transition_effect : HkbRecord | str, optional
-            Effect to use when this transition activates. If None will use the [get_default_transition_effect][].
-        flags : TransitionInfoFlags, optional
-            Additional flags for this transition.
-        """
-        statemachine = self.resolve_object(statemachine)
-        eventId = self.event(eventId)
-
-        if not transition_effect:
-            transition_effect = self.get_default_transition_effect()
-        else:
-            transition_effect = self.resolve_object(transition_effect)
-
-        kwargs.setdefault("triggerInterval/enterEventId", -1)
-        kwargs.setdefault("triggerInterval/exitEventId", -1)
-        kwargs.setdefault("initiateInterval/enterEventId", -1)
-        kwargs.setdefault("initiateInterval/exitEventId", -1)
-
-        wildcards_ptr: HkbPointer = statemachine["wildcardTransitions"]
-        if wildcards_ptr.is_set():
-            wildcards = wildcards_ptr.get_target()
-        else:
-            wildcards = self.new_record(
-                "hkbStateMachine::TransitionInfoArray",
-                "<new>",
-                transitions=[],
-            )
-            wildcards_ptr.set_value(wildcards)
-
-        transitions: HkbArray = wildcards["transitions"]
-        transitions.append(
-            self.new_record(
-                "hkbStateMachine::TransitionInfo",
-                None,  # Not a top-level object
-                toStateId=toStateId,
-                eventId=eventId.index,
-                transition=transition_effect,
-                flags=flags,
-                **kwargs,
-            )
-        )
-
     def get_default_transition_effect(self) -> HkbRecord:
         """Returns the most commonly linked CustomTransitionEffect. In Elden Ring and Nightreign this object will be called DefaultTransition.
 
@@ -1222,7 +1157,6 @@ class CommonActionsMixin:
 
         return (state, cmsg, clip)
 
-
     def create_blend_chain(
         self,
         animation: Animation | str | int,
@@ -1242,7 +1176,7 @@ class CommonActionsMixin:
         animation : Animation | str | int
             Animation to use for the clip.
         blend_weight : int, optional
-            Blend weight of the BlenderGeneratorChild. 
+            Blend weight of the BlenderGeneratorChild.
         cmsg_name : str, optional
             Name of the CMSG, typically ends with "_CMSG".
         offsetType : CmsgOffsetType, optional
@@ -1261,12 +1195,133 @@ class CommonActionsMixin:
             cmsg_kwargs = {}
         cmsg_kwargs.setdefault("name", cmsg_name)
         cmsg_kwargs.setdefault("generators", [clip])
-        cmsg_kwargs.setdefault("offsetType", offsetType,)
-        cmsg_kwargs.setdefault("animeEndEventType", animeEndEventType,)
+        cmsg_kwargs.setdefault(
+            "offsetType",
+            offsetType,
+        )
+        cmsg_kwargs.setdefault(
+            "animeEndEventType",
+            animeEndEventType,
+        )
 
-        cmsg = self.new_cmsg(animation.anim_id,**cmsg_kwargs)
+        cmsg = self.new_cmsg(animation.anim_id, **cmsg_kwargs)
         blend = self.new_blender_generator_child(cmsg, weight=blend_weight)
 
         return (blend, cmsg, clip)
 
+    def register_wildcard_transition(
+        self,
+        statemachine: HkbRecord | str,
+        toStateId: int,
+        eventId: Event | str | int,
+        *,
+        transition_effect: HkbRecord | str = None,
+        flags: TransitionInfoFlags = 3584,
+        # ALLOW_SELF_TRANSITION_BY_TRANSITION_FROM_ANY_STATE,
+        # IS_LOCAL_WILDCARD
+        # IS_GLOBAL_WILDCARD
+        **kwargs,
+    ) -> None:
+        """Sets up a wildcard transition for a given statemachine's state, i.e. a way to transition to this state from any other state.
 
+        Parameters
+        ----------
+        statemachine : HkbRecord | str
+            The statemachine to setup the wildcard transition for.
+        toStateId : int
+            ID of the target state.
+        eventId : Event | str | int
+            Event that activates this transition.
+        transition_effect : HkbRecord | str, optional
+            Effect to use when this transition activates. If None will use the [get_default_transition_effect][].
+        flags : TransitionInfoFlags, optional
+            Additional flags for this transition.
+        """
+        statemachine = self.resolve_object(statemachine)
+        eventId = self.event(eventId)
+
+        if not transition_effect:
+            transition_effect = self.get_default_transition_effect()
+        else:
+            transition_effect = self.resolve_object(transition_effect)
+
+        kwargs.setdefault("triggerInterval/enterEventId", -1)
+        kwargs.setdefault("triggerInterval/exitEventId", -1)
+        kwargs.setdefault("initiateInterval/enterEventId", -1)
+        kwargs.setdefault("initiateInterval/exitEventId", -1)
+
+        wildcards_ptr: HkbPointer = statemachine["wildcardTransitions"]
+        if wildcards_ptr.is_set():
+            wildcards = wildcards_ptr.get_target()
+        else:
+            wildcards = self.new_record(
+                "hkbStateMachine::TransitionInfoArray",
+                "<new>",
+                transitions=[],
+            )
+            wildcards_ptr.set_value(wildcards)
+
+        transitions: HkbArray = wildcards["transitions"]
+        transitions.append(
+            self.new_record(
+                "hkbStateMachine::TransitionInfo",
+                None,  # Not a top-level object
+                toStateId=toStateId,
+                eventId=eventId.index,
+                transition=transition_effect,
+                flags=flags,
+                **kwargs,
+            )
+        )
+
+    def add_wildcard_state(
+        self,
+        statemachine: HkbRecord | str,
+        state: HkbRecord | str,
+        event: Event | str = None,
+        transition_effect: HkbRecord | str = None,
+        copy_transition_effect: bool = False,
+    ) -> HkbRecord:
+        """Add a state to a statemachine and setup a wildcard transition for it.
+
+        Goes really well with create_state_chain!
+
+        Parameters
+        ----------
+        statemachine : HkbRecord | str
+            The statemachine to add the state to.
+        state : HkbRecord | str
+            The state to add, which should not have been added elsewhere yet. Note that if this is a string a new state with that name will be created.
+        event : Event | str, optional
+            The wildcard transition event. If None, no wildcard transition will be setup.
+        transition_effect : HkbRecord | str, optional
+            The transition effect to use for the wildcard transition.
+        copy_transition_effect : bool, optional
+            If True and a transition effect is provided, a copy of the effect is created with a new name based on the event's name (which is how FS often does it). 
+
+        Returns
+        -------
+        HkbRecord
+            The state that was added to the statemachine.
+        """
+        statemachine = self.resolve_object(statemachine)
+
+        if isinstance(state, str):
+            state_id = self.get_next_state_id(statemachine)
+            state = self.new_statemachine_state(state_id)
+        else:
+            state_id = state["stateId"].get_value()
+
+        statemachine["states"].append(state)
+
+        if event:
+            if copy_transition_effect and transition_effect:
+                transition_effect = self.make_copy(
+                    transition_effect, name=self.event(event).name
+                )
+
+            self.register_wildcard_transition(
+                statemachine, state_id, event, transition_effect=transition_effect
+            )
+
+        return state
