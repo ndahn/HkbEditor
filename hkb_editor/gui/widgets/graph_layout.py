@@ -65,7 +65,7 @@ class GraphLayout:
 
 
 @dataclass
-class HorizontalGraphLayout:
+class HorizontalGraphLayout(GraphLayout):
     def get_pos_for_node(
         self, graph: nx.DiGraph, node: Node, nodemap: dict[str, Node]
     ) -> tuple[float, float]:
