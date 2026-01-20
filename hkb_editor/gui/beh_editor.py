@@ -1886,7 +1886,7 @@ class BehaviorEditor:
         def on_results(sender: str, matches: list[HkbRecord], user_data: Any) -> None:
             self.canvas.clear_highlights()
             for obj in matches:
-                self.canvas.set_highlight(obj.object_id, True, color=style.red)
+                self.canvas.set_highlight(obj.object_id, color=style.red)
 
         search_objects_dialog(
             self.beh,

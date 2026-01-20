@@ -520,7 +520,7 @@ class GraphWidget:
         if get_config().single_branch_mode:
             if node != self.selected_node:
                 if self.selected_node:
-                    self.set_highlight(self.selected_node, False)
+                    self.set_highlight(self.selected_node, style.white)
                 self.reveal(node)
         else:
             if node == self.selected_node:
@@ -528,12 +528,12 @@ class GraphWidget:
                 return
             else:
                 if self.selected_node:
-                    self.set_highlight(self.selected_node, False)
+                    self.set_highlight(self.selected_node, style.white)
                 self._unfold_node(node)
 
         self.selected_node = node
         self._unfold_node(node)
-        self.set_highlight(node, True)
+        self.set_highlight(node, style.blue)
 
         if self.on_node_selected:
             self.on_node_selected(node)
@@ -542,7 +542,7 @@ class GraphWidget:
         if self.selected_node is None:
             return
 
-        self.set_highlight(self.selected_node, False)
+        self.set_highlight(self.selected_node, style.white)
         self._fold_node(self.selected_node)
         self.selected_node = None
 
@@ -554,16 +554,13 @@ class GraphWidget:
             if node.visible:
                 dpg.configure_item(f"{self.tag}_node_{node.id}_box", color=style.white)
 
-    def set_highlight(self, node: Node | str, highlighted: bool, color: tuple = style.blue) -> None:
+    def set_highlight(self, node: Node | str, color: tuple = style.white) -> None:
         if isinstance(node, Node):
             node = node.id
 
         if node not in self.nodes or not self.nodes[node].visible:
             return
 
-        if not highlighted:
-            color = style.white
-        
         dpg.configure_item(f"{self.tag}_node_{node}_box", color=color)
 
     def set_hovered(self, node: Node | str, hovered: bool) -> None:
