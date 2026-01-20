@@ -207,12 +207,21 @@ class GraphWidget:
         bbox = self.get_canvas_content_bbox()
         content_w = bbox[2]
         content_h = bbox[3]
+
+        if content_w == 0 or content_h == 0:
+            # Content not ready yet
+            return
+
         content_center_x = bbox[0] + content_w / 2
         content_center_y = bbox[1] + content_h / 2
 
         canvas_w, canvas_h = dpg.get_item_rect_size(self.tag)
         canvas_center_x = canvas_w / 2
         canvas_center_y = canvas_h / 2
+
+        if canvas_w == 0 or canvas_h == 0:
+            # Canvas not fully drawn yet
+            return
 
         # Calculate zoom level to fit content
         zoom_w = math.log(canvas_w / content_w, self.layout.zoom_factor)
