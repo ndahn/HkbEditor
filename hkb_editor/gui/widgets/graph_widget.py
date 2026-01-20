@@ -19,7 +19,10 @@ class GraphWidget:
         on_node_selected: Callable[[Node], None] = None,
         node_menu_func: Callable[[Node], None] = None,
         get_node_frontpage: Callable[
-            [str], str | list[str] | list[tuple[str, tuple[int, int, int, int]]]
+            [Node], str | list[str] | list[tuple[str, tuple[int, int, int, int]]]
+        ] = None,
+        get_node_tooltip: Callable[
+            [Node], list[str] | list[tuple[str, tuple[int, int, int, int]]]
         ] = None,
         get_edge_label: Callable[[Node, Node], str] = None,
         draw_edges: bool = True,
@@ -44,6 +47,7 @@ class GraphWidget:
         self.on_node_selected = on_node_selected
         self.node_menu_func = node_menu_func
         self.get_node_frontpage = get_node_frontpage
+        self.get_node_tooltip = get_node_tooltip
         self.get_edge_label = get_edge_label
         self.draw_edges = draw_edges
         self.edge_style = edge_style
@@ -250,6 +254,18 @@ class GraphWidget:
                 dpg.add_draw_node(tag=f"{self.tag}_edge_layer")
                 dpg.add_draw_node(tag=f"{self.tag}_node_layer")
 
+        dpg.add_window(
+            autosize=True,
+            no_title_bar=True,
+            no_move=True,
+            no_resize=True,
+            no_scrollbar=True,
+            no_saved_settings=True,
+            no_focus_on_appearing=True,
+            show=False,
+            tag=f"{self.tag}_tooltip",
+        )
+
         with dpg.handler_registry(tag=f"{self.tag}_handler_registry"):
             dpg.add_mouse_release_handler(
                 dpg.mvMouseButton_Left, callback=self._on_left_click
@@ -407,6 +423,8 @@ class GraphWidget:
         else:
             node = None
 
+        hover_changed = (self.hovered_node != node)
+
         if self.hovered_node:
             self.set_hovered(self.hovered_node, False)
             for n in nx.all_neighbors(self.graph, self.hovered_node.id):
@@ -422,6 +440,25 @@ class GraphWidget:
                 if neighbor.visible:
                     self.set_hovered(n, True)
                     self._set_edge_highlight(node, neighbor, True)
+
+            if self.get_node_tooltip:
+                if hover_changed:
+                    dpg.delete_item(f"{self.tag}_tooltip", children_only=True)
+
+                    hover_content = self.get_node_tooltip(node)
+                    if hover_content:
+                        for line in hover_content:
+                            color = style.white
+                            if isinstance(line, tuple):
+                                line, color = line
+                            dpg.add_text(line, parent=f"{self.tag}_tooltip", color=color)
+                
+                if len(dpg.get_item_children(f"{self.tag}_tooltip", 1)) > 0:
+                    mx, my = dpg.get_mouse_pos()
+                    dpg.set_item_pos(f"{self.tag}_tooltip", (mx + 20, my + 20))
+                    dpg.show_item(f"{self.tag}_tooltip")
+        else:
+            dpg.hide_item(f"{self.tag}_tooltip")
 
         self.hovered_node = node
 
