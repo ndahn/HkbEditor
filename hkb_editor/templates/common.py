@@ -25,6 +25,12 @@ class Variable:
     index: int
     name: str
 
+    def __eq__(self, other: Any):
+        return str(other) == str(self)
+
+    def __str__(self):
+        return self.name
+
     def __repr__(self) -> str:
         return f"Variable '{self.name}' ({self.index})"
 
@@ -33,6 +39,12 @@ class Variable:
 class Event:
     index: int
     name: str
+
+    def __eq__(self, other: Any):
+        return str(other) == str(self)
+
+    def __str__(self):
+        return self.name
 
     def __repr__(self) -> str:
         return f"Event '{self.name}' ({self.index})"
@@ -48,6 +60,10 @@ class Animation:
     def make_name(cls, category: int, anim_id: int) -> str:
         return f"a{category:03d}_{anim_id:06d}"
 
+    @classmethod
+    def is_valid_name(cls, name: str) -> bool:
+        return bool(re.match(r"a[0-9]{3}_[0-9]{6}", name))
+
     @property
     def category(self) -> int:
         """the X part of aXXX_YYYYYY without leading zeros."""
@@ -57,6 +73,12 @@ class Animation:
     def anim_id(self) -> int:
         """The Y part of aXXX_YYYYYY without leading zeros."""
         return int(self.name.split("_")[-1])
+
+    def __eq__(self, other: Any):
+        return str(other) == str(self)
+
+    def __str__(self) -> str:
+        return self.name
 
     def __repr__(self) -> str:
         return f"Animation '{self.name}' ({self.index})"

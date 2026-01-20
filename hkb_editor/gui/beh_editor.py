@@ -68,7 +68,7 @@ from .tools import (
 )
 from .workflows.aliases import AliasManager, AliasMap
 from .workflows.create_cmsg import create_cmsg_dialog
-from .workflows.register_clip import register_clip_dialog
+from .workflows.register_clip import register_clips_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
@@ -560,10 +560,10 @@ class BehaviorEditor:
                 callback=self.open_create_object_dialog,
             )
             dpg.add_menu_item(
-                label="Register Clip...", callback=self.open_register_clip_dialog
+                label="Create Slot...", callback=self.open_create_cmsg_dialog
             )
             dpg.add_menu_item(
-                label="Create CMSG...", callback=self.open_create_cmsg_dialog
+                label="Register Clips...", callback=self.open_register_clip_dialog
             )
 
             dpg.add_separator()
@@ -1981,21 +1981,32 @@ class BehaviorEditor:
             return
 
         def on_clip_registered(
-            sender: str, records: tuple[HkbRecord, HkbRecord], user_data: Any
+            sender: str, records: tuple[HkbRecord, list[HkbRecord]], user_data: Any
         ):
-            cmsg, clip = records
+            cmsg, clips = records
 
             # This is a bit ugly, but so is adding more stuff to ids
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
                 self.add_pinned_object(cmsg)
-                self.add_pinned_object(clip)
+                for clip in clips:
+                    self.add_pinned_object(clip)
 
-            self.jump_to_object(clip)
+            self.jump_to_object(cmsg)
 
-        register_clip_dialog(
+        active_cmsg = None
+        if self.selected_node:
+            obj = self.beh.objects[self.selected_node.id]
+            if obj.type_name == "hkbClipGenerator":
+                parent_id = next(self.canvas.graph.predecessors(obj.object_id), None)
+                obj = self.beh.objects.get(parent_id)
+            if obj.type_name == "CustomManualSelectorGenerator":
+                active_cmsg = obj
+
+        register_clips_dialog(
             self.beh,
             on_clip_registered,
+            active_cmsg=active_cmsg,
             tag=tag,
         )
 
@@ -2028,7 +2039,7 @@ class BehaviorEditor:
         create_cmsg_dialog(
             self.beh,
             on_cmsg_created,
-            active_statemachine_id=active_sm.object_id if active_sm else None,
+            active_statemachine=active_sm.object_id if active_sm else None,
             tag=tag,
         )
 
