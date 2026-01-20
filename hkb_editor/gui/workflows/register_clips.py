@@ -190,7 +190,6 @@ def register_clips_dialog(
                 user_data="flags",
             )
 
-        # TODO instructions
         instructions = """\
 Registers one or more animations in an existing CMSG. All animations should have the same ID (the Y part of aXXX_YYYYYY), and the ID should be compatible with the CMSG's animId.
 
