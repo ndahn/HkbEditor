@@ -36,6 +36,7 @@ nav:
   - HowTo:
     - First Steps: howto/first_steps.md
     - Basic Use: howto/basics.md
+    - Behaviors & HKS: howto/hks.md
     - Tools:
       - Event Listener: howto/tools/event_listener.md
       - Mirror Skeleton: howto/tools/mirror_skeleton.md
