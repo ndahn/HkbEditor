@@ -5,9 +5,9 @@ import math
 
 from hkb_editor.external import get_config
 
-from ..graph_layout import GraphLayout, Node
-from .. import style
-from ..helpers import estimate_drawn_text_size
+from .graph_layout import GraphLayout, HorizontalGraphLayout, Node
+from hkb_editor.gui import style
+from hkb_editor.gui.helpers import estimate_drawn_text_size
 
 
 class GraphWidget:
@@ -32,7 +32,7 @@ class GraphWidget:
         tag: str = None,
     ):
         if not layout:
-            layout = GraphLayout()
+            layout = HorizontalGraphLayout()
 
         if not get_node_frontpage:
             get_node_frontpage = lambda n: n.id

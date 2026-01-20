@@ -5,12 +5,12 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray
-from hkb_editor.gui.graph_layout import GraphLayout, Node
+from hkb_editor.gui.widgets.graph_layout import HorizontalGraphLayout, Node
 from hkb_editor.gui.helpers import make_copy_menu
 
 
 @dataclass
-class CachedLayout(GraphLayout):
+class CachedLayout(HorizontalGraphLayout):
     cache: dict[str, tuple[float, float]] = None
 
     def get_pos_for_node(

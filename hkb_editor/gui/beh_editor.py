@@ -51,7 +51,7 @@ except (ImportError, AttributeError) as e:
 
 from hkb_editor.hkb.version_updates import fix_variable_defaults
 
-from .widgets.graph_widget import GraphWidget, GraphLayout, Node
+from .widgets.graph_widget import GraphWidget, HorizontalGraphLayout, Node
 from .widgets.attributes_widget import AttributesWidget
 from .widgets.graphmap import GraphMap  # TODO
 from .dialogs import (
@@ -927,7 +927,7 @@ class BehaviorEditor:
         ):
             self.canvas = GraphWidget(
                 None,
-                GraphLayout(),
+                HorizontalGraphLayout(),
                 on_node_selected=self.on_node_selected,
                 node_menu_func=self.open_node_menu,
                 get_node_frontpage=self.get_node_frontpage,
