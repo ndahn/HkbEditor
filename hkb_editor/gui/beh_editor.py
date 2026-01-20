@@ -68,7 +68,7 @@ from .tools import (
 )
 from .workflows.aliases import AliasManager, AliasMap
 from .workflows.create_cmsg import create_cmsg_dialog
-from .workflows.register_clip import register_clips_dialog
+from .workflows.register_clips import register_clips_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
 from .workflows.update_name_ids import update_name_ids_dialog
