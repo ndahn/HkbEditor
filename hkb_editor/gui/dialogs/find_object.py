@@ -47,6 +47,10 @@ def find_dialog(
         dpg.show_item(f"{tag}_loading")
         dpg.set_value(f"{tag}_total", "(Searching...)")
 
+        # initial_filt might be None when called from a higher function like select_objects
+        if filt is None:
+            filt = ""
+
         # Short delay in case the user is still typing
         time.sleep(0.3)
         if filt != dpg.get_value(sender):
