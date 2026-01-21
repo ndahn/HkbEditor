@@ -890,32 +890,26 @@ def restore_root_meta(
             if effect:
                 effect_res = results.objects.get(effect)
                 if effect_res:
-                    if effect_res.action == MergeAction.NEW:
+                    if effect_res.action in (MergeAction.NEW, MergeAction.REUSE):
                         # Update referenced transition effect
-                        effect = effect_res.result.object_id
-                        transition["transition"].set_value(effect)
+                        new_effect = effect_res.result.object_id
+                        transition["transition"].set_value(new_effect)
                     elif effect_res.action in (MergeAction.IGNORE, MergeAction.SKIP):
                         # Unset the transition effect
                         transition["transition"].set_value(None)
-                    elif effect_res.action == MergeAction.REUSE:
-                        # Use transition effect as is
-                        pass
 
             # Translate the condition object if one was used
             condition = transition["condition"].get_value()
             if condition:
                 condition_res = results.objects.get(condition)
                 if condition_res:
-                    if condition_res.action == MergeAction.NEW:
+                    if condition_res.action in (MergeAction.NEW, MergeAction.REUSE):
                         # Update referenced transition condition
-                        condition = condition_res.result.object_id
-                        transition["transition"].set_value(condition)
+                        new_condition = condition_res.result.object_id
+                        transition["transition"].set_value(new_condition)
                     elif condition_res.action in (MergeAction.IGNORE, MergeAction.SKIP):
                         # Unset the transition condition
                         transition["transition"].set_value(None)
-                    elif condition_res.action == MergeAction.REUSE:
-                        # Use transition condition as is
-                        pass
 
             wildcards.append(transition)
 
