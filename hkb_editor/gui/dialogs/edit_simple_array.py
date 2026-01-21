@@ -121,11 +121,10 @@ def edit_simple_array_dialog(
         if on_update:
             try:
                 on_update(item_idx, old_item, new_item)
-            except Exception as e:
+            except Exception:
                 # Rejected, regenerate the table before chickening out
                 fill_table()
-                logging.getLogger().error(f"Value update rejected: {e}")
-                return
+                raise
 
         items[item_idx] = tuple(new_item)
 

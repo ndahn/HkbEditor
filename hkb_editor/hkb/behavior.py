@@ -202,6 +202,27 @@ class HavokBehavior(Tagfile):
 
         return idx
 
+    def update_variable(
+        self,
+        idx: int,
+        variable_name: str = None,
+        range_min: int = None,
+        range_max: int = None,
+        default: Any = None,
+    ) -> None:
+        if variable_name:
+            self._variables[idx] = variable_name
+
+        if range_min is not None or range_max is not None:
+            bounds = self._variable_bounds[idx]
+            if range_min is not None:
+                bounds["min/value"] = range_min
+            if range_max is not None:
+                bounds["max/value"] = range_max
+
+        if default is not None:
+            self.set_variable_default(idx, default)
+
     def get_variables(self, full_info: bool = False) -> list[str] | list[HkbVariable]:
         if full_info:
             return [self.get_variable(i) for i in range(len(self._variables))]
@@ -314,7 +335,7 @@ class HavokBehavior(Tagfile):
         # Note that words is an array of HkbRecords
         words: HkbArray[HkbRecord] = self._variable_defaults["wordVariableValues"]
 
-        if not vtype:
+        if vtype is None:
             vtype = self.get_variable_type(idx)
 
         if vtype == VariableType.BOOL:
@@ -498,8 +519,12 @@ class HavokBehavior(Tagfile):
             for idx, var in enumerate(self.get_variables(full_info=True)):
                 if var.vtype in vartypes:
                     variables.append(idx)
-                    target_idx = words[idx].get_field("value", resolve=True)
-                    used_indices.append(target_idx)
+                    try:
+                        target_idx = words[idx].get_field("value", resolve=True)
+                        used_indices.append(target_idx)
+                    except KeyError:
+                        # Older games like Sekiro don't seem to have quadVariableValues
+                        pass
 
             if len(used_indices) == len(defaults):
                 return

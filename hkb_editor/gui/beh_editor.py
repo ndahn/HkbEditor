@@ -301,7 +301,7 @@ class BehaviorEditor:
         if ret:
             self._do_write_to_file(ret)
             self.loaded_file = ret
-            self.last_save = self.beh.top_undo_id()
+            self.last_save_undo_id = self.beh.top_undo_id()
             return True
 
         return False
@@ -399,7 +399,7 @@ class BehaviorEditor:
             self._busy = False
 
     def exit_app(self):
-        if not self.beh or (not self.beh.can_undo() and not self.beh.can_redo()):
+        if not self.beh or self.beh.top_undo_id() != self.last_save_undo_id:
             # Nothing was loaded or no changes have been made
             self._do_exit()
             return
@@ -1734,6 +1734,7 @@ class BehaviorEditor:
                 # Assume it's actually a string
                 pass
 
+            # TODO Use update_variable instead
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
 
