@@ -17,7 +17,7 @@ def run(
 ):
     """Game Event (Player)
 
-    Create a game event that can be triggered from HKS, EMEVD, ESD, objects, etc. The new event will be called `W_Event<game_event_id>`.
+    Create a player game event that can be triggered from HKS, EMEVD, ESD, objects, etc. The new event will be called `W_Event<game_event_id>`.
 
     Full instructions:
     https://ndahn.github.io/HkbEditor/templates/er/game_event_player/
