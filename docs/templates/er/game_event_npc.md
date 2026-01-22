@@ -2,7 +2,7 @@
 
 ???+ quote
 
-    - Author: VIVID
+    - Author: mrsakana266
     - Status: confirmed
 
 Creates multipe NPC game events that can be triggered from HKS, EMEVD, ESD, objects, etc. This is always a full animation, half blends are not possible. Event animations are often used for boss phase transitions. Once registered it can be used like any other animation.
