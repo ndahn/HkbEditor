@@ -13,6 +13,10 @@ Creates multipe NPC game events that can be triggered from HKS, EMEVD, ESD, obje
 
 ???+ warning
 
+    NPC events are usually limited to 20000..20059 and 30000..30029. If you need additional slots you'll have to edit the `ANIME_ID_EVENT_BEGIN` and `ANIME_ID_EVENT_END` variables in the NPC's HKS. 
+
+???+ danger
+
     Don't forget to run `File -> Update name ID files` to add new entries to `action/eventnameid.txt`!
 
 ---

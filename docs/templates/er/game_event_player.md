@@ -31,7 +31,7 @@ function EventXXXXX_onDeactivate()
 end
 ```
 
-???+ warning
+???+ danger
 
     Don't forget to run `File -> Update name ID files` to add new entries to `action/eventnameid.txt`!
 
