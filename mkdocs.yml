@@ -48,6 +48,7 @@ nav:
       - Dodge Stutter Fix: templates/er/dodge_stutter_fix.md
       - Evasion: templates/er/evasion.md
       - Game Event (Player): templates/er/game_event_player.md
+      - Game Event (NPC): templates/er/game_event_npc.md
       #- Gesture: templates/er/gesture.md
       - Jump: templates/er/jump.md
       - Jump Attack Type: templates/er/jump_attack.md
