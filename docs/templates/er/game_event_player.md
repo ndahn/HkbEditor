@@ -5,7 +5,7 @@
     - Author: FloppyDonuts
     - Status: hopeful
 
-Create a game event that can be triggered from HKS, EMEVD, ESD, objects, etc. This is always a full animation, half blends are not possible. A good example for a game event is touching a site of grace. Event animations are typically placed in `a000`. 
+Create a player game event that can be triggered from HKS, EMEVD, ESD, objects, etc. This is always a full animation, half blends are not possible. A good example for a game event is touching a site of grace. Event animations are typically placed in `a000`. 
 
 To use this game event you need to add the following functions to your `c0000.hks`. The event to activate it will be called `W_EventXXXXX`.
 
@@ -33,6 +33,6 @@ end
 
 ???+ warning
 
-    Don't forget to add an entry to your `action/eventnameid.txt` file. HkbEditor can do this for you - simply run `File -> Update name ID files`.
+    Don't forget to run `File -> Update name ID files` to add new entries to `action/eventnameid.txt`!
 
 ---
