@@ -67,7 +67,7 @@ from .tools import (
     open_state_graph_viewer,
 )
 from .workflows.aliases import AliasManager, AliasMap
-from .workflows.create_cmsg import create_cmsg_dialog
+from .workflows.create_slot import create_slot_dialog
 from .workflows.register_clips import register_clips_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
@@ -1734,7 +1734,7 @@ class BehaviorEditor:
                 # Assume it's actually a string
                 pass
 
-            # TODO Use update_variable instead
+            # TODO Use update_variable instead, this approach has a lot of problems
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
 
@@ -2037,7 +2037,7 @@ class BehaviorEditor:
             self.jump_to_object(cmsg)
 
         active_sm = self.get_active_statemachine()
-        create_cmsg_dialog(
+        create_slot_dialog(
             self.beh,
             on_cmsg_created,
             active_statemachine=active_sm.object_id if active_sm else None,

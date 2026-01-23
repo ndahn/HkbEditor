@@ -20,7 +20,7 @@ from hkb_editor.gui.helpers import (
 from hkb_editor.gui import style
 
 
-def create_cmsg_dialog(
+def create_slot_dialog(
     behavior: HavokBehavior,
     callback: Callable[
         [str, tuple[HkbRecord, HkbRecord, HkbRecord, HkbRecord], Any], None
@@ -143,7 +143,7 @@ def create_cmsg_dialog(
 
     # Dialog content
     with dpg.window(
-        label="Create CMSG",
+        label="Create Slot",
         width=400,
         height=600,
         autosize=True,
