@@ -85,7 +85,7 @@ def register_clips_dialog(
         anim_lines: list[str] = values["animations"]
         cmsg: HkbRecord = values["cmsg"]
         playback_mode_val: str = values["playback_mode"]
-        flags: ClipFlags = values["flags"]
+        flags = ClipFlags(values["flags"])
 
         playback_mode = PlaybackMode[playback_mode_val]
 

@@ -88,7 +88,7 @@ def create_slot_dialog(
         enable_script: bool = values["enable_script"]
         transition_effect: HkbRecord = values["transition_effect"]
         copy_transition_effect: bool = values["copy_transition_effect"]
-        transition_flags: TransitionInfoFlags = values["transition_flags"]
+        transition_flags = TransitionInfoFlags(values["transition_flags"])
 
         playback_mode = PlaybackMode[playback_mode_val]
         animation_end_event_type = AnimeEndEventType[animation_end_event_type_val]
@@ -135,7 +135,7 @@ def create_slot_dialog(
                 event,
                 transition_effect=transition_effect,
                 copy_transition_effect=copy_transition_effect,
-                flags=transition_flags.value,
+                flags=transition_flags,
             )
 
         callback(dialog, (state, cmsg, clip), user_data)
