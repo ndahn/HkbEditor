@@ -3,7 +3,7 @@
 ???+ quote
 
     - Author: Shiki
-    - Status: untested
+    - Status: confirmed
 
 Creates a new rolling/evasion animations for players. 
 
