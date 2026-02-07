@@ -1,7 +1,5 @@
 from typing import Generic, TypeVar, Generator
-from lxml import etree as ET
 
-from .tagfile import Tagfile
 from .hkb_types import XmlValueHandler, HkbArray
 
 

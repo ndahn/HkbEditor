@@ -10,6 +10,7 @@ from hkb_editor.hkb.index_attributes import (
     animation_attributes,
 )
 from .update_name_ids import get_nameidfile_folder
+from hkb_editor.hkb.hkb_flags import hkbBlenderGenerator_Flags
 
 
 def _safe_pointer_get(ptr: HkbPointer) -> HkbRecord:
@@ -102,6 +103,23 @@ def check_attributes(behavior: HavokBehavior, logger: logging.Logger) -> None:
                 else:
                     if has_nullptr:
                         logger.warning(f"Pointer array {obj.object_id}/{path} contains terminal null-pointers, might be okay")
+
+        if obj.type_name == "hkbClipGenerator":
+            anim = obj["animationName"]
+            if not re.match(r"a[0-9]{3}_[0-9]{6}", anim):
+                logger.warning(f"Clip {obj.object_id} has invalid animation name {anim}")
+
+        elif obj.type_name == "hkbBlenderGenerator":
+            flags = hkbBlenderGenerator_Flags(obj["flags"].get_value())
+            if hkbBlenderGenerator_Flags.PARAMETRIC_BLEND in flags:
+                children: HkbArray[HkbPointer] = obj["children"].get_value()
+                prev_weight = 0.0
+                # For parametric blends the children need to be ordered by weight
+                for idx, child in enumerate(children):
+                    weight = child.get_target()["weight"].get_value()
+                    if weight < prev_weight:
+                        logger.warning(f"Non-monotonic weights in parametric blend {obj} at {idx}")
+                    prev_weight = weight
 
         if obj.type_name in event_attributes:
             paths = event_attributes[obj.type_name]

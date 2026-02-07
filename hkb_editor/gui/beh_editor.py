@@ -399,7 +399,7 @@ class BehaviorEditor:
             self._busy = False
 
     def exit_app(self):
-        if not self.beh or self.beh.top_undo_id() != self.last_save_undo_id:
+        if not self.beh or self.beh.top_undo_id() == self.last_save_undo_id:
             # Nothing was loaded or no changes have been made
             self._do_exit()
             return
@@ -1982,32 +1982,20 @@ class BehaviorEditor:
             return
 
         def on_clip_registered(
-            sender: str, records: tuple[HkbRecord, list[HkbRecord]], user_data: Any
+            sender: str, clips: list[HkbRecord], user_data: Any
         ):
-            cmsg, clips = records
-
             # This is a bit ugly, but so is adding more stuff to ids
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
-                self.add_pinned_object(cmsg)
                 for clip in clips:
                     self.add_pinned_object(clip)
 
-            self.jump_to_object(cmsg)
-
-        active_cmsg = None
-        if self.selected_node:
-            obj = self.beh.objects[self.selected_node.id]
-            if obj.type_name == "hkbClipGenerator":
-                parent_id = next(self.canvas.graph.predecessors(obj.object_id), None)
-                obj = self.beh.objects.get(parent_id)
-            if obj.type_name == "CustomManualSelectorGenerator":
-                active_cmsg = obj
+            if clips:
+                self.jump_to_object(clips[0])
 
         register_clips_dialog(
             self.beh,
             on_clip_registered,
-            active_cmsg=active_cmsg,
             tag=tag,
         )
 
