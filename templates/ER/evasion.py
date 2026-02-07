@@ -109,4 +109,4 @@ def run(
     ctx.array_add(roll_selftrans_msg, "generators", new_roll_selftrans_msg)
 
     roll_index = len(roll_msg["generators"])
-    ctx.log(f"Index of new evasion {name}: {roll_index}")
+    ctx.logger.info(f"Index of new evasion {name}: {roll_index}")
