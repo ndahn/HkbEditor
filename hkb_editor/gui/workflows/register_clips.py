@@ -80,24 +80,29 @@ def register_clips_dialog(
                 if not line:
                     continue
 
-                animation = util.animation(line)
-                cmsgs = cmsg_groups.get(animation.anim_id)
+                anim = util.animation(line)
+                cmsgs = cmsg_groups.get(anim.anim_id)
                 clip = None
+
+                if not cmsgs:
+                    cmsgs = list(behavior.query(f"type_name=CustomManualSelectorGenerator animId={anim.anim_id}"))
+
+                if not cmsgs:
+                    logging.warning(f"Could not find any CMSGs for {anim}")
+                    continue
                 
+                cmsg_groups[anim.anim_id] = cmsgs
+
                 if reuse_clips:
-                    clip = clips.get(animation)
+                    clip = clips.get(anim)
 
                 if not clip:
                     clip = util.new_clip(
-                        animation,
+                        anim,
                         mode=playback_mode,
                         flags=flags,
                     )
-                    clips[animation] = clip
-
-                if not cmsgs:
-                    cmsgs = list(behavior.query(f"type_name=CustomManualSelectorGenerator animId={animation.anim_id}"))
-                    cmsg_groups[animation.anim_id] = cmsgs
+                    clips[anim] = clip
 
                 for cmsg in cmsgs:
                     cmsg["generators"].append(clip)
