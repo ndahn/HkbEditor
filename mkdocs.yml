@@ -2,7 +2,7 @@ site_name: HkbEditor
 repo_url: https://github.com/ndahn/HkbEditor
 site_url: https://ndahn.github.io/HkbEditor/
 site_author: Nikolas Dahn
-site_description: "A graphical editor for Havok behaviors"
+site_description: "A graphical editor for Havok behaviors. Includes at least one cat :3"
 copyright: Nikolas Dahn
 theme:
   favicon: assets/images/icon.png
