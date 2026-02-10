@@ -1,11 +1,11 @@
-from typing import Any, Callable, Annotated
+from typing import Any, Callable
 import logging
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
 from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags as ClipFlags
-from hkb_editor.templates.common import CommonActionsMixin, Animation
+from hkb_editor.templates.common import CommonActionsMixin, Animation, Variable
 from hkb_editor.gui.dialogs import select_animation
 from hkb_editor.gui.helpers import center_window, add_paragraphs, create_value_widget
 from hkb_editor.gui import style
@@ -27,6 +27,7 @@ def register_clips_dialog(
     values = {
         "animations": [],
         "reuse_clips": reuse_clips,
+        "starttime_variable": None,
         "playback_mode": PlaybackMode.SINGLE_PLAY.name,
         "flags": ClipFlags.NONE,
     }
@@ -59,6 +60,8 @@ def register_clips_dialog(
     def on_okay():
         anim_lines: list[str] = values["animations"]
         playback_mode_val: str = values["playback_mode"]
+        starttime_var: str = values.get("starttime_variable")
+        reuse_clips = values["reuse_clips"]
         flags = ClipFlags(values["flags"])
 
         playback_mode = PlaybackMode[playback_mode_val]
@@ -102,6 +105,10 @@ def register_clips_dialog(
                         mode=playback_mode,
                         flags=flags,
                     )
+
+                    if starttime_var:
+                        util.bind_variable(clip, "startTime", starttime_var)
+
                     clips[anim] = clip
 
                 for cmsg in cmsgs:
@@ -151,30 +158,42 @@ def register_clips_dialog(
             user_data="playback_mode",
         )
 
-        # Reuse clips, although it's rarely useful
-        create_value_widget(
-            behavior,
-            bool,
-            "Reuse clips",
-            on_value_change,
-            default=values["reuse_clips"],
-            tag=f"{tag}_reuse_clips",
-            user_data="reuse_clips",
-        )
-        with dpg.tooltip(dpg.last_item()):
-            dpg.add_text("Reuse clip insances in multiple CMSGs.Can cause problems\nwith self transitions (e.g. dodge stutter).")
-
-        # Flags
-        with dpg.tree_node(label="Flags"):
+        with dpg.tree_node(label="Advanced"):
+            # Bind startTime to a variable
             create_value_widget(
                 behavior,
-                ClipFlags,
-                "Flags",
+                Variable,
+                "Bind startTime",
                 on_value_change,
-                default=values["flags"],
-                tag=f"{tag}_flags",
-                user_data="flags",
+                default=values["starttime_variable"],
+                tag=f"{tag}_starttime_variable",
+                user_data="starttime_variable",
             )
+
+            # Reuse clips, although it's rarely useful
+            create_value_widget(
+                behavior,
+                bool,
+                "Reuse clips",
+                on_value_change,
+                default=values["reuse_clips"],
+                tag=f"{tag}_reuse_clips",
+                user_data="reuse_clips",
+            )
+            with dpg.tooltip(dpg.last_item()):
+                dpg.add_text("Reuse clip insances in multiple CMSGs.Can cause problems\nwith self transitions (e.g. dodge stutter).")
+
+            # Flags
+            with dpg.tree_node(label="Flags"):
+                create_value_widget(
+                    behavior,
+                    ClipFlags,
+                    "Flags",
+                    on_value_change,
+                    default=values["flags"],
+                    tag=f"{tag}_flags",
+                    user_data="flags",
+                )
 
         instructions = """\
 Registers one or more animations in an existing CMSG. All animations should have the same ID (the Y part of aXXX_YYYYYY), and the ID should be compatible with the CMSG's animId.
