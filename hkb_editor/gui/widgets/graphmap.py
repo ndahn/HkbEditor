@@ -18,6 +18,7 @@ class GraphMap:
         self.graph: nx.DiGraph = None
         self.get_node_data = get_node_data
         self.on_click_callback = on_click_callback
+        self.callback_triggered = False
         self.tag = tag
 
         self._nodes: list[str] = []
@@ -30,6 +31,37 @@ class GraphMap:
 
         self._setup_content()
         self.set_graph(graph)
+
+    def deinit(self):
+        # Prevent double deinitialization
+        if getattr(self, "_deinitialized", False):
+            return
+
+        # Disable mouse callbacks in the brief window until the handlers are removed
+        self._node_lookup = None
+
+        # Disable all handlers in case deletion fails (see below)
+        registry_tag = self._handler_tag
+        if dpg.does_item_exist(registry_tag):
+            dpg.configure_item(registry_tag, show=False)
+
+        # Delete the drawable content
+        if dpg.does_item_exist(self.tag):
+            dpg.delete_item(self.tag)
+
+        # Schedule handler registry deletion for later, otherwise this can sometimes lead
+        # to silent program crashes. This is the only solution I have found to this.
+        def delayed_cleanup():
+            if dpg.does_item_exist(registry_tag):
+                for listener in dpg.get_item_children(registry_tag, 1):
+                    dpg.delete_item(listener)
+                dpg.delete_item(registry_tag)
+
+        with dpg.mutex():
+            # Calling delayed_cleanup directly sometimes leads to a silent crash.
+            # Unfortunately, this is not guaranteed to run due to a bug in dearpygui, see
+            # https://github.com/hoffstadt/DearPyGui/issues/2269
+            dpg.set_frame_callback(dpg.get_frame_count() + 5, delayed_cleanup)
 
     def __del__(self):
         if dpg.does_item_exist(self._handler_tag):
@@ -109,7 +141,7 @@ class GraphMap:
         self.graph = graph
         self._nodes: list[str] = sorted(graph.nodes)
         # TODO Performance seems to be okayish up until ~1000 nodes
-        print("### nodes", len(self._nodes))
+        print(f"Rendering {len(self._nodes)} nodes...")
 
         # Need to create a new series due to the bug mentioned below
         dpg.delete_item(f"{self.tag}_x_axis", children_only=True)
@@ -229,10 +261,18 @@ class GraphMap:
         if not dpg.is_item_hovered(f"{self.tag}_plot"):
             return
 
+        if self.callback_triggered:
+            return
+
+        # The callback can take a while to resolve, make sure we handle the user's impatience :)
+        self.callback_triggered = True
+        
         pos = dpg.get_plot_mouse_pos()
         node = self.get_node_at(pos)
         if node:
             self.on_click_callback(node)
+
+        self.callback_triggered = False
 
     def set_highlighted_node(self, node: str) -> None:
         if self._highlighted_node and self._highlighted_node != node:

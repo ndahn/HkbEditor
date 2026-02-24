@@ -1036,7 +1036,6 @@ def open_merge_hierarchy_dialog(
     def close():
         if graph_preview:
             graph_preview.deinit()
-
         dpg.delete_item(dialog)
 
     event_rows: dict[str, int] = {}

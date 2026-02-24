@@ -584,10 +584,10 @@ class BehaviorEditor:
                 label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"
         ):
             # TODO enable once https://github.com/hoffstadt/DearPyGui/issues/2374 is done
-            #dpg.add_menu_item(
-            #    label="Graph Map...",
-            #    callback=lambda: self.open_graphmap_dialog(),
-            #)
+            dpg.add_menu_item(
+                label="Graph Map...",
+                callback=lambda: self.open_graphmap_dialog(),
+            )
 
             dpg.add_menu_item(
                 label="Event Listener...",
@@ -908,7 +908,6 @@ class BehaviorEditor:
             dpg.add_separator()
             # Tables are more flexible with item design and support filtering
             with dpg.table(
-                delay_search=True,
                 no_host_extendX=True,
                 header_row=False,
                 # policy=dpg.mvTable_SizingFixedFit,
@@ -1912,22 +1911,26 @@ class BehaviorEditor:
             # TODO is this what we want?
             self.jump_to_object(node_id)
 
+        def close():
+            if graph_map:
+                graph_map.deinit()
+            dpg.delete_item(dialog)
+
         with dpg.window(
             width=500, 
             height=500,
-            # FIXME crashes on close
-            on_close=lambda: dpg.delete_item(dialog),
+            on_close=close,
             tag=tag,
         ) as dialog:
             g = self.canvas.graph
-            w = GraphMap(
+            graph_map = GraphMap(
                 g, 
                 self.get_node_frontpage, 
                 on_graphnode_selected,
                 tag + "_content"
             )
 
-        dpg.set_item_user_data(dialog, w)
+        dpg.set_item_user_data(dialog, graph_map)
 
 
     def open_eventlistener_dialog(self):
