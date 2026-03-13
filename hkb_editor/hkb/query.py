@@ -67,7 +67,7 @@ You may run queries over the following fields:
 - any attribute path
 
 Examples:
-- id=*588 OR type_name:hkbStateMachine
+- id=*588 OR type_name=hkbStateMachine
 - bindings:0/memberPath=selectedGeneratorIndex
 - NOT animId=[100000..200000]
 - name=~AddDamageFire
