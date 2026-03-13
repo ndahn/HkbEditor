@@ -19,7 +19,7 @@ Any fired events that match the filters from the config file will be printed to 
 
 ## GUI
 
-Once you start the game you may also be able to spot a short message saying that events will now be published at the configured address (`127.0.0.1:27072` by default). HkbEditor has a tool to visualize these events over time called which you can find under *Tools -> Event Listener*.
+Once you start the game you may also be able to spot a short message saying that events will now be published at the configured address (`127.0.0.1:27072` by default). HkbEditor has a tool to visualize these events over time which you can find under *Tools -> Event Listener*.
 
 ![](../../assets/guide/eventlistener.png)
 

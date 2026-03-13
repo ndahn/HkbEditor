@@ -216,9 +216,10 @@ def create_value_widget(
             except Exception:
                 pass
 
-            def on_variable_selected(sender: str, variable: int, user_data: Any):
-                if variable is not None:
-                    variable_name = behavior.get_variable(variable)
+            def on_variable_selected(sender: str, var_idx: int, user_data: Any):
+                if var_idx is not None:
+                    # TODO get_variable returns a HkbVariable, not a Variable! :/
+                    variable_name = behavior.get_variable(var_idx).name
                     dpg.set_value(f"{tag}_input_helper", variable_name)
                     callback(sender, variable_name, user_data)
                 else:
@@ -234,9 +235,9 @@ def create_value_widget(
             except Exception:
                 pass
 
-            def on_event_selected(sender: str, event: int, user_data: Any):
-                if event is not None:
-                    event_name = behavior.get_event(event)
+            def on_event_selected(sender: str, evt_idx: int, user_data: Any):
+                if evt_idx is not None:
+                    event_name = behavior.get_event(evt_idx)
                     dpg.set_value(f"{tag}_input_helper", event_name)
                     callback(sender, event_name, user_data)
                 else:
@@ -252,9 +253,9 @@ def create_value_widget(
             except Exception:
                 pass
 
-            def on_animation_selected(sender: str, animation: int, user_data: Any):
-                if animation:
-                    animation_name = behavior.get_animation(animation)
+            def on_animation_selected(sender: str, anim_idx: int, user_data: Any):
+                if anim_idx:
+                    animation_name = behavior.get_animation(anim_idx)
                     dpg.set_value(f"{tag}_input_helper", animation_name)
                     callback(sender, animation_name, user_data)
                 else:

@@ -77,8 +77,6 @@ class GraphWidget:
         if getattr(self, "_deinitialized", False):
             return
 
-        self._deinitialized = True
-
         # Disable mouse callbacks in the brief window until the handlers are removed
         self.hover_enabled = False
 

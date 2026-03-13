@@ -260,7 +260,6 @@ def edit_simple_array_dialog(
             dpg.add_text("", tag=f"{tag}_total")
 
         with dpg.table(
-            delay_search=True,
             resizable=True,
             policy=dpg.mvTable_SizingStretchProp,
             scrollY=True,

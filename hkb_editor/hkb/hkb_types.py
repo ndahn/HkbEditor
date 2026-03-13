@@ -365,7 +365,7 @@ class HkbArray(XmlValueHandler, Generic[T]):
                 key = len(self) + key
 
             try:
-                item = next(e for i, e in enumerate(self.element) if i == key)
+                item = self.element[key]
             except StopIteration:
                 raise IndexError(f"Invalid index {key}")
 

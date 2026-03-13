@@ -1,11 +1,11 @@
-from typing import Any, Callable, Annotated
+from typing import Any, Callable
 import logging
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbRecord
 from hkb_editor.hkb.hkb_enums import hkbClipGenerator_PlaybackMode as PlaybackMode
 from hkb_editor.hkb.hkb_flags import hkbClipGenerator_Flags as ClipFlags
-from hkb_editor.templates.common import CommonActionsMixin, Animation
+from hkb_editor.templates.common import CommonActionsMixin, Animation, Variable
 from hkb_editor.gui.dialogs import select_animation
 from hkb_editor.gui.helpers import center_window, add_paragraphs, create_value_widget
 from hkb_editor.gui import style
@@ -15,7 +15,7 @@ def register_clips_dialog(
     behavior: HavokBehavior,
     callback: Callable[[str, tuple[str, str], Any], None],
     *,
-    active_cmsg: HkbRecord | str = None,
+    reuse_clips: bool = False,
     tag: str = 0,
     user_data: Any = None,
 ) -> None:
@@ -23,11 +23,11 @@ def register_clips_dialog(
         tag = f"register_clip_dialog_{dpg.generate_uuid()}"
 
     util = CommonActionsMixin(behavior)
-    active_cmsg = util.resolve_object(active_cmsg)
 
     values = {
         "animations": [],
-        "cmsg": active_cmsg,
+        "reuse_clips": reuse_clips,
+        "starttime_variable": None,
         "playback_mode": PlaybackMode.SINGLE_PLAY.name,
         "flags": ClipFlags.NONE,
     }
@@ -37,30 +37,6 @@ def register_clips_dialog(
             value = value.splitlines()
 
         values[key] = value
-
-    def check_animations():
-        lines: list[str] = values["animations"]
-        valid_anims = []
-        for n in lines:
-            if Animation.is_valid_name(n):
-                valid_anims.append(n)
-
-        if not valid_anims:
-            return
-
-        prev_id = ""
-
-        for anim in valid_anims:
-            anim_id = anim.split("_")[-1]
-            if prev_id and anim_id != prev_id:
-                logging.warning("Animations should have the same IDs")
-                break
-            prev_id = anim_id
-
-        cmsg: HkbRecord = values["cmsg"]
-        if cmsg and cmsg["animId"].get_value() != prev_id:
-            cmsg_anim_id = cmsg["animId"].get_value()
-            logging.warning(f"CMSG with animId={cmsg_anim_id} does not match animations")
 
     def on_animation_selected(sender: str, animation_id: int, user_data: Any):
         new_anim = util.animation(animation_id)
@@ -83,8 +59,9 @@ def register_clips_dialog(
 
     def on_okay():
         anim_lines: list[str] = values["animations"]
-        cmsg: HkbRecord = values["cmsg"]
         playback_mode_val: str = values["playback_mode"]
+        starttime_var: str = values.get("starttime_variable")
+        reuse_clips = values["reuse_clips"]
         flags = ClipFlags(values["flags"])
 
         playback_mode = PlaybackMode[playback_mode_val]
@@ -98,30 +75,46 @@ def register_clips_dialog(
                 show_warning(f"Invalid animation {line}")
                 return
 
-        if not cmsg:
-            show_warning("CMSG not set")
-            return
-
-        check_animations()
-
         # Do the deed
-        clips = []
+        clips: dict[Animation, HkbRecord] = {}
+        cmsg_groups: dict[int, list[HkbRecord]] = {}
         with behavior.transaction():
             for line in anim_lines:
                 if not line:
                     continue
 
-                animation = util.animation(line)
-                clip = util.new_clip(
-                    animation,
-                    mode=playback_mode,
-                    flags=flags,
-                )
+                anim = util.animation(line)
+                cmsgs = cmsg_groups.get(anim.anim_id)
+                clip = None
 
-                cmsg["generators"].append(clip)
-                clips.append(clip)
+                if not cmsgs:
+                    cmsgs = list(behavior.query(f"type_name=CustomManualSelectorGenerator animId={anim.anim_id}"))
 
-        callback(dialog, (cmsg, clips), user_data)  
+                if not cmsgs:
+                    logging.warning(f"Could not find any CMSGs for {anim}")
+                    continue
+                
+                cmsg_groups[anim.anim_id] = cmsgs
+
+                if reuse_clips:
+                    clip = clips.get(anim)
+
+                if not clip:
+                    clip = util.new_clip(
+                        anim,
+                        mode=playback_mode,
+                        flags=flags,
+                    )
+
+                    if starttime_var:
+                        util.bind_variable(clip, "startTime", starttime_var)
+
+                    clips[anim] = clip
+
+                for cmsg in cmsgs:
+                    cmsg["generators"].append(clip)
+
+        callback(dialog, list(clips.values()), user_data)  
         dpg.delete_item(dialog)
 
     # Dialog content
@@ -154,19 +147,6 @@ def register_clips_dialog(
             with dpg.tooltip(dpg.last_item()):
                 dpg.add_text("Animations to register, one animation per line")
 
-        # CMSG to register the clip in (selected from animation name)
-        create_value_widget(
-            behavior,
-            Annotated[HkbRecord, "CustomManualSelectorGenerator"],
-            "CMSG",
-            on_value_change,
-            default=values["cmsg"],
-            tag=f"{tag}_cmsg",
-            user_data="cmsg",
-        )
-        with dpg.tooltip(dpg.last_item()):
-            dpg.add_text("CMSG to add the clips to")
-
         # Clip playback mode
         create_value_widget(
             behavior,
@@ -178,17 +158,42 @@ def register_clips_dialog(
             user_data="playback_mode",
         )
 
-        # Flags
-        with dpg.tree_node(label="Flags"):
+        with dpg.tree_node(label="Advanced"):
+            # Bind startTime to a variable
             create_value_widget(
                 behavior,
-                ClipFlags,
-                "Flags",
+                Variable,
+                "Bind startTime",
                 on_value_change,
-                default=values["flags"],
-                tag=f"{tag}_flags",
-                user_data="flags",
+                default=values["starttime_variable"],
+                tag=f"{tag}_starttime_variable",
+                user_data="starttime_variable",
             )
+
+            # Reuse clips, although it's rarely useful
+            create_value_widget(
+                behavior,
+                bool,
+                "Reuse clips",
+                on_value_change,
+                default=values["reuse_clips"],
+                tag=f"{tag}_reuse_clips",
+                user_data="reuse_clips",
+            )
+            with dpg.tooltip(dpg.last_item()):
+                dpg.add_text("Reuse clip insances in multiple CMSGs.Can cause problems\nwith self transitions (e.g. dodge stutter).")
+
+            # Flags
+            with dpg.tree_node(label="Flags"):
+                create_value_widget(
+                    behavior,
+                    ClipFlags,
+                    "Flags",
+                    on_value_change,
+                    default=values["flags"],
+                    tag=f"{tag}_flags",
+                    user_data="flags",
+                )
 
         instructions = """\
 Registers one or more animations in an existing CMSG. All animations should have the same ID (the Y part of aXXX_YYYYYY), and the ID should be compatible with the CMSG's animId.

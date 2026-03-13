@@ -201,7 +201,6 @@ class AttributesWidget:
         with dpg.group(tag=self.tag):
             dpg.add_text("", tag=f"{self.tag}_attributes_title", color=style.blue)
             with dpg.table(
-                delay_search=True,
                 no_host_extendX=True,
                 resizable=True,
                 borders_innerV=True,

@@ -399,7 +399,7 @@ class BehaviorEditor:
             self._busy = False
 
     def exit_app(self):
-        if not self.beh or self.beh.top_undo_id() != self.last_save_undo_id:
+        if not self.beh or self.beh.top_undo_id() == self.last_save_undo_id:
             # Nothing was loaded or no changes have been made
             self._do_exit()
             return
@@ -584,10 +584,10 @@ class BehaviorEditor:
                 label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"
         ):
             # TODO enable once https://github.com/hoffstadt/DearPyGui/issues/2374 is done
-            #dpg.add_menu_item(
-            #    label="Graph Map...",
-            #    callback=lambda: self.open_graphmap_dialog(),
-            #)
+            dpg.add_menu_item(
+                label="Graph Map...",
+                callback=lambda: self.open_graphmap_dialog(),
+            )
 
             dpg.add_menu_item(
                 label="Event Listener...",
@@ -908,7 +908,6 @@ class BehaviorEditor:
             dpg.add_separator()
             # Tables are more flexible with item design and support filtering
             with dpg.table(
-                delay_search=True,
                 no_host_extendX=True,
                 header_row=False,
                 # policy=dpg.mvTable_SizingFixedFit,
@@ -1912,22 +1911,26 @@ class BehaviorEditor:
             # TODO is this what we want?
             self.jump_to_object(node_id)
 
+        def close():
+            if graph_map:
+                graph_map.deinit()
+            dpg.delete_item(dialog)
+
         with dpg.window(
             width=500, 
             height=500,
-            # FIXME crashes on close
-            on_close=lambda: dpg.delete_item(dialog),
+            on_close=close,
             tag=tag,
         ) as dialog:
             g = self.canvas.graph
-            w = GraphMap(
+            graph_map = GraphMap(
                 g, 
                 self.get_node_frontpage, 
                 on_graphnode_selected,
                 tag + "_content"
             )
 
-        dpg.set_item_user_data(dialog, w)
+        dpg.set_item_user_data(dialog, graph_map)
 
 
     def open_eventlistener_dialog(self):
@@ -1982,32 +1985,20 @@ class BehaviorEditor:
             return
 
         def on_clip_registered(
-            sender: str, records: tuple[HkbRecord, list[HkbRecord]], user_data: Any
+            sender: str, clips: list[HkbRecord], user_data: Any
         ):
-            cmsg, clips = records
-
             # This is a bit ugly, but so is adding more stuff to ids
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
-                self.add_pinned_object(cmsg)
                 for clip in clips:
                     self.add_pinned_object(clip)
 
-            self.jump_to_object(cmsg)
-
-        active_cmsg = None
-        if self.selected_node:
-            obj = self.beh.objects[self.selected_node.id]
-            if obj.type_name == "hkbClipGenerator":
-                parent_id = next(self.canvas.graph.predecessors(obj.object_id), None)
-                obj = self.beh.objects.get(parent_id)
-            if obj.type_name == "CustomManualSelectorGenerator":
-                active_cmsg = obj
+            if clips:
+                self.jump_to_object(clips[0])
 
         register_clips_dialog(
             self.beh,
             on_clip_registered,
-            active_cmsg=active_cmsg,
             tag=tag,
         )
 

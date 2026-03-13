@@ -28,6 +28,9 @@ class Variable:
     def __eq__(self, other: Any):
         return str(other) == str(self)
 
+    def __hash__(self):
+        return hash(self.name)
+
     def __str__(self):
         return self.name
 
@@ -42,6 +45,9 @@ class Event:
 
     def __eq__(self, other: Any):
         return str(other) == str(self)
+
+    def __hash__(self):
+        return hash(self.name)
 
     def __str__(self):
         return self.name
@@ -76,6 +82,9 @@ class Animation:
 
     def __eq__(self, other: Any):
         return str(other) == str(self)
+
+    def __hash__(self):
+        return hash(self.name)
 
     def __str__(self) -> str:
         return self.name

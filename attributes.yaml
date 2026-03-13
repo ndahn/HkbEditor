@@ -64,11 +64,11 @@ CustomManualSelectorGenerator:
   offsetType: How to choose the active generator.
   animId: Animation ID of the associated animations (the Y part of aXXX_YYYYYY).
   animeEndEventType: What to do once the animation ends.
-  enableScript:
+  enableScript: Should this CMSG call HKS functions for the state it belongs to?
   enableTae: Does this CMSG have actual animations associated?
   changeTypeOfSelectedIndexAfterActivate: 
   generatorChangedTransitionEffect: Custom transition for when the generator changes.
-  checkAnimEndSlotNo: 
+  checkAnimEndSlotNo: Used for HKS when calling env(IsAnimEnd, X).
   replanningAI: 
   rideSync: 
 
@@ -108,8 +108,8 @@ hkbLayer:
   useMotion: Set to true if this animation's world transform should be used (worldFromModel).
   blendingControlData:
     weight: How much this layer affects the end result.
-    fadeInDuration: Time over which this layer gradually becomes activates.
-    fadeOutDuration: Time over which this layer gradually becomes deactivates.
+    fadeInDuration: Time over which this layer gradually activates.
+    fadeOutDuration: Time over which this layer gradually deactivates.
     onEventId: An event to switch on this layer.
     offEventId: An event to switch off this layer.
     onByDefault: Whether this layer should be active when its parent activates.
