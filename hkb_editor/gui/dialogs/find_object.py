@@ -26,7 +26,7 @@ def find_dialog(
     on_filter_help_click: Callable[[], None] = None,
     on_result_callback: Callable[[list[Any]], None] = None,
     modal: bool = False,
-    hide_on_close: bool = True,
+    hide_on_close: bool = False,
     tag: str = 0,
     user_data: Any = None,
 ) -> str:
@@ -310,6 +310,7 @@ def search_objects_dialog(
         okay_callback=None,
         initial_filter=initial_filter,
         filter_help=lucene_help_text,
+        hide_on_close=True,
         on_filter_help_click=lambda: webbrowser.open(lucene_url),
         on_result_callback=on_results,
         tag=tag,

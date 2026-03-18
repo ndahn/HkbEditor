@@ -210,18 +210,19 @@ class HavokBehavior(Tagfile):
         range_max: int = None,
         default: Any = None,
     ) -> None:
-        if variable_name:
-            self._variables[idx] = variable_name
+        with self.transaction():
+            if variable_name:
+                self._variables[idx] = variable_name
 
-        if range_min is not None or range_max is not None:
-            bounds = self._variable_bounds[idx]
-            if range_min is not None:
-                bounds["min/value"] = range_min
-            if range_max is not None:
-                bounds["max/value"] = range_max
+            if range_min is not None or range_max is not None:
+                bounds = self._variable_bounds[idx]
+                if range_min is not None:
+                    bounds["min/value"] = range_min
+                if range_max is not None:
+                    bounds["max/value"] = range_max
 
-        if default is not None:
-            self.set_variable_default(idx, default)
+            if default is not None:
+                self.set_variable_default(idx, default)
 
     def get_variables(self, full_info: bool = False) -> list[str] | list[HkbVariable]:
         if full_info:
@@ -341,8 +342,10 @@ class HavokBehavior(Tagfile):
         if vtype == VariableType.BOOL:
             if default in (None, ""):
                 default = False
-
-            elif not isinstance(default, bool):
+            elif default in (0, 1):
+                default = True if default == 1 else False
+                
+            if not isinstance(default, bool):
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -353,8 +356,10 @@ class HavokBehavior(Tagfile):
         elif vtype == VariableType.INT8:
             if default in (None, ""):
                 default = 0
+            else:
+                default = int(default)
 
-            elif not isinstance(default, int) or default.bit_length() > 8:
+            if not isinstance(default, int) or default.bit_length() > 8:
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -364,8 +369,10 @@ class HavokBehavior(Tagfile):
         elif vtype == VariableType.INT16:
             if default in (None, ""):
                 default = 0
+            else:
+                default = int(default)
 
-            elif not isinstance(default, int) or default.bit_length() > 16:
+            if not isinstance(default, int) or default.bit_length() > 16:
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -375,8 +382,10 @@ class HavokBehavior(Tagfile):
         elif vtype == VariableType.INT32:
             if default in (None, ""):
                 default = 0
+            else:
+                default = int(default)
 
-            elif not isinstance(default, int) or default.bit_length() > 32:
+            if not isinstance(default, int) or default.bit_length() > 32:
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -386,8 +395,10 @@ class HavokBehavior(Tagfile):
         elif vtype == VariableType.REAL:
             if default in (None, ""):
                 default = 0.0
+            else:
+                default = float(default)
 
-            elif not isinstance(default, float):
+            if not isinstance(default, float):
                 raise ValueError(
                     f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                 )
@@ -431,7 +442,7 @@ class HavokBehavior(Tagfile):
                 if default in (None, ""):
                     default = [0.0, 0.0, 0.0]
 
-                elif not isinstance(default, Iterable) or len(default) != 3:
+                if not isinstance(default, Iterable) or len(default) != 3:
                     raise ValueError(
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )
@@ -439,7 +450,7 @@ class HavokBehavior(Tagfile):
                 if default in (None, ""):
                     default = [0.0, 0.0, 0.0, 0.0]
                 
-                elif not isinstance(default, Iterable) or len(default) != 4:
+                if not isinstance(default, Iterable) or len(default) != 4:
                     raise ValueError(
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )
@@ -448,7 +459,7 @@ class HavokBehavior(Tagfile):
                 if default in (None, ""):
                     default = [0.0, 0.0, 0.0, 1.0]
 
-                elif not isinstance(default, Iterable) or len(default) != 4:
+                if not isinstance(default, Iterable) or len(default) != 4:
                     raise ValueError(
                         f'Invalid default "{default}" for variable {idx} ({vtype.name})'
                     )
