@@ -55,7 +55,7 @@ def create_slot_dialog(
         "animation": "",
         "event": "",
         "playback_mode": PlaybackMode.SINGLE_PLAY.name,
-        "animation_end_event_type": AnimeEndEventType.NONE.name,
+        "animation_end_event_type": AnimeEndEventType.FIRE_IDLE_EVENT.name,
         "offset_type": OffsetType.IDLE_CATEGORY.name,
         "enable_tae": True,
         "enable_script": True,
@@ -203,6 +203,19 @@ def create_slot_dialog(
         )
         with dpg.tooltip(dpg.last_item()):
             dpg.add_text("How the CMSG picks the clip to activate")
+        
+        # AnimeEndEventType
+        create_value_widget(
+            behavior,
+            AnimeEndEventType,
+            "Animation End Action",
+            on_value_change,
+            default=values["animation_end_event_type"],
+            tag=f"{tag}_animation_end_event_type",
+            user_data="animation_end_event_type",
+        )
+        with dpg.tooltip(dpg.last_item()):
+            dpg.add_text("What to do when the animation ends, usually IDLE or NONE")
 
         # ClipGenerator animation
         create_value_widget(
@@ -231,19 +244,6 @@ def create_slot_dialog(
         dpg.add_spacer(height=1)
 
         with dpg.tree_node(label="Advanced"):
-            # AnimeEndEventType
-            create_value_widget(
-                behavior,
-                AnimeEndEventType,
-                "Animation End Action",
-                on_value_change,
-                default=values["animation_end_event_type"],
-                tag=f"{tag}_animation_end_event_type",
-                user_data="animation_end_event_type",
-            )
-            with dpg.tooltip(dpg.last_item()):
-                dpg.add_text("What to do when the animation ends")
-
             # CMSG enable TAE
             create_value_widget(
                 behavior,
