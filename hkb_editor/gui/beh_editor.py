@@ -846,7 +846,9 @@ class BehaviorEditor:
                 self.file_save_as()
 
         elif dpg.is_key_down(dpg.mvKey_ModCtrl):
-            if key == dpg.mvKey_S:
+            if key == dpg.mvKey_O:
+                self.file_open()
+            elif key == dpg.mvKey_S:
                 self.file_save()
             elif key == dpg.mvKey_Q:
                 self.exit_app()
