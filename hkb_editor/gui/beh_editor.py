@@ -78,6 +78,7 @@ from .workflows.clone_hierarchy import (
     paste_children,
     MergeAction,
 )
+from .workflows.fix_common_problems import fix_common_problems_dialog
 from .workflows.verify_behavior import verify_behavior
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
@@ -571,6 +572,10 @@ class BehaviorEditor:
             dpg.add_menu_item(
                 label="Verify Behavior...",
                 callback=self.verify_behavior,
+            )
+            dpg.add_menu_item(
+                label="Fix Common Problems...",
+                callback=self.open_fix_common_problems_dialog,
             )
 
             dpg.add_separator()
@@ -2066,6 +2071,15 @@ class BehaviorEditor:
             self.alias_manager.aliases.insert(0, aliases)
         except ValueError as e:
             self.logger.error("Loading bone names failed: %s", e, exc_info=True)
+
+    def open_fix_common_problems_dialog(self):
+        tag = f"{self.tag}_fix_common_problems"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        fix_common_problems_dialog(self.beh, tag=tag)
 
     def open_hierarchy_import_dialog(self):
         file_path = open_file_dialog(

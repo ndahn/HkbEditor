@@ -1,26 +1,112 @@
-from typing import Callable, Any
+from typing import Callable, Any, Iterable
 import colorsys
 import numpy as np
 from dearpygui import dearpygui as dpg
 
 
+
+class Color(tuple):
+    def __new__(
+        cls, color_or_r: int | Iterable[int], g: int = None, b: int = None, a: int = 255
+    ):
+        if isinstance(color_or_r, Iterable):
+            if len(color_or_r) == 3:
+                r, g, b = color_or_r
+            else:
+                r, g, b, a = color_or_r
+        else:
+            r = color_or_r
+
+        return super().__new__(cls, (r, g, b, a))
+
+    @classmethod
+    def from_floats(cls, r: float, g: float, b: float, a: float = 1.0) -> "Color":
+        return Color(int(r * 255), int(g * 255), int(b * 255), int(a * 255))
+
+    def as_floats(self) -> tuple[float, float, float, float]:
+        return (self.r / 255, self.g / 255, self.b / 255, self.a / 255)
+
+    @property
+    def rgb(self) -> tuple[int, int, int]:
+        return self[:2]
+
+    @property
+    def hsv(self) -> tuple[int, int, int]:
+        h, s, v = colorsys.rgb_to_hsv(self.r, self.g, self.b)
+        return (int(h * 255), int(s * 255), int(v * 255))
+
+    @property
+    def r(self) -> int:
+        return self[0]
+
+    @property
+    def g(self) -> int:
+        return self[1]
+
+    @property
+    def b(self) -> int:
+        return self[2]
+
+    @property
+    def a(self) -> int:
+        return self[3]
+
+    def but(
+        self, *, r: int = None, g: int = None, b: int = None, a: int = None
+    ) -> "Color":
+        if r is None:
+            r = self.r
+
+        if g is None:
+            g = self.g
+
+        if b is None:
+            b = self.b
+
+        if a is None:
+            a = self.a
+
+        return Color(r, g, b, a)
+
+    def mix(self, other: "tuple | Color", ratio: float = 0.5) -> "Color":
+        r = ratio * self.r + (1 - ratio) * other[0]
+        g = ratio * self.g + (1 - ratio) * other[1]
+        b = ratio * self.b + (1 - ratio) * other[2]
+        a = ratio * self.a + (1 - ratio) * other[3]
+        return Color(r, g, b, a)
+
+    def brightness(self, brightness: int) -> "Color":
+        h, s, _ = colorsys.rgb_to_hsv(*self.as_floats()[:3])
+        r, g, b = colorsys.hsv_to_rgb(h, s, brightness / 255)
+        return Color.from_floats(r, g, b, self.a / 255)
+
+    def __or__(self, other: "tuple | Color") -> "Color":
+        return self.mix(other)
+
+    def __str__(self) -> str:
+        return str(self)
+
+    def __repr__(self) -> str:
+        return f"Color {self}"
+
+
 # https://coolors.co/palette/ffbe0b-fb5607-ff006e-8338ec-3a86ff
-yellow = (255, 190, 11, 255)
-orange = (251, 86, 7, 255)
-red = (234, 11, 30, 255)
-pink = (255, 0, 110, 255)
-purple = (127, 50, 236, 255)
-blue = (58, 134, 255, 255)
-green = (138, 201, 38, 255)
+yellow = Color(255, 190, 11, 255)
+orange = Color(251, 86, 7, 255)
+red = Color(234, 11, 30, 255)
+pink = Color(255, 0, 110, 255)
+purple = Color(127, 50, 236, 255)
+blue = Color(58, 134, 255, 255)
+green = Color(138, 201, 38, 255)
 
-white = (255, 255, 255, 255)
-light_grey = (151, 151, 151, 255)
-dark_grey = (62, 62, 62, 255)
-black = (0, 0, 0, 255)
+white = Color(255, 255, 255, 255)
+light_grey = Color(151, 151, 151, 255)
+dark_grey = Color(62, 62, 62, 255)
+black = Color(0, 0, 0, 255)
 
-light_blue = (112, 214, 255, 255)
-light_green = (112, 255, 162, 255)
-light_red = (255, 112, 119)
+light_blue = Color(112, 214, 255, 255)
+light_green = Color(112, 255, 162, 255)
+light_red = Color(255, 112, 119)
 
 
 class HighContrastColorGenerator:

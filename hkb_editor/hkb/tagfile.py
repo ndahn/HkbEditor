@@ -1,4 +1,4 @@
-from typing import Callable, Generator, TYPE_CHECKING, Any
+from typing import Any, Callable, Generator, Iterator, TYPE_CHECKING
 import logging
 from collections import deque
 from contextlib import contextmanager
@@ -548,3 +548,9 @@ class Tagfile:
                 parent.remove(obj.element)
 
         return obj
+
+    def __len__(self) -> int:
+        return len(self.objects)
+
+    def __iter__(self) -> "Iterator[HkbRecord]":
+        yield from self.objects.values()

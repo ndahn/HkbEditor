@@ -105,9 +105,9 @@ def check_attributes(behavior: HavokBehavior, logger: logging.Logger) -> None:
                         logger.warning(f"Pointer array {obj.object_id}/{path} contains terminal null-pointers, might be okay")
 
         if obj.type_name == "hkbClipGenerator":
-            anim = obj["animationName"]
+            anim = obj["animationName"].get_value()
             if not re.match(r"a[0-9]{3}_[0-9]{6}", anim):
-                logger.warning(f"Clip {obj.object_id} has invalid animation name {anim}")
+                logger.error(f"Clip {obj.object_id} has invalid animation name {anim}")
 
         elif obj.type_name == "hkbBlenderGenerator":
             flags = hkbBlenderGenerator_Flags(obj["flags"].get_value())
@@ -148,10 +148,10 @@ def check_graph(behavior: HavokBehavior, logger: logging.Logger) -> None:
     g = behavior.build_graph(root.object_id)
 
     unmapped_ids = set(behavior.objects.keys()).difference(g.nodes)
-    abandoned = [behavior.objects[oid] for oid in unmapped_ids]
+    orphans = [behavior.objects[oid] for oid in unmapped_ids]
 
-    if abandoned:
-        logger.warning(f"The following objects are abandoned: {[str(o) for o in abandoned]}")
+    if orphans:
+        logger.warning(f"The following objects are abandoned: {[str(o) for o in orphans]}")
 
     cycles = list(nx.simple_cycles(g))
     if cycles:

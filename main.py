@@ -18,7 +18,7 @@ def main():
         level=logging.DEBUG,
         format="[%(levelname)s]\t%(message)s",
         handlers=[
-            logging.FileHandler(logfile),
+            logging.FileHandler(logfile, mode="w"),
             logging.StreamHandler(),
         ],
     )
