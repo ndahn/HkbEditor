@@ -28,7 +28,12 @@ def fix_common_problems_dialog(
         issues = 0
         for record in behavior:
             array: HkbArray
-            for _, array in record.find_fields_by_class(HkbArray):
+            for path, array in record.find_fields_by_class(HkbArray):
+                # Some pointer arrays in the root objects must not be altered, so we limit 
+                # it to generators for now where we know how they work
+                if not path.endswith("generators"):
+                    continue
+
                 if array.is_pointer_array:
                     invalid = []
                     for idx, ptr in enumerate(array):
