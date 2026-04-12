@@ -583,7 +583,7 @@ class CommonActionsMixin:
         enableScript: bool = True,
         enableTae: bool = True,
         offsetType: CmsgOffsetType = CmsgOffsetType.NONE,
-        animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_NEXT_STATE_EVENT,
+        animeEndEventType: AnimeEndEventType = AnimeEndEventType.FIRE_IDLE_EVENT,
         changeTypeOfSelectedIndexAfterActivate: ChangeIndexType = ChangeIndexType.NONE,
         checkAnimEndSlotNo: int = -1,
         rideSync: RideSync = RideSync.DISABLE,

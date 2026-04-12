@@ -13,7 +13,9 @@ def run(
     ctx: TemplateContext,
     animation: Animation,
     game_event_id: int = 70000,
-    transition_effect: Annotated[HkbRecord, "hkbTransitionEffect"] = "DefaultTransition",
+    transition_effect: Annotated[
+        HkbRecord, "hkbTransitionEffect"
+    ] = "DefaultTransition",
 ):
     """Game Event (Player)
 
@@ -21,9 +23,9 @@ def run(
 
     Full instructions:
     https://ndahn.github.io/HkbEditor/templates/er/game_event_player/
-    
+
     Author: FloppyDonuts
-    
+
     Status: hopeful
 
     Parameters
@@ -31,7 +33,7 @@ def run(
     ctx : TemplateContext
         The template context.
     game_event_id : int, optional
-        ID of the event. 
+        ID of the event.
     animation : Animation, optional
         The event animation. Usually placed in a000.
     transition_effect : Annotated[HkbRecord, &quot;hkbTransitionEffect&quot;], optional
@@ -45,13 +47,13 @@ def run(
 
     if not transition_effect:
         transition_effect = ctx.find("name=DefaultTransition")
-    
+
     state, _, _ = ctx.create_state_chain(
         state_id,
         animation,
         f"Event{game_event_id}",
         cmsg_kwargs={
-
+            "animeEndEventType": AnimeEndEventType.FIRE_IDLE_EVENT,
         },
     )
 
