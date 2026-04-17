@@ -20,7 +20,7 @@ from hkb_editor.gui.helpers import (
 from hkb_editor.gui import style
 
 
-def create_slot_dialog(
+def create_stateinfo_dialog(
     behavior: HavokBehavior,
     callback: Callable[
         [str, tuple[HkbRecord, HkbRecord, HkbRecord, HkbRecord], Any], None
@@ -111,8 +111,10 @@ def create_slot_dialog(
             return
 
         show_warning("")
-        
-        statemachine = next(behavior.query(f"name='{statemachine_val}' type_name=hkbStateMachine"))
+
+        statemachine = next(
+            behavior.query(f"name='{statemachine_val}' type_name=hkbStateMachine")
+        )
         new_state_id = util.get_next_state_id(statemachine)
 
         with behavior.transaction():
@@ -167,7 +169,7 @@ def create_slot_dialog(
 
         # Base name
         create_value_widget(
-            behavior, 
+            behavior,
             str,
             "Base Name",
             on_value_change,
@@ -203,7 +205,7 @@ def create_slot_dialog(
         )
         with dpg.tooltip(dpg.last_item()):
             dpg.add_text("How the CMSG picks the clip to activate")
-        
+
         # AnimeEndEventType
         create_value_widget(
             behavior,

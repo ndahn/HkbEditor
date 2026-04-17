@@ -57,9 +57,9 @@ from .widgets.graphmap import GraphMap  # TODO
 from .dialogs import (
     about_dialog,
     open_file_dialog,
-    save_file_dialog, 
+    save_file_dialog,
     edit_simple_array_dialog,
-    search_objects_dialog, 
+    search_objects_dialog,
 )
 from .tools import (
     skeleton_mirror_dialog,
@@ -67,7 +67,7 @@ from .tools import (
     open_state_graph_viewer,
 )
 from .workflows.aliases import AliasManager, AliasMap
-from .workflows.create_slot import create_slot_dialog
+from .workflows.create_stateinfo import create_stateinfo_dialog
 from .workflows.register_clips import register_clips_dialog
 from .workflows.create_object import create_object_dialog
 from .workflows.apply_template import apply_template_dialog
@@ -82,7 +82,6 @@ from .workflows.fix_common_problems import fix_common_problems_dialog
 from .workflows.verify_behavior import verify_behavior
 from .helpers import make_copy_menu, center_window, common_loading_indicator
 from . import style
-
 
 
 def get_default_layout_path():
@@ -134,7 +133,6 @@ class BehaviorEditor:
             no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup"
         )
         dpg.set_frame_callback(dpg.get_frame_count() + 1, lambda: center_window(about))
-        
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
         if severity < self.min_notification_severity:
@@ -425,7 +423,7 @@ class BehaviorEditor:
 
         dpg.split_frame()
         center_window(wnd)
-    
+
     def _do_exit(self):
         dpg.stop_dearpygui()
         dpg.destroy_context()
@@ -561,7 +559,7 @@ class BehaviorEditor:
                 callback=self.open_create_object_dialog,
             )
             dpg.add_menu_item(
-                label="Create Slot...", callback=self.open_create_cmsg_dialog
+                label="New State + CMSG...", callback=self.open_create_stateinfo_dialog
             )
             dpg.add_menu_item(
                 label="Register Clips...", callback=self.open_register_clip_dialog
@@ -585,9 +583,7 @@ class BehaviorEditor:
             )
 
         # Tools
-        with dpg.menu(
-                label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"
-        ):
+        with dpg.menu(label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"):
             # TODO enable once https://github.com/hoffstadt/DearPyGui/issues/2374 is done
             dpg.add_menu_item(
                 label="Graph Map...",
@@ -598,12 +594,12 @@ class BehaviorEditor:
                 label="Event Listener...",
                 callback=lambda: self.open_eventlistener_dialog(),
             )
-            
+
             # TODO needs an overhaul, right now it's just wrong
-            #dpg.add_menu_item(
+            # dpg.add_menu_item(
             #    label="StateInfo Graph...",
             #    callback=lambda: self.open_stategraph_dialog(),
-            #)
+            # )
 
             dpg.add_menu_item(
                 label="Mirror Skeleton...",
@@ -1162,7 +1158,7 @@ class BehaviorEditor:
     def get_node_frontpage(self, node: Node | str) -> list[str]:
         if isinstance(node, Node):
             node = node.id
-        
+
         obj = self.beh.objects[node]
 
         lines = [
@@ -1172,7 +1168,7 @@ class BehaviorEditor:
 
         # Check if there is an event associated with this StateInfo
         name = obj.get_field("name", None, resolve=True)
-        
+
         if obj.type_name == "hkbStateMachine::StateInfo":
             name = f"{name} ({obj['stateId'].get_value()})"
 
@@ -1211,7 +1207,7 @@ class BehaviorEditor:
             self._update_attributes(node)
         else:
             self.clear_attributes()
-    
+
     def _create_attach_menu(self, node: Node):
 
         def get_target_type_id(obj: XmlValueHandler):
@@ -1426,9 +1422,15 @@ class BehaviorEditor:
             self.logger.warning("Could not locate child node in parent")
             return
 
-        msg_type = self.beh.type_registry.find_first_type_by_name("hkbManualSelectorGenerator")
-        if msg_type not in self.beh.type_registry.get_compatible_types(parent_ptr.subtype_id):
-            self.logger.warning("Parent pointer is incompatible with hkbManualSelectorGenerator")
+        msg_type = self.beh.type_registry.find_first_type_by_name(
+            "hkbManualSelectorGenerator"
+        )
+        if msg_type not in self.beh.type_registry.get_compatible_types(
+            parent_ptr.subtype_id
+        ):
+            self.logger.warning(
+                "Parent pointer is incompatible with hkbManualSelectorGenerator"
+            )
             return
 
         def on_object_created(sender: str, selector: HkbRecord, user_data: Any):
@@ -1598,7 +1600,7 @@ class BehaviorEditor:
             self.canvas.clear()
             self.attributes_widget.clear()
             return
-        
+
         root_id = sm.object_id
         self.canvas.set_graph(self.get_graph(root_id))
 
@@ -1684,7 +1686,7 @@ class BehaviorEditor:
         self.clear_attributes()
         self.canvas.show_node_path(path)
         self.canvas.look_at_node(object_id)
-    
+
     def search_attribute(self, path: str, value: XmlValueHandler):
         path = re.sub(r":[0-9]+", ":*", path)
         self.open_search_dialog(f"{path}={value.get_value()}")
@@ -1727,7 +1729,9 @@ class BehaviorEditor:
             new_value[:] = self.beh.get_variable(idx).astuple()
 
             if idx not in (-1, len(self.beh._variables) - 1):
-                self.logger.info("Fixing affected references of known variable attributes")
+                self.logger.info(
+                    "Fixing affected references of known variable attributes"
+                )
                 fix_index_references(self.beh, variable_attributes, None, idx)
 
         def on_update(
@@ -1749,7 +1753,9 @@ class BehaviorEditor:
         def on_delete(idx: int):
             self.beh.delete_variable(idx)
             if idx not in (-1, len(self.beh._variables) + 1):
-                self.logger.info("Fixing affected references of known variable attributes")
+                self.logger.info(
+                    "Fixing affected references of known variable attributes"
+                )
                 fix_index_references(self.beh, variable_attributes, idx, None)
 
         def on_move(idx: int, new_idx: int):
@@ -1845,7 +1851,9 @@ class BehaviorEditor:
 
             self.beh.create_animation(new_value, idx)
             if idx not in (-1, len(self.beh._animations) - 1):
-                self.logger.info("Fixing affected references of known animation attributes")
+                self.logger.info(
+                    "Fixing affected references of known animation attributes"
+                )
                 fix_index_references(self.beh, animation_attributes, None, idx)
 
         def on_update(idx: int, old_value: tuple[str], new_value: list):
@@ -1858,7 +1866,9 @@ class BehaviorEditor:
         def on_delete(idx: int):
             self.beh.delete_animation(idx)
             if idx not in (-1, len(self.beh._animations) + 1):
-                self.logger.info("Fixing affected references of known animation attributes")
+                self.logger.info(
+                    "Fixing affected references of known animation attributes"
+                )
                 fix_index_references(self.beh, animation_attributes, idx, None)
 
         def on_move(idx: int, new_idx: int):
@@ -1913,7 +1923,7 @@ class BehaviorEditor:
             graphmap: GraphMap = dpg.get_item_user_data(tag)
             graphmap.set_graph(self.canvas.graph)
             dpg.show_item(tag)
-            #dpg.focus_item(tag)
+            # dpg.focus_item(tag)
             return
 
         def on_graphnode_selected(node_id: str):
@@ -1926,21 +1936,17 @@ class BehaviorEditor:
             dpg.delete_item(dialog)
 
         with dpg.window(
-            width=500, 
+            width=500,
             height=500,
             on_close=close,
             tag=tag,
         ) as dialog:
             g = self.canvas.graph
             graph_map = GraphMap(
-                g, 
-                self.get_node_frontpage, 
-                on_graphnode_selected,
-                tag + "_content"
+                g, self.get_node_frontpage, on_graphnode_selected, tag + "_content"
             )
 
         dpg.set_item_user_data(dialog, graph_map)
-
 
     def open_eventlistener_dialog(self):
         tag = f"{self.tag}_event_listener_dialog"
@@ -1993,9 +1999,7 @@ class BehaviorEditor:
             dpg.focus_item(tag)
             return
 
-        def on_clip_registered(
-            sender: str, clips: list[HkbRecord], user_data: Any
-        ):
+        def on_clip_registered(sender: str, clips: list[HkbRecord], user_data: Any):
             # This is a bit ugly, but so is adding more stuff to ids
             pin_objects = dpg.get_value(f"{sender}_pin_objects")
             if pin_objects:
@@ -2011,7 +2015,7 @@ class BehaviorEditor:
             tag=tag,
         )
 
-    def open_create_cmsg_dialog(self):
+    def open_create_stateinfo_dialog(self):
         tag = f"{self.tag}_create_cmsg_dialog"
         if dpg.does_item_exist(tag):
             dpg.show_item(tag)
@@ -2037,7 +2041,7 @@ class BehaviorEditor:
             self.jump_to_object(cmsg)
 
         active_sm = self.get_active_statemachine()
-        create_slot_dialog(
+        create_stateinfo_dialog(
             self.beh,
             on_cmsg_created,
             active_statemachine=active_sm.object_id if active_sm else None,
@@ -2193,6 +2197,6 @@ class BehaviorEditor:
             return
 
         about_dialog(tag=tag)
-        
+
         dpg.split_frame()
         center_window(tag)
