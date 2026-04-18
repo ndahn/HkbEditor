@@ -22,14 +22,21 @@ _undefined = object()
 
 
 class Tagfile:
-    def __init__(self, xml_file: str, undo: bool = False):
+    def __init__(
+        self,
+        xml_file: str,
+        undo: bool = False,
+        root_object_type: str = "hkRootLevelContainer",
+    ):
         from .hkb_types import HkbRecord
 
         self.file = xml_file
         self._tree: HkbXmlElement = xml_from_file(xml_file, undo=undo)
 
         # Some versions of HKLib seem to decompile floats with commas
-        self.floats_use_commas = bool(self._tree.xpath("(//real[contains(@dec, ',')])[1]"))
+        self.floats_use_commas = bool(
+            self._tree.xpath("(//real[contains(@dec, ',')])[1]")
+        )
 
         self.type_registry = TypeRegistry()
         self.type_registry.load_types(self._tree)
@@ -45,14 +52,11 @@ class Tagfile:
             if k.startswith("object")
         ]
         self._next_object_id = max(objectid_values, default=0) + 1
-
-        self.behavior_root: HkbRecord = self.find_first_by_type_name(
-            "hkRootLevelContainer"
-        )
+        self.behavior_root: HkbRecord = self.find_first_by_type_name(root_object_type)
 
     def _regenerate_cache(self) -> None:
         from .hkb_types import HkbRecord
-        
+
         self.objects = {
             obj.get("id"): HkbRecord.from_object(self, obj)
             for obj in self._tree.findall(".//object")
@@ -94,7 +98,7 @@ class Tagfile:
         undo_stack = self._tree.undo_stack
         if undo_stack:
             return undo_stack.top_undo_id()
-        
+
         return -1
 
     def top_undo_type(self) -> MutationType:
@@ -108,7 +112,7 @@ class Tagfile:
         undo_stack = self._tree.undo_stack
         if undo_stack:
             return undo_stack.top_undo_type()
-        
+
         return None
 
     def can_undo(self) -> bool:
@@ -172,7 +176,7 @@ class Tagfile:
         self.file = file_path
 
     def root_graph(self):
-        # Caching this would be nice, but then we'd have to update it anytime there are 
+        # Caching this would be nice, but then we'd have to update it anytime there are
         # changes to the graph
         return self.build_graph(self.behavior_root.object_id)
 
@@ -426,17 +430,17 @@ class Tagfile:
         object_filter: Callable[["HkbRecord"], bool] = None,
         search_root: "HkbRecord | str" = None,
     ) -> Generator["HkbRecord", None, None]:
-        """Find behavior nodes matching the specified criteria. 
+        """Find behavior nodes matching the specified criteria.
 
         Supports Lucene-style search queries like `<field>=<value>`.
 
         - Fields are used verbatim, with the only excception that array indices may be replaced by a `*` wildcard.
         - Values may be specified using fields, wildcards, fuzzy searches, ranges.
-        - Terms may be combined using grouping, OR, NOT. 
+        - Terms may be combined using grouping, OR, NOT.
         - Terms separated by a space are assumed to be AND.
 
         You may run queries over the following fields:
-        
+
         - id
         - object_id (same as id)
         - type_id
@@ -461,7 +465,7 @@ class Tagfile:
         ValueError
             If the query has invalid syntax.
         """
-        # TODO would be nice to place this in the query module, but neither the query nor 
+        # TODO would be nice to place this in the query module, but neither the query nor
         # the HkbRecord objects have any knowledge about the graph structure
         parent_pattern = r"\bparent=(object[0-9]+)\b"
         parent_query = re.search(parent_pattern, query_str)
