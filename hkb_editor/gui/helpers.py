@@ -1,6 +1,7 @@
 from typing import Any, Callable, Type, Literal, Annotated, get_origin, get_args
 from enum import IntFlag, Enum, Flag
 from functools import partial
+from pathlib import Path
 import math
 import re
 import logging
@@ -280,6 +281,51 @@ def create_value_widget(
             )
             if label:
                 dpg.add_text(label)
+
+    # Item tables
+    elif type_origin is list or value_type is list:
+        from hkb_editor.gui.widgets import add_simple_items_table
+
+        if type_args:
+            item_type = type_args[0]
+        elif default:
+            item_type = type(default[0])
+        else:
+            item_type = str
+
+        add_simple_items_table(
+            behavior,
+            {"value": item_type},
+            lambda: (None, ),
+            callback,
+            initial_values=default,
+            label=label,
+            tag=tag,
+            user_data=user_data,
+            **kwargs,
+        )
+    elif type_origin is dict or value_type is dict:
+        from hkb_editor.gui.widgets import add_simple_items_table
+
+        if type_args:
+            key_type, val_type = type_args
+        elif default:
+            key_type = type(next(iter(default.keys())))
+            val_type = type(next(iter(default.values())))
+        else:
+            key_type = val_type = str
+
+        add_simple_items_table(
+            behavior,
+            {"key": key_type, "value": val_type},
+            lambda: (None, None),
+            callback,
+            initial_values=default,
+            label=label,
+            tag=tag,
+            user_data=user_data,
+            **kwargs,
+        )
 
     # Select an object
     elif value_type == HkbRecord or (
@@ -715,6 +761,37 @@ def table_sort(sender: str, sort_specs: tuple[tuple[str, int]], user_data: Any):
         )
 
     dpg.reorder_items(sender, 1, rows)
+
+
+def shorten_path(path: str | Path, maxlen: int = 30) -> str:
+    if not path:
+        return ""
+
+    parts = Path(path).parts
+    short = parts[-1]
+
+    for p in reversed(parts[:-1]):
+        short = Path(p, short)
+        if len(str(short)) > maxlen:
+            short = Path("...", short)
+            break
+
+    return str(short)
+
+
+def dpg_section(
+    label: str,
+    color: tuple,
+    *,
+    spacer: int = 10,
+    parent: str = 0,
+    tag: str = 0,
+) -> None:
+    if spacer > 0:
+        dpg.add_spacer(height=spacer)
+
+    dpg.add_text(label, color=color, parent=parent, tag=tag)
+    dpg.add_separator()
 
 
 def common_loading_indicator(

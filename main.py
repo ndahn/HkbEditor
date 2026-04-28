@@ -54,7 +54,7 @@ def main():
     dpg.create_viewport(
         title="HkbEditor",
         small_icon="icon.ico",
-        large_icon="doc/iconx.png",
+        large_icon="docs/assets/images/icon.png",
         disable_close=True,
     )
 

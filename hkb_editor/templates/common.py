@@ -1174,7 +1174,7 @@ class CommonActionsMixin:
         if cmsg_kwargs is None:
             cmsg_kwargs = {}
         cmsg_kwargs.setdefault("name", name + "_CMSG")
-        cmsg_kwargs.setdefault("generators", [clip])
+        cmsg_kwargs.setdefault("generators", []).append(clip)
 
         cmsg = self.new_cmsg(animation, **cmsg_kwargs)
 

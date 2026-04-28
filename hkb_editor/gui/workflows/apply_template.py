@@ -40,18 +40,19 @@ def apply_template_dialog(
         webbrowser.open("file:///" + os.path.dirname(template_file))
 
     def set_arg(sender: str, value: Any, arg: TemplateContext._Arg) -> None:
-        if get_origin(arg.type) == Literal:
+        origin = get_origin(arg.type) or arg.type
+        if origin == Literal:
             if value is None:
                 return
 
             # Literal can hold types other than string, but the combo only supports strings
-            for choice in get_choices(arg.type):
+            for choice in get_choices(origin):
                 if str(choice) == value:
                     value = choice
                     break
 
-        elif issubclass(arg.type, (Enum, Flag)):
-            value = arg.type[value].value
+        elif issubclass(origin, (Enum, Flag)):
+            value = origin[value].value
 
         else:
             # simple types and HkbRecord will just be passed through

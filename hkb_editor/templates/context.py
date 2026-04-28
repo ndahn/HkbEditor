@@ -56,12 +56,14 @@ class TemplateContext(CommonActionsMixin):
             raise ValueError("Template does not contain a run() function")
 
         self.logger = logging.getLogger(os.path.basename(template_file))
-        
-    def _parse_template_func(self, func: ast.FunctionDef, module_ast: ast.Module = None):
+
+    def _parse_template_func(
+        self, func: ast.FunctionDef, module_ast: ast.Module = None
+    ):
         doc = parse_docstring(ast.get_docstring(func))
         self._title = doc.short_description
         self._description = doc.long_description
-        
+
         # For cases where a class has been imported under an alias (import X as Y)
         import_map = {}
         if module_ast:
@@ -69,17 +71,36 @@ class TemplateContext(CommonActionsMixin):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         name = alias.asname or alias.name
-                        import_map[name] = (alias.name, alias.name.split('.')[-1])
+                        import_map[name] = (alias.name, alias.name.split(".")[-1])
                 elif isinstance(node, ast.ImportFrom):
-                    module = node.module or ''
+                    module = node.module or ""
                     for alias in node.names:
                         local_name = alias.asname or alias.name
                         import_map[local_name] = (module, alias.name)
-        
+
         def type_from_str(type_str: str) -> type:
             if type_str.startswith("Literal["):
                 choices = ast.literal_eval(type_str[7:])
                 return Literal[tuple(choices)]
+
+            # list[item_type]
+            if type_str.startswith("list[") and type_str.endswith("]"):
+                item_type = type_from_str(type_str[5:-1])
+                return list[item_type]
+
+            # dict[key_type, val_type] - split on first comma not inside brackets
+            if type_str.startswith("dict[") and type_str.endswith("]"):
+                inner = type_str[5:-1]
+                depth = 0
+                for i, ch in enumerate(inner):
+                    if ch in "([":
+                        depth += 1
+                    elif ch in ")]":
+                        depth -= 1
+                    elif ch == "," and depth == 0:
+                        key_type = type_from_str(inner[:i].strip())
+                        val_type = type_from_str(inner[i + 1 :].strip())
+                        return dict[key_type, val_type]
 
             valid = {
                 c.__name__: c
@@ -100,29 +121,31 @@ class TemplateContext(CommonActionsMixin):
                 if "," in type_str:
                     comma = type_str.index(",")
                     actual_type = valid[type_str[10:comma]]
-                    extras = "[" + type_str[comma + 1:]
+                    extras = "[" + type_str[comma + 1 :]
                     annotations = ast.literal_eval(extras)
                 else:
                     actual_type = valid[type_str[10:-1]]
                     annotations = []
                 return Annotated[actual_type, *annotations]
-            
+
             if type_str in valid:
                 return valid[type_str]
-            
+
             # Try to resolve enum/flag from imports
             if type_str in import_map:
                 module_path, original_name = import_map[type_str]
                 try:
                     module = __import__(module_path, fromlist=[original_name])
                     resolved = getattr(module, original_name)
-                    if isinstance(resolved, type) and issubclass(resolved, (Enum, Flag)):
+                    if isinstance(resolved, type) and issubclass(
+                        resolved, (Enum, Flag)
+                    ):
                         return resolved
                 except (ImportError, AttributeError):
                     pass
-            
+
             return type(None)
-        
+
         def get_arg_type(arg: ast.arg, arg_doc: DocstringParam, default: Any):
             if arg.annotation:
                 return type_from_str(ast.unparse(arg.annotation))
@@ -132,7 +155,7 @@ class TemplateContext(CommonActionsMixin):
                 return type(default)
             else:
                 raise ValueError(f"Type of argument {arg.arg} could not be determined")
-        
+
         def collect_args(args: list[ast.arg], defaults: list[Any]):
             # defaults are specified from the right
             pad = [None] * (len(args) - len(defaults))
@@ -153,7 +176,9 @@ class TemplateContext(CommonActionsMixin):
                             if type_name in import_map:
                                 module_path, original_name = import_map[type_name]
                                 try:
-                                    module = __import__(module_path, fromlist=[original_name])
+                                    module = __import__(
+                                        module_path, fromlist=[original_name]
+                                    )
                                     enum_class = getattr(module, original_name)
                                     default = getattr(enum_class, member_name)
                                 except (ImportError, AttributeError):
@@ -179,7 +204,9 @@ class TemplateContext(CommonActionsMixin):
         collect_args(func.args.args, func.args.defaults)
         collect_args(func.args.kwonlyargs, func.args.kw_defaults)
 
-    def find_all(self, *query: str, start_from: HkbRecord | str = None) -> list[HkbRecord]:
+    def find_all(
+        self, *query: str, start_from: HkbRecord | str = None
+    ) -> list[HkbRecord]:
         """Returns all objects matching the specified query.
 
         Parameters
@@ -196,7 +223,9 @@ class TemplateContext(CommonActionsMixin):
         """
         return list(self._behavior.query(" ".join(query), search_root=start_from))
 
-    def find(self, *query: str, default: Any = _undefined, start_from: HkbRecord | str = None) -> HkbRecord:
+    def find(
+        self, *query: str, default: Any = _undefined, start_from: HkbRecord | str = None
+    ) -> HkbRecord:
         """Returns the first object matching the specified query.
 
         Parameters
@@ -272,7 +301,7 @@ class TemplateContext(CommonActionsMixin):
         with self._behavior.transaction():
             for path, value in attributes.items():
                 handler = record.get_field(path)
-                
+
                 handler.set_value(value)
                 self.logger.debug(f"Updated {path}={value} of {record}")
 
@@ -348,5 +377,5 @@ class TemplateContext(CommonActionsMixin):
 
         ret = array.pop(index).get_value()
         self.logger.debug(f"Removed item {index} ({ret}) from {path} of {record}")
-        
+
         return ret

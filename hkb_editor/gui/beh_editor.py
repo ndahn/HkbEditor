@@ -1680,7 +1680,7 @@ class BehaviorEditor:
             self._on_root_selected("", True, root.object_id)
 
         # Make sure the graph is complete
-        self.canvas.set_graph(self.beh.build_graph())
+        self.canvas.set_graph(self.beh.build_graph(root.object_id))
         # Reveal the node in the state machine graph
         path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
         self.clear_attributes()

@@ -29,7 +29,7 @@ def fix_common_problems_dialog(
         for record in behavior:
             array: HkbArray
             for path, array in record.find_fields_by_class(HkbArray):
-                # Some pointer arrays in the root objects must not be altered, so we limit 
+                # Some pointer arrays in the root objects must not be altered, so we limit
                 # it to generators for now where we know how they work
                 if not path.endswith("generators"):
                     continue
@@ -86,7 +86,7 @@ def fix_common_problems_dialog(
         logger.info(f"Removed {len(orphans)} abandoned objects")
         return len(orphans)
 
-    def show_message(msg: str = None, color: style.Color = style.red) -> None:
+    def show_message(msg: str = None, color: style.RGBA = style.red) -> None:
         if msg:
             dpg.configure_item(
                 f"{tag}_notification",
