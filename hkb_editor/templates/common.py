@@ -777,6 +777,59 @@ class CommonActionsMixin:
             **kwargs,
         )
 
+    def new_statemachine(
+        self,
+        startStateId: int,
+        name: str,
+        *,
+        object_id: str = "<new>",
+        states: list[HkbRecord | str] = None,
+        **kwargs,
+    ) -> HkbRecord:
+        """Create a new statemachine.
+
+        Statemachines contain StateInfo nodes and manage transitions between them. The state that's active in the beginning is usually hard set, however, halfblend SMs tend to set it via a variable.
+
+        Transitions between nodes are configured using TransitionInfoArrays. Those added to an SM's wildcardTransitions can be activated anytime, however, StateInfos can customize these with their own TransitionInfoArrays. To register a wildcard transition use [register_wildcard_transition][].
+
+        Parameters
+        ----------
+        startStateId : int
+            _description_
+        name : str
+            _description_
+        object_id : str, optional
+            _description_, by default "<new>"
+        states : list[HkbRecord  |  str], optional
+            _description_, by default None
+
+        Returns
+        -------
+        HkbRecord
+            _description_
+        """
+        if states:
+            states = [self.resolve_object(obj).object_id for obj in states]
+        else:
+            states = []
+
+        kwargs.setdefault("eventToSendWhenStateOrTransitionChanges/id", -1)
+        kwargs.setdefault("returnToPreviousStateEventId", -1)
+        kwargs.setdefault("randomTransitionEventId", -1)
+        kwargs.setdefault("transitionToNextHigherStateEventId", -1)
+        kwargs.setdefault("transitionToNextLowerStateEventId", -1)
+        kwargs.setdefault("syncVariableIndex", -1)
+        kwargs.setdefault("maxSimultaneousTransitions", 32)
+
+        return self.new_record(
+            "hkbStateMachine",
+            object_id,
+            name=name,
+            startStateId=startStateId,
+            states=states,
+            **kwargs,
+        )
+
     def new_statemachine_state(
         self,
         stateId: int,

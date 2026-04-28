@@ -33,7 +33,9 @@ def run(
 
     Creates a new action that can be done while moving.
 
-    TODO
+    The regular animation slots are all meant for oneshot animations, e.g. firing a crossbow. Only slots with an animation *and* name will be generated. If you need a looping animation place it in the `loop` slot (for the idle) and `loop_move` for when you're moving. The `motion_blend` attribute decides which movement type to use.
+
+    At the end this template will print some HKS definitions you will need to execute your halfblend with `ExecEventHalfBlend`.
 
     Full instructions:
     https://ndahn.github.io/HkbEditor/templates/er/halfblend_slot/
@@ -46,6 +48,39 @@ def run(
     ----------
     ctx : TemplateContext
         The template context.
+    base_name : str
+        The names of generated nodes and events will be derived from this.
+    anim_selector : CmsgOffsetType, optional
+        How the CMSGs will select their clips (when multiple animations are registered).
+    function_call : bool, optional
+        Call a <base_name>_Activate() HKS function whenever the halfblend activates.
+    anim1_name : str, optional
+        Suffix of nodes in animation slot 1.
+    anim1 : Animation, optional
+        Animation to use for animation slot 1.
+    anim2_name : str, optional
+        Suffix of nodes in animation slot 2.
+    anim2 : Animation, optional
+        Animation to use for animation slot 2.
+    anim3_name : str, optional
+        Suffix of nodes in animation slot 3.
+    anim3 : Animation, optional
+        Animation to use for animation slot 3.
+    anim4_name : str, optional
+        Suffix of nodes in animation slot 4.
+    anim4 : Animation, optional
+        Animation to use for animation slot 4.
+    anim5_name : str, optional
+        Suffix of nodes in animation slot 5.
+    anim5 : Animation, optional
+        Animation to use for animation slot 5.
+    loop : Animation, optional
+        Looping idle animation.
+    move_loop : Animation, optional
+        Looping animation while moving. Only used if loop is also set.
+    motion_blend : Literal[&quot;walk&quot;, &quot;stance&quot;, &quot;no, optional
+        Which movement type to blend while in the move_loop animation.
+
     """
     upper_sm = ctx.find("name=Upper_SM")
 
@@ -58,11 +93,12 @@ def run(
     # Many halfblends use an additional function to setup stuff when activated
     # (since the SM's initial state isn't predefined)
     if function_call:
+        hks_func_name = f"{base_name.replace(' ', '_')}_Activate()"
         script_gen = ctx.new_record(
             "hkbScriptGenerator",
             "<new>",
             name=f"{base_name} Script",
-            onActivateScript=f"{base_name.replace(' ', '_')}_Activate()",
+            onActivateScript=hks_func_name,
         )
         action_state["generator"] = script_gen
         action_parent: HkbPointer = script_gen["child"]
@@ -70,21 +106,7 @@ def run(
         action_parent: HkbPointer = action_state["generator"]
 
     # New SM for this action
-    # TODO create new ctx helper for statemachines
-    action_sm = ctx.new_record(
-        "hkbStateMachine",
-        "<new>",
-        name=f"{base_name}_SM",
-        returnToPreviousStateEventId=-1,
-        randomTransitionEventId=-1,
-        transitionToNextHigherStateEventId=-1,
-        transitionToNextLowerStateEventId=-1,
-        syncVariableIndex=-1,
-        maxSimultaneousTransitions=32,
-        **{
-            "eventToSendWhenStateOrTransitionChanges/id": -1,
-        },
-    )
+    action_sm = ctx.new_statemachine(0, f"{base_name}_SM")
     ctx.bind_variable(action_sm, "startStateId", "UpperDefaultState01")
     action_parent.set_value(action_sm)
 
@@ -149,7 +171,7 @@ def run(
         (anim4, anim4_name),
         (anim5, anim5_name),
     ]:
-        if anim:
+        if anim and suffix:
             make_action_state(anim, suffix)
 
     if loop:
@@ -222,4 +244,7 @@ def run(
 
 To execute your halfblend action, call `ExecEventHalfBlend` with any of the `Event_*` definitions.\
 """
+    if function_call:
+        msg += f"\nWhenever your halfblend activates it will also call the HKS function {hks_func_name}() if it exists."
+
     ctx.logger.info(msg)
