@@ -563,6 +563,9 @@ class CommonActionsMixin:
             )
 
         with self._behavior.transaction():
+            if not attributes:
+                attributes = source.fields
+                
             for attr in attributes:
                 src_attr = source.get_field(attr)
                 new_val = src_attr.get_value()

@@ -391,6 +391,17 @@ class Tagfile:
             if obj.type_id in compatible:
                 yield obj
 
+    def get_immediate_parents(self, object_id: "HkbRecord | str") -> "list[HkbRecord]":
+        from .hkb_types import HkbRecord
+
+        if isinstance(object_id, HkbRecord):
+            object_id = object_id.object_id
+        
+        parents: list[HkbXmlElement] = self._tree.xpath(
+            f"/*/object[.//pointer[@id='{object_id}']]"
+        )
+        return [self.objects[p.get("id")] for p in parents]
+
     def find_hierarchy_parents_for(
         self, object_id: "HkbRecord | str", parent_type: str
     ) -> Generator["HkbRecord", None, None]:
@@ -407,19 +418,14 @@ class Tagfile:
             visited.add(candidate_id)
 
             # Search upwards through the hierarchy to see if any ancestors match our criteria
-            parents: list[HkbXmlElement] = self._tree.xpath(
-                f"/*/object[.//pointer[@id='{candidate_id}']]"
-            )
-
-            for parent_elem in parents:
-                oid = parent_elem.get("id")
-
-                if parent_elem.get("typeid") == parent_type:
-                    yield self.objects[oid]
+            parents = self.get_immediate_parents(candidate_id)
+            for parent in parents:
+                if parent.type_id == parent_type:
+                    yield parent
 
                 # Parent didn't match, but might still have a matching parent
-                if oid not in visited:
-                    candidates.append(oid)
+                if parent.object_id not in visited:
+                    candidates.append(parent.object_id)
 
         return None
 

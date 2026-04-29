@@ -16,7 +16,7 @@ def find_dialog(
     item_to_row: Callable[[Any], tuple[str, ...] | str] = str,
     *,
     context_menu_func: Callable[[Any], None] = None,
-    okay_callback: Callable[[str, Any, Any], None] = None,
+    okay_callback: Callable[[str, Any | list[Any], Any], None] = None,
     allow_clear: bool = False,
     item_limit: int = None,
     initial_filter: str = "",
@@ -25,6 +25,7 @@ def find_dialog(
     filter_help: str = None,
     on_filter_help_click: Callable[[], None] = None,
     on_result_callback: Callable[[list[Any]], None] = None,
+    multiple: bool = False,
     modal: bool = False,
     hide_on_close: bool = False,
     tag: str = 0,
@@ -33,7 +34,8 @@ def find_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-    selected_item = None
+    active_idx = None
+    selected_rows = set()
 
     if item_limit is None:
         item_limit = 2000 / len(columns)
@@ -113,24 +115,75 @@ def find_dialog(
 
         dpg.hide_item(f"{tag}_loading")
 
-    def on_select(sender, is_selected: bool, item: Any):
-        nonlocal selected_item
-        if selected_item == item:
+    def clear_selection() -> None:
+        for row in selected_rows:
+            dpg.set_value(dpg.get_item_children(row, slot=1)[0], False)
+        
+        selected_rows.clear()
+
+    def on_select(sender: str, select: bool, item: Any):
+        nonlocal active_idx
+        item_row = dpg.get_item_parent(sender)
+        
+        if select and item_row in selected_rows:
+            return
+        
+        if not select and item_row not in selected_rows:
             return
 
-        selected_item = item
+        rows = dpg.get_item_children(table, slot=1)
+        for idx, row in enumerate(rows):
+            if row == item_row:
+                item_idx = idx
+                break
+        else:
+            raise ValueError(f"Could not determine row for item {item}")
 
-        # Deselect all other selectables
-        if is_selected:
-            for row in dpg.get_item_children(table, slot=1):
-                row_selected = dpg.get_item_user_data(row) == item
-                dpg.set_value(dpg.get_item_children(row, slot=1)[0], row_selected)
+        if multiple:
+            if dpg.is_key_down(dpg.mvKey_ModCtrl):
+                # Add to selection, no change to current selection
+                pass
+            elif dpg.is_key_down(dpg.mvKey_ModShift):
+                # Extend selection
+                start_idx = active_idx
+                end_idx = item_idx
+
+                if start_idx > end_idx:
+                    end_idx, start_idx = start_idx, end_idx
+                
+                for idx in range(start_idx, end_idx + 1):
+                    row = rows[idx]
+                    dpg.set_value(dpg.get_item_children(row, slot=1)[0], select)
+                    if select:
+                        selected_rows.add(row)
+                    else:
+                        selected_rows.discard(row)
+            else:
+                # Replace selection
+                if item_row not in selected_rows:
+                    clear_selection()
+        else:
+            if select:
+                clear_selection()
+
+        active_idx = item_idx
+        if select:
+            selected_rows.add(item_row)
+        else:
+            selected_rows.discard(item_row)
 
     def on_okay():
-        if selected_item is None:
+        if not selected_rows:
             return
 
-        okay_callback(dialog, selected_item, user_data)
+        if multiple:
+            items = [dpg.get_item_user_data(row) for row in selected_rows]
+            okay_callback(dialog, items, user_data)
+        else:
+            rows = dpg.get_item_children(table, slot=1)
+            item = dpg.get_item_user_data(rows[active_idx])
+            okay_callback(dialog, item, user_data)
+        
         on_window_close()
 
     def on_clear():
@@ -142,11 +195,12 @@ def find_dialog(
         def open_context_menu(sender: str, app_data: tuple[int, int]):
             _, row = app_data
             item = dpg.get_item_user_data(row)
+            selectable = dpg.get_item_children(row, slot=1)[0]
 
             if item is not None:
                 # Force select the right-clicked item
-                on_select(sender, True, item)
-                context_menu_func(selected_item)
+                on_select(selectable, True, item)
+                context_menu_func(item)
 
         with dpg.item_handler_registry() as right_click_handler:
             dpg.add_item_clicked_handler(
@@ -265,6 +319,7 @@ def search_objects_dialog(
     *,
     initial_filter: str = "",
     result_callback: Callable[[str, list[HkbRecord], Any], None] = None,
+    multiple: bool = False,
     tag: str = None,
     user_data: Any = None,
 ) -> str:
@@ -313,6 +368,7 @@ def search_objects_dialog(
         hide_on_close=True,
         on_filter_help_click=lambda: webbrowser.open(lucene_url),
         on_result_callback=on_results,
+        multiple=multiple,
         tag=tag,
         user_data=user_data,
     )
@@ -327,6 +383,7 @@ def select_object(
     initial_filter: str = "",
     allow_clear: bool = True,
     title: str = None,
+    multiple: bool = False,
     tag: str = None,
     user_data: Any = None,
 ) -> None:
@@ -368,6 +425,7 @@ def select_object(
         title=title,
         filter_help=lucene_help_text,
         on_filter_help_click=lambda: webbrowser.open(lucene_url),
+        multiple=multiple,
         tag=tag,
         user_data=user_data,
     )
@@ -380,6 +438,7 @@ def select_variable(
     initial_filter: str = "",
     allow_clear: bool = True,
     title: str = "Select Variable",
+    multiple: bool = False,
     tag: str = None,
     user_data: Any = None,
 ) -> str:
@@ -415,6 +474,7 @@ def select_variable(
         # item_limit=len(variables) * 1.1,
         initial_filter=initial_filter,
         title=title,
+        multiple=multiple,
         tag=tag,
         user_data=user_data,
     )
@@ -427,6 +487,7 @@ def select_event(
     initial_filter: str = "",
     allow_clear: bool = True,
     title: str = "Select Event",
+    multiple: bool = False,
     tag: str = None,
     user_data: Any = None,
 ) -> None:
@@ -460,6 +521,7 @@ def select_event(
         # item_limit=len(events) * 1.1,
         initial_filter=initial_filter,
         title=title,
+        multiple=multiple,
         tag=tag,
         user_data=user_data,
     )
@@ -467,12 +529,13 @@ def select_event(
 
 def select_animation(
     behavior: HavokBehavior,
-    on_animation_name_selected: Callable[[str, int, Any], None],
+    on_animation_selected: Callable[[str, int, Any], None],
     *,
     initial_filter: str = "",
     allow_clear: bool = True,
     full_names: bool = False,
     title: str = "Select Animation Name",
+    multiple: bool = False,
     tag: str = None,
     user_data: Any = None,
 ) -> None:
@@ -494,7 +557,7 @@ def select_animation(
         return item
 
     def on_okay(sender: str, selected: tuple[int, str], user_data: Any):
-        on_animation_name_selected(
+        on_animation_selected(
             sender,
             selected[0] if selected is not None else None,
             user_data,
@@ -509,6 +572,7 @@ def select_animation(
         # item_limit=len(animations) * 1.1,
         initial_filter=initial_filter,
         title=title,
+        multiple=multiple,
         tag=tag,
         user_data=user_data,
     )

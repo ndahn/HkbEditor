@@ -2170,7 +2170,7 @@ class BehaviorEditor:
         self.logger.info(
             "Opening website. An offline version of the guide can be found inside the docs/ folder!"
         )
-        webbrowser.open("https://ndahn.github.io/HkbEditor/howto/howto/")
+        webbrowser.open("https://ndahn.github.io/HkbEditor/howto/")
 
     def close_all_dialogs(self) -> None:
         dialogs = [
