@@ -60,6 +60,7 @@ from .dialogs import (
     save_file_dialog,
     edit_simple_array_dialog,
     search_objects_dialog,
+    mass_rename_dialog,
 )
 from .tools import (
     skeleton_mirror_dialog,
@@ -1401,11 +1402,16 @@ class BehaviorEditor:
 
             dpg.add_selectable(
                 label="Search children",
-                callback=lambda s, a, u: self.open_search_dialog(f"parent={node.id}"),
+                callback=lambda s, a, u: self.open_search_dialog(f"parent={u.id}"),
                 user_data=node,
             )
             dpg.add_selectable(
-                label="Pin Object",
+                label="Mass rename",
+                callback=lambda s, a, u: self.open_mass_rename_dialog(u),
+                user_data=node,
+            )
+            dpg.add_selectable(
+                label="Pin object",
                 callback=lambda s, a, u: self.add_pinned_object(u),
                 user_data=obj,
             )
@@ -1917,6 +1923,26 @@ class BehaviorEditor:
             jump_callback=lambda s, a, u: self.jump_to_object(a),
             initial_filter=query,
             result_callback=on_results,
+            tag=tag,
+        )
+
+    def open_mass_rename_dialog(self, node: Node) -> None:
+        tag = f"{self.tag}_mass_rename_dialog_{node.id}"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        def on_mass_rename(sender: str, renamed: list[HkbRecord], user_data: Any):
+            # This is a bit ugly, but so is adding more stuff to new_object
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                for node in renamed:
+                    self.add_pinned_object(node.object_id)
+
+        mass_rename_dialog(
+            self.beh.objects[node.id],
+            on_mass_rename,
             tag=tag,
         )
 

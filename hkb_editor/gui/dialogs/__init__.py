@@ -10,3 +10,4 @@ from .find_object import (
     select_animation,
 )
 from .make_tuple import new_tuple_dialog
+from .mass_rename import mass_rename_dialog

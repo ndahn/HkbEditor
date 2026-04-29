@@ -4,10 +4,9 @@ import networkx as nx
 import math
 
 from hkb_editor.external import get_config
-
-from .graph_layout import GraphLayout, HorizontalGraphLayout, Node
 from hkb_editor.gui import style
 from hkb_editor.gui.helpers import estimate_drawn_text_size
+from .graph_layout import GraphLayout, HorizontalGraphLayout, Node
 
 
 class GraphWidget:
