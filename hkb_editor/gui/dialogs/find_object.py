@@ -25,6 +25,7 @@ def find_dialog(
     filter_help: str = None,
     on_filter_help_click: Callable[[], None] = None,
     on_result_callback: Callable[[list[Any]], None] = None,
+    select_color: style.RGBA = style.muted_green,
     multiple: bool = False,
     modal: bool = False,
     hide_on_close: bool = False,
@@ -34,7 +35,7 @@ def find_dialog(
     if tag in (0, "", None):
         tag = dpg.generate_uuid()
 
-    active_idx = None
+    anchor_idx = None
     selected_rows = set()
 
     if item_limit is None:
@@ -116,61 +117,55 @@ def find_dialog(
         dpg.hide_item(f"{tag}_loading")
 
     def clear_selection() -> None:
-        for row in selected_rows:
-            dpg.set_value(dpg.get_item_children(row, slot=1)[0], False)
-
+        for idx, row in enumerate(dpg.get_item_children(table, 1)):
+            dpg.unhighlight_table_row(table, idx)
+            children = dpg.get_item_children(row, slot=1)
+            if children:
+                dpg.set_value(children[0], False)
+        
         selected_rows.clear()
 
-    def on_select(sender: str, select: bool, item: Any):
-        nonlocal active_idx
-        item_row = dpg.get_item_parent(sender)
-
-        if select and item_row in selected_rows:
-            return
-
-        if not select and item_row not in selected_rows:
-            return
-
-        rows = dpg.get_item_children(table, slot=1)
-        for idx, row in enumerate(rows):
-            if row == item_row:
-                item_idx = idx
-                break
+    def _set_row_selected(row: str, idx: int, select: bool) -> None:
+        if select:
+            dpg.highlight_table_row(table, idx, select_color)
+            selected_rows.add(row)
         else:
+            dpg.unhighlight_table_row(table, idx)
+            selected_rows.discard(row)
+
+    def on_select(sender: str, select: bool, item: Any):
+        nonlocal anchor_idx
+
+        dpg.set_value(sender, False)
+        item_row = dpg.get_item_parent(sender)
+        rows = dpg.get_item_children(table, slot=1)
+
+        # Find the clicked row's index
+        item_idx = next((i for i, r in enumerate(rows) if r == item_row), None)
+        if item_idx is None:
             raise ValueError(f"Could not determine row for item {item}")
 
         if multiple:
-            if dpg.is_key_down(dpg.mvKey_ModCtrl):
-                # Add to selection, no change to current selection
-                pass
-            elif dpg.is_key_down(dpg.mvKey_ModShift):
-                # Extend selection
-                start_idx = active_idx
-                end_idx = item_idx
-
-                if start_idx > end_idx:
-                    end_idx, start_idx = start_idx, end_idx
-
-                for idx in range(start_idx, end_idx + 1):
-                    row = rows[idx]
-                    dpg.set_value(dpg.get_item_children(row, slot=1)[0], select)
-                    if select:
-                        selected_rows.add(row)
-                    else:
-                        selected_rows.discard(row)
+            if dpg.is_key_down(dpg.mvKey_ModShift) and anchor_idx is not None:
+                # Extend selection from anchor to clicked row - always select, never toggle
+                start, end = sorted((anchor_idx, item_idx))
+                for i in range(start, end + 1):
+                    _set_row_selected(rows[i], item_idx, True)
+                # Don't update anchor on shift-click
+                return
+            elif dpg.is_key_down(dpg.mvKey_ModCtrl):
+                # Toggle just this row
+                _set_row_selected(item_row, item_idx, select)
             else:
-                # Replace selection
-                if item_row not in selected_rows:
-                    clear_selection()
-        else:
-            if select:
+                # Plain click: replace selection
                 clear_selection()
-
-        active_idx = item_idx
-        if select:
-            selected_rows.add(item_row)
+                _set_row_selected(item_row, item_idx, select)
         else:
-            selected_rows.discard(item_row)
+            # Single-select: clear others, apply this
+            clear_selection()
+            _set_row_selected(item_row, item_idx, select)
+
+        anchor_idx = item_idx
 
     def on_okay():
         if not selected_rows:
@@ -181,7 +176,7 @@ def find_dialog(
             okay_callback(dialog, items, user_data)
         else:
             rows = dpg.get_item_children(table, slot=1)
-            item = dpg.get_item_user_data(rows[active_idx])
+            item = dpg.get_item_user_data(rows[anchor_idx])
             okay_callback(dialog, item, user_data)
 
         on_window_close()
