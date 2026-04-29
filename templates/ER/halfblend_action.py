@@ -82,10 +82,16 @@ def run(
         Which movement type to blend while in the move_loop animation.
 
     """
+    # Definitions the user needs for HKS
+    def0 = f"{base_name.upper()}_DEF0"
+    hks_definitions: list[str] = []
+    hks_functions: list[str] = []
+
     upper_sm = ctx.find("name=Upper_SM")
 
     action_state_id = ctx.get_next_state_id(upper_sm)
     action_state = ctx.new_statemachine_state(action_state_id, name=base_name)
+    hks_definitions.append(f"{def0} = {action_state_id}")
 
     # NOTE: no wildcard transition needed due to how halfblends work
     ctx.array_add(upper_sm, "states", action_state)
@@ -93,15 +99,16 @@ def run(
     # Many halfblends use an additional function to setup stuff when activated
     # (since the SM's initial state isn't predefined)
     if function_call:
-        hks_func_name = f"{base_name.replace(' ', '_')}_Activate()"
+        hks_common_func = f"{base_name.replace(' ', '_')}_Activate()"
         script_gen = ctx.new_record(
             "hkbScriptGenerator",
             "<new>",
             name=f"{base_name} Script",
-            onActivateScript=hks_func_name,
+            onActivateScript=hks_common_func,
         )
         action_state["generator"] = script_gen
         action_parent: HkbPointer = script_gen["child"]
+        hks_functions.append(hks_common_func)
     else:
         action_parent: HkbPointer = action_state["generator"]
 
@@ -109,12 +116,6 @@ def run(
     action_sm = ctx.new_statemachine(0, f"{base_name}_SM")
     ctx.bind_variable(action_sm, "startStateId", "UpperDefaultState01")
     action_parent.set_value(action_sm)
-
-    # Definitions the user needs for HKS
-    def0 = f"{base_name.upper()}_DEF0"
-    definitions: list[str] = [
-        f"{def0} = {action_state_id}",
-    ]
 
     # Create the desired state chains
     default_transition = ctx.get_default_transition_effect()
@@ -132,9 +133,14 @@ def run(
         """
 
         def1 = f"{base_name.upper()}_{suffix.upper()}_DEF1"
-        definitions.append(f"{def1} = {state_id}")
-        definitions.append(
+        hks_definitions.append(f"{def1} = {state_id}")
+        hks_definitions.append(
             f'Event_{base_name}_{suffix} = {{"{event.name}", {def0}, {def1}}}'
+        )
+
+    def add_function(suffix: str) -> None:
+        hks_functions.append(
+            f"{base_name.replace(' ', '_')}_{suffix.replace(' ', '_')}"
         )
 
     def make_action_state(
@@ -162,6 +168,7 @@ def run(
         ctx.array_add(action_sm, "states", state)
 
         add_definition(event, suffix, state_id)
+        add_function(suffix)
         return (state, cmsg, clip)
 
     for anim, suffix in [
@@ -240,11 +247,11 @@ def run(
 
     msg = f"""Success! Copy the following lines and add them to your HKS:
 
-{"\n".join(definitions)}
+{"\n".join(hks_definitions)}
 
-To execute your halfblend action, call `ExecEventHalfBlend` with any of the `Event_*` definitions.\
+To execute your halfblend action, call `ExecEventHalfBlend` with any of the `Event_*` definitions.
+In addition you should create the following HKS functions:
+
+{"\n".join(hks_functions)}
 """
-    if function_call:
-        msg += f"\nWhenever your halfblend activates it will also call the HKS function {hks_func_name}() if it exists."
-
     ctx.logger.info(msg)

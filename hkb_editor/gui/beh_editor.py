@@ -78,6 +78,7 @@ from .workflows.clone_hierarchy import (
     paste_children,
     MergeAction,
 )
+from .workflows.duplicate_clipcat import duplicate_clipcat_dialog
 from .workflows.fix_common_problems import fix_common_problems_dialog
 from .workflows.verify_behavior import verify_behavior
 from .helpers import make_copy_menu, center_window, common_loading_indicator
@@ -563,6 +564,9 @@ class BehaviorEditor:
             )
             dpg.add_menu_item(
                 label="Register Clips...", callback=self.open_register_clip_dialog
+            )
+            dpg.add_menu_item(
+                label="Duplicate Clips...", callback=self.open_duplicate_clips_dialog
             )
 
             dpg.add_separator()
@@ -2012,6 +2016,29 @@ class BehaviorEditor:
         register_clips_dialog(
             self.beh,
             on_clip_registered,
+            tag=tag,
+        )
+
+    def open_duplicate_clips_dialog(self):
+        tag = f"{self.tag}_duplicate_clips_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        def on_clips_duplicated(sender: str, clips: list[HkbRecord], user_data: Any):
+            # This is a bit ugly, but so is adding more stuff to ids
+            pin_objects = dpg.get_value(f"{sender}_pin_objects")
+            if pin_objects:
+                for clip in clips:
+                    self.add_pinned_object(clip)
+
+            if clips:
+                self.jump_to_object(clips[0])
+
+        duplicate_clipcat_dialog(
+            self.beh,
+            on_clips_duplicated,
             tag=tag,
         )
 

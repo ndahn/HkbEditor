@@ -171,7 +171,7 @@ def duplicate_clipcat_dialog(
         dpg.add_spacer(height=3)
 
         instructions = """\
-Enter the animation IDs to duplicate. For each ID, all clips with that 'animationName' will be duplicated within their respective parents.
+Enter the animation IDs to duplicate to a new category. For each ID, all clips with that 'animationName' will be duplicated within their respective parents.
 """
         add_paragraphs(instructions, 50, color=style.light_blue)
 

@@ -8,7 +8,7 @@ from hkb_editor.gui.helpers import add_paragraphs, center_window
 from hkb_editor.gui import style
 
 
-def find_dialog(
+def mass_rename_dialog(
     root: HkbRecord,
     callback: Callable[[str, list[HkbRecord], Any], None] = None,
     *,
@@ -153,7 +153,7 @@ def find_dialog(
         dpg.add_spacer(height=3)
 
         instructions = """\
-Use regular expressions to replace parts of record names. Supports capture groups to keep parts of the matched string. Be aware that the names of StateInfo are relevant for HKS!
+Use regular expressions to replace parts of record names. Supports capture groups to keep parts of the matched string. Be aware that the names of StateInfos are relevant for HKS!
 """
         add_paragraphs(instructions, 50, color=style.light_blue)
 
