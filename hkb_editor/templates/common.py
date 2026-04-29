@@ -498,7 +498,6 @@ class CommonActionsMixin:
             self._behavior.add_object(record)
 
         self.logger.debug(f"Created new {record}")
-
         return record
 
     def make_copy(

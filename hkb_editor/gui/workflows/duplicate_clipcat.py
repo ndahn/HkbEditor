@@ -1,9 +1,8 @@
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb.hkb_types import HkbRecord, HkbArray, HkbPointer
 from hkb_editor.hkb.behavior import HavokBehavior
-from hkb_editor.hkb.query import query_objects
 from hkb_editor.templates.common import CommonActionsMixin, Animation
 from hkb_editor.gui.helpers import (
     center_window,
@@ -24,12 +23,12 @@ def duplicate_clipcat_dialog(
         tag = f"duplicate_clipcat_dialog_{dpg.generate_uuid()}"
 
     util = CommonActionsMixin(behavior)
-    animations = behavior.get_animations()
 
     def on_anims_selected(sender: str, anims: list[int], user_data: Any) -> None:
         current_values = set(x for x in dpg.get_value(f"{tag}_anims").splitlines() if x)
         current_values.update(behavior.get_animation(aid) for aid in anims)
-        dpg.set_value(f"{tag}_anims", sorted(current_values))
+        lines = "\n".join(sorted(current_values))
+        dpg.set_value(f"{tag}_anims", lines)
 
     def open_add_anims_dialog() -> None:
         select_animation(
@@ -55,7 +54,7 @@ def duplicate_clipcat_dialog(
 
     def on_okay():
         lines = dpg.get_value(f"{tag}_anims").splitlines()
-        valid = set(animations)
+        valid = set(behavior.get_animations())
         selected = []
 
         for anim in lines:
@@ -78,13 +77,14 @@ def duplicate_clipcat_dialog(
             all_clips = behavior.query("type=hkbClipGenerator")
             for anim_name in selected:
                 # Find all clips using this animation
-                anim_clips = [c for c in all_clips if c["animationName"] == anim_name]
+                anim_clips = [c for c in all_clips if c["animationName"].get_value() == anim_name]
                 anim = util.animation(anim_name, create=False)
-
                 new_anim_name = Animation.make_name(anim_cat, anim.anim_id)
-                new_anim = util.animation(new_anim_name)
                 
                 for clip in anim_clips:
+                    # Only create animation entries when there are actually clips for them
+                    new_anim = util.animation(new_anim_name)
+
                     # Duplicate the clip in each of its parents
                     parents = behavior.get_immediate_parents(clip)
                     clip_copy = None
@@ -125,7 +125,6 @@ def duplicate_clipcat_dialog(
                                 animationName=new_anim.name,
                                 animationInternalId=new_anim.index,
                             )
-                            behavior.add_object(clip_copy)
                             copies.append(clip_copy)
                         
                         # Add the copy to the parent's generators
@@ -171,7 +170,7 @@ def duplicate_clipcat_dialog(
         dpg.add_spacer(height=3)
 
         instructions = """\
-Enter the animation IDs to duplicate to a new category. For each ID, all clips with that 'animationName' will be duplicated within their respective parents.
+For each selected animation, a new animation with new category (aXXX) will be created. All ClipGenerators using them will be duplicated within their respective parents.
 """
         add_paragraphs(instructions, 50, color=style.light_blue)
 
@@ -195,5 +194,5 @@ Enter the animation IDs to duplicate to a new category. For each ID, all clips w
     dpg.split_frame()
     center_window(dialog)
 
-    dpg.focus_item(f"{tag}_base_name")
+    dpg.focus_item(tag)
     return dialog

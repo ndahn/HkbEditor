@@ -81,9 +81,7 @@ def mass_rename_dialog(
 
     def add_tooltip_table(items: list[tuple[str, str]]) -> None:
         with dpg.table(
-            header_row=False,
-            no_host_extendX=True,
-            no_host_extendY=True,
+            header_row=False
         ):
             dpg.add_table_column()
             dpg.add_table_column()
@@ -115,8 +113,8 @@ def mass_rename_dialog(
                     ("(abc)", "capture group"),
                     ("(?:abc)", "non-capturing group"),
                     (".", "any character"),
-                    ("[abc]", "any of abc")
-                    ("\d  \w  \s", "digit, word, space"),
+                    ("[abc]", "any of abc"),
+                    ("\\d  \\w  \\s", "digit, word, space"),
                     ("*  +  ?", "0+, 1+, optional"),
                 ]
             )
@@ -177,5 +175,5 @@ Use regular expressions to replace parts of record names. Supports capture group
     dpg.split_frame()
     center_window(dialog)
 
-    dpg.focus_item(f"{tag}_base_name")
+    dpg.focus_item(tag)
     return dialog

@@ -65,7 +65,7 @@ def find_dialog(
         idx = -1
 
         def get_matches(matches):
-            # Helper to catch exceptions from invalid queries 
+            # Helper to catch exceptions from invalid queries
             # and cancel early when the query changes
             try:
                 for item in matches:
@@ -118,16 +118,16 @@ def find_dialog(
     def clear_selection() -> None:
         for row in selected_rows:
             dpg.set_value(dpg.get_item_children(row, slot=1)[0], False)
-        
+
         selected_rows.clear()
 
     def on_select(sender: str, select: bool, item: Any):
         nonlocal active_idx
         item_row = dpg.get_item_parent(sender)
-        
+
         if select and item_row in selected_rows:
             return
-        
+
         if not select and item_row not in selected_rows:
             return
 
@@ -150,7 +150,7 @@ def find_dialog(
 
                 if start_idx > end_idx:
                     end_idx, start_idx = start_idx, end_idx
-                
+
                 for idx in range(start_idx, end_idx + 1):
                     row = rows[idx]
                     dpg.set_value(dpg.get_item_children(row, slot=1)[0], select)
@@ -183,7 +183,7 @@ def find_dialog(
             rows = dpg.get_item_children(table, slot=1)
             item = dpg.get_item_user_data(rows[active_idx])
             okay_callback(dialog, item, user_data)
-        
+
         on_window_close()
 
     def on_clear():
@@ -193,9 +193,8 @@ def find_dialog(
     if context_menu_func:
 
         def open_context_menu(sender: str, app_data: tuple[int, int]):
-            _, row = app_data
-            item = dpg.get_item_user_data(row)
-            selectable = dpg.get_item_children(row, slot=1)[0]
+            _, selectable = app_data
+            item = dpg.get_item_user_data(selectable)
 
             if item is not None:
                 # Force select the right-clicked item
@@ -300,12 +299,10 @@ def find_dialog(
     dpg.split_frame()
     on_filter_update(f"{tag}_filter", initial_filter, None)
 
-    # The dpg loading indicator has a fixed size depending on the radius of the circles, 
-    # so we have to position it manually 
+    # The dpg loading indicator has a fixed size depending on the radius of the circles,
+    # so we have to position it manually
     filt_box_max = dpg.get_item_rect_max(f"{tag}_filter")
-    indicator_pos = (
-        filt_box_max[0] - 33, filt_box_max[1] - 62
-    )
+    indicator_pos = (filt_box_max[0] - 33, filt_box_max[1] - 62)
     dpg.set_item_pos(f"{tag}_loading", indicator_pos)
 
     dpg.focus_item(f"{tag}_filter")
@@ -377,7 +374,7 @@ def search_objects_dialog(
 def select_object(
     behavior: HavokBehavior,
     target_type_id: str,
-    on_pointer_selected: Callable[[str, HkbRecord, Any], None],
+    on_pointer_selected: Callable[[str, HkbRecord | list[HkbRecord], Any], None],
     *,
     include_derived: bool = True,
     initial_filter: str = "",
@@ -433,7 +430,7 @@ def select_object(
 
 def select_variable(
     behavior: HavokBehavior,
-    on_variable_selected: Callable[[str, int, Any], None],
+    on_variable_selected: Callable[[str, int | list[int], Any], None],
     *,
     initial_filter: str = "",
     allow_clear: bool = True,
@@ -458,12 +455,13 @@ def select_variable(
     def item_to_row(item: tuple[int, HkbVariable]) -> tuple[str, ...]:
         return (item[0], *[str(v) for v in item[1].astuple()])
 
-    def on_okay(sender: str, selected: tuple[int, HkbVariable], user_data: Any):
-        on_variable_selected(
-            sender,
-            selected[0] if selected is not None else None,
-            user_data,
-        )
+    def on_okay(
+        sender: str,
+        selected: tuple[int, HkbVariable] | list[tuple[int, HkbVariable]],
+        user_data: Any,
+    ):
+        val = selected[0] if not multiple else [s[0] for s in selected]
+        on_variable_selected(sender, val, user_data)
 
     return find_dialog(
         find_matches,
@@ -482,7 +480,7 @@ def select_variable(
 
 def select_event(
     behavior: HavokBehavior,
-    on_event_selected: Callable[[str, int, Any], None],
+    on_event_selected: Callable[[str, int | list[int], Any], None],
     *,
     initial_filter: str = "",
     allow_clear: bool = True,
@@ -505,12 +503,11 @@ def select_event(
     def item_to_row(item: tuple[int, str]) -> tuple[str, ...]:
         return item
 
-    def on_okay(sender: str, selected: tuple[int, str], user_data: Any):
-        on_event_selected(
-            sender,
-            selected[0] if selected is not None else None,
-            user_data,
-        )
+    def on_okay(
+        sender: str, selected: tuple[int, str] | list[tuple[int, str]], user_data: Any
+    ):
+        val = selected[0] if not multiple else [s[0] for s in selected]
+        on_event_selected(sender, val, user_data)
 
     return find_dialog(
         find_matches,
@@ -529,7 +526,7 @@ def select_event(
 
 def select_animation(
     behavior: HavokBehavior,
-    on_animation_selected: Callable[[str, int, Any], None],
+    on_animation_selected: Callable[[str, int | list[int], Any], None],
     *,
     initial_filter: str = "",
     allow_clear: bool = True,
@@ -556,12 +553,11 @@ def select_animation(
     def item_to_row(item: tuple[int, str]) -> tuple[str, ...]:
         return item
 
-    def on_okay(sender: str, selected: tuple[int, str], user_data: Any):
-        on_animation_selected(
-            sender,
-            selected[0] if selected is not None else None,
-            user_data,
-        )
+    def on_okay(
+        sender: str, selected: tuple[int, str] | list[tuple[int, str]], user_data: Any
+    ):
+        val = selected[0] if not multiple else [s[0] for s in selected]
+        on_animation_selected(sender, val, user_data)
 
     return find_dialog(
         find_matches,
