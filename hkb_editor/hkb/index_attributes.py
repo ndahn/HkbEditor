@@ -9,13 +9,13 @@ event_attributes = {
     ],
     "hkbStateMachine": [
         "eventToSendWhenStateOrTransitionChanges/id",  # NOTE guessed
-    ],
-    "hkbStateMachine::TransitionInfoArray": [
-        "transitions:*/eventId",
         "returnToPreviousStateEventId",
         "randomTransitionEventId",
         "transitionToNextHigherStateEventId",
         "transitionToNextLowerStateEventId",
+    ],
+    "hkbStateMachine::TransitionInfoArray": [
+        "transitions:*/eventId",
     ],
     "hkbLayer": [
         "blendingControlData/onEventId",

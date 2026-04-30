@@ -13,7 +13,7 @@ Note that in ER/NR the rolling and backstep animations are tied together. There 
 2. register new backsteps manually to keep them in sync, or 
 3. rebind one of the selectors' attributes to a new variable and adjust your HKS (specifically the `SetWeightIndex` function).
 
-ER also comes with an unused "superlight" backstep, which will interfere with any new evasion types. This template will remove it so the rolling and backstep selectors are in sync.
+ER also comes with an unused "superlight" backstep, which will interfere with any new evasion types as they are using the same variable (`EvasionWeightIndex`). If you enable `fix_superlight`, this template will add dummy entries to the rolling behaviors so they are in synch with the backstep selectors and avoid potential issues. The superlight dummies will simply point to the regular light rolls.
 
 ???+ info
 

@@ -418,6 +418,9 @@ class HkbArray(XmlValueHandler, Generic[T]):
             f"Non-matching value type {value.type_id} ({val_type}), expected {self.element_type_id} ({exp_type})"
         )
 
+    def get_item_wrapper(self) -> Type[T]:
+        return get_value_handler(self.tagfile.type_registry, self.element_type_id)
+
     def _wrap_value(self, value: Any) -> T:
         if self.is_pointer_array and isinstance(value, HkbRecord):
             return HkbPointer.new(self.tagfile, self.element_type_id, value.object_id)
@@ -427,14 +430,14 @@ class HkbArray(XmlValueHandler, Generic[T]):
             # original parent
             return value.new(self.tagfile, value.type_id, value.get_value())
 
-        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
+        Handler = self.get_item_wrapper()
         return Handler.new(self.tagfile, self.element_type_id, value)
 
-    def get_item_wrapper(self) -> Type[T]:
-        return get_value_handler(self.tagfile.type_registry, self.element_type_id)
+    def get_resolved_values(self) -> list:
+        return [x.get_value() for x in self]
 
     def get_value(self) -> list[T]:
-        Handler = get_value_handler(self.tagfile.type_registry, self.element_type_id)
+        Handler = self.get_item_wrapper()
         return [
             Handler(self.tagfile, elem, self.element_type_id) for elem in self.element
         ]

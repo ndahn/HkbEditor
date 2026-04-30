@@ -21,7 +21,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 pelite = "0.10"
 
-# Windows API bindings.  Only the selected features are required for this mod.
+# Windows API bindings. Only the selected features are required for this mod.
 windows = { version = "0.54", features = [
     "Win32_Foundation",
     "Win32_System_LibraryLoader",

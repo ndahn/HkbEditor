@@ -121,6 +121,9 @@ class CommonActionsMixin:
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
 
+    def get_parents(self, obj: HkbRecord | str) -> list[HkbRecord]:
+        return self._behavior.get_immediate_parents(obj)
+
     def variable(
         self,
         variable: Variable | str | int,
