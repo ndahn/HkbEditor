@@ -51,6 +51,8 @@ def run(
         The backstep type to add for the new evasion type (if register_backstep is True).
     register_backstep : bool, optional
         Disable this if you want to register a new backstep yourself.
+    fix_superlight : bool, optional
+        ER has remnants of a superlight weight class that interferes with new rolls. Activating this will fix it if needed.
     """
     evasion_sm = ctx.find("name=Evasion_SM")
     backstep_selector = ctx.find("name=BackStep_Selector")
