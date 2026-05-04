@@ -930,6 +930,7 @@ class BehaviorEditor:
             autosize=True,
             no_close=True,
             no_scrollbar=True,
+            no_scroll_with_mouse=True,
             tag=f"{self.tag}_canvas_window",
         ):
             self.canvas = GraphWidget(
@@ -940,6 +941,8 @@ class BehaviorEditor:
                 get_node_frontpage=self.get_node_frontpage,
                 tag=f"{self.tag}_canvas",
             )
+
+        dpg.bind_item_theme(f"{self.tag}_canvas_window", style.window_no_padding_theme)
 
         # Attributes panel
         with dpg.window(
