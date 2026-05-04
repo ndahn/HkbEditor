@@ -49,7 +49,6 @@ class Node:
         return hash(self.id)
 
 
-
 @dataclass
 class GraphLayout:
     gap_x: int = 30
@@ -57,52 +56,80 @@ class GraphLayout:
     node0_margin: tuple[int, int] = (50, 50)
     text_margin: int = 5
     zoom_factor: float = 1.3
-    
-    def get_pos_for_node(
-        self, graph: nx.DiGraph, node: Node, nodemap: dict[str, Node]
-    ) -> tuple[float, float]:
-        return None
+
+    def compute_layout(
+        self, graph: nx.DiGraph, nodemap: dict[str, Node]
+    ) -> dict[str, tuple[float, float]]:
+        """Return {node_id: (x, y)} for all visible nodes."""
+        return {}
 
 
 @dataclass
 class HorizontalGraphLayout(GraphLayout):
-    def get_pos_for_node(
-        self, graph: nx.DiGraph, node: Node, nodemap: dict[str, Node]
-    ) -> tuple[float, float]:
-        parent_id = next(
-            (n for n in graph.predecessors(node.id) if nodemap[n].visible), None
-        )
-        
-        if parent_id and parent_id in nodemap:
-            parent = nodemap[parent_id]
-            level = parent.level + 1
-            ymin = parent.y
-        else:
-            level = node.level
-            ymin = 0
+    def compute_layout(
+        self, graph: nx.DiGraph, nodemap: dict[str, Node]
+    ) -> dict[str, tuple[float, float]]:
+        """
+        Place nodes left-to-right by column, top-to-bottom within each column.
 
-        if level == 0:
-            px, py = self.node0_margin
-        else:
-            px = py = 0.0
+        Column is derived from the deepest visible parent's column + 1, so
+        multi-parent nodes land in the correct column for the branch that
+        revealed them rather than using a pre-assigned shortest-path depth.
 
-            for n in nodemap.values():
-                if n.visible:
-                    nl = n.level
+        next_y[col] tracks the next free y-coordinate per column so siblings
+        from different parents never overlap.
+        """
+        scale = self.zoom_factor
+        gap_x = self.gap_x * scale
+        step_y = self.step_y * scale
 
-                    if nl == level:
-                        # Move down
-                        py = max(py, n.y + n.height)
+        positions: dict[str, tuple[float, float]] = {}
+        col_map: dict[str, int] = {}  # node_id -> column index
+        col_x: dict[int, float] = {}  # col index -> x coordinate
+        next_y: dict[int, float] = {}  # col index -> next free y
 
-                    elif nl == (level - 1):
-                        # Move to the right
-                        px = max(px, n.x + n.width)
+        for node_id in nx.topological_sort(graph):
+            node = nodemap[node_id]
+            if not node.visible:
+                continue
 
-            px += self.gap_x * self.zoom_factor
+            # Pick the visible parent with the greatest column (deepest in the
+            # current view). This handles multi-parent nodes correctly: the node
+            # lands one step to the right of whichever parent is furthest right.
+            visible_parents = [
+                p for p in graph.predecessors(node_id) if nodemap[p].visible
+            ]
 
-            if py > 0.0:
-                py += self.step_y * self.zoom_factor
+            if not visible_parents:
+                col = 0
+                x = float(self.node0_margin[0])
+                ymin = float(self.node0_margin[1])
+            else:
+                parent_id = max(visible_parents, key=lambda p: col_map.get(p, 0))
+                parent = nodemap[parent_id]
+                col = col_map[parent_id] + 1
 
-            py = max(ymin, py)
+                # x: right edge of the widest node in the parent column + gap
+                if col not in col_x:
+                    col_x[col] = parent.x + parent.width + gap_x
+                else:
+                    col_x[col] = max(col_x[col], parent.x + parent.width + gap_x)
 
-        return px, py
+                x = col_x[col]
+                # Don't place this child above its parent's top edge
+                ymin = parent.y
+
+            col_map[node_id] = col
+
+            # y: below the last sibling in this column, but never above ymin
+            y = max(next_y.get(col, float(self.node0_margin[1])), ymin)
+
+            positions[node_id] = (x, y)
+            node.pos = (x, y)  # keep node in sync so size-based x updates work
+
+            # Advance the cursor once we know the node's height (may be None on
+            # first pass before the node has been drawn; fall back to step_y).
+            h = node.height if node.size else step_y
+            next_y[col] = y + h + step_y
+
+        return positions
