@@ -117,10 +117,8 @@ class GraphWidget:
             dpg.configure_item(self.tag, zoom_rate=rate)
 
         with dpg.plot(
-            width=-1,
-            height=400,
             no_menus=True,
-            # no_mouse_pos=True,
+            no_mouse_pos=True,
             no_box_select=True,
             no_frame=True,
             no_title=True,
@@ -240,8 +238,6 @@ class GraphWidget:
         xmax = 0
         ymin = 0
         ymax = 0
-        wmax = 0
-        hmax = 0
 
         for n in self.nodes.values():
             if not n.visible or n.size is None:
@@ -251,8 +247,6 @@ class GraphWidget:
             xmax = max(n.x + n.width, xmax)
             ymin = min(n.y, ymin)
             ymax = max(n.y + n.height, ymax)
-            wmax = max(n.width, wmax)
-            hmax = max(n.height, hmax)
 
         xrange = xmax - xmin + self.layout.node0_margin[0]
         yrange = ymax - ymin + self.layout.node0_margin[1]
@@ -355,7 +349,6 @@ class GraphWidget:
         )
 
         self._layout_dirty = True
-        self._layout_1st_pass = True
 
         if self.selected_node:
             selected = self.selected_node
@@ -574,6 +567,8 @@ class GraphWidget:
         self._x_offset = tx0 - px0 * self._x_scale
         self._y_offset = ty0 - py0 * self._y_scale
 
+        self._layout_1st_pass = False
+
         if self._layout_dirty:
             for node in self.nodes.values():
                 if node.visible and node.size is None:
@@ -581,10 +576,8 @@ class GraphWidget:
                     node.size = self._estimate_node_size(node)
 
             self._plot_positions = self.layout.compute_layout(self.graph, self.nodes)
-            if self._layout_1st_pass:
-                self._layout_1st_pass = False
-            else:
-                self._layout_dirty = False
+            self._layout_1st_pass = True
+            self._layout_dirty = False
 
         dpg.delete_item(sender, children_only=True, slot=2)
         dpg.push_container_stack(sender)

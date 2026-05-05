@@ -85,7 +85,7 @@ class HorizontalGraphLayout(GraphLayout):
 
         positions: dict[str, tuple[float, float]] = {}
         col_map: dict[str, int] = {}  # node_id -> column index
-        col_x: dict[int, float] = {}  # col index -> x coordinate
+        col_max_x: dict[int, float] = {}  # col index -> max right edge in that col
         next_y: dict[int, float] = {}  # col index -> next free y
 
         for node_id in nx.topological_sort(graph):
@@ -106,18 +106,9 @@ class HorizontalGraphLayout(GraphLayout):
                 ymin = float(self.node0_margin[1])
             else:
                 parent_id = max(visible_parents, key=lambda p: col_map.get(p, 0))
-                parent = nodemap[parent_id]
                 col = col_map[parent_id] + 1
-
-                # x: right edge of the widest node in the parent column + gap
-                if col not in col_x:
-                    col_x[col] = parent.x + parent.width + gap_x
-                else:
-                    col_x[col] = max(col_x[col], parent.x + parent.width + gap_x)
-
-                x = col_x[col]
-                # Don't place this child above its parent's top edge
-                ymin = parent.y
+                x = col_max_x.get(col - 1, float(self.node0_margin[0])) + gap_x
+                ymin = nodemap[parent_id].y
 
             col_map[node_id] = col
 
@@ -131,5 +122,8 @@ class HorizontalGraphLayout(GraphLayout):
             # first pass before the node has been drawn; fall back to step_y).
             h = node.height if node.size else step_y
             next_y[col] = y + h + step_y
+
+            w = node.width if node.size else 0.0
+            col_max_x[col] = max(col_max_x.get(col, 0.0), x + w)
 
         return positions
