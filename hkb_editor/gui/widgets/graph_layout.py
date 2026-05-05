@@ -53,7 +53,7 @@ class Node:
 class GraphLayout:
     gap_x: int = 30
     step_y: int = 20
-    node0_margin: tuple[int, int] = (50, 50)
+    node0_margin: tuple[int, int] = (0, 0)
     text_margin: int = 5
     zoom_factor: float = 1.3
 

@@ -61,11 +61,12 @@ class GraphWidget:
         self._x_offset = 0.0
         self._y_scale = 1.0
         self._y_offset = 0.0
-        # Plot-space positions from the last layout pass; used to transform to pixels.
+        # Plot-space positions from the last layout pass; used to transform to pixels
         self._plot_positions: dict[str, tuple[float, float]] = {}
 
-        # Set when visibility changes; cleared after layout is recomputed.
+        # Set when visibility changes; cleared after layout is recomputed
         self._layout_dirty: bool = False
+        self._layout_1st_pass: bool = False
 
         self._setup_content()
         self.set_graph(graph)
@@ -117,9 +118,9 @@ class GraphWidget:
 
         with dpg.plot(
             width=-1,
-            height=-1,
+            height=400,
             no_menus=True,
-            no_mouse_pos=True,
+            #no_mouse_pos=True,
             no_box_select=True,
             no_frame=True,
             no_title=True,
@@ -209,13 +210,13 @@ class GraphWidget:
     def look_at(self, px: float, py: float) -> None:
         xmin, xmax = dpg.get_axis_limits(f"{self.tag}_plot_xaxis")
         ymin, ymax = dpg.get_axis_limits(f"{self.tag}_plot_yaxis")
-        half_range = max(xmax - xmin, ymax - ymin) / 2
+        axis_range = max(xmax - xmin, ymax - ymin)
 
-        if half_range == 0:
-            half_range = 10
+        if axis_range == 0:
+            axis_range = 10
 
-        dpg.set_axis_limits(f"{self.tag}_plot_xaxis", px - half_range, px + half_range)
-        dpg.set_axis_limits(f"{self.tag}_plot_yaxis", py - half_range, py + half_range)
+        dpg.set_axis_limits(f"{self.tag}_plot_xaxis", px - axis_range * 0.1, px + axis_range * 0.9)
+        dpg.set_axis_limits(f"{self.tag}_plot_yaxis", py - axis_range * 0.1, py + axis_range * 0.9)
 
         def release():
             dpg.set_axis_limits_auto(f"{self.tag}_plot_xaxis")
@@ -235,6 +236,8 @@ class GraphWidget:
         xmax = 0
         ymin = 0
         ymax = 0
+        wmax = 0
+        hmax = 0
 
         for n in self.nodes.values():
             if not n.visible or n.size is None:
@@ -244,15 +247,20 @@ class GraphWidget:
             xmax = max(n.x + n.width, xmax)
             ymin = min(n.y, ymin)
             ymax = max(n.y + n.height, ymax)
+            wmax = max(n.width, wmax)
+            hmax = max(n.height, hmax)
 
         xrange = xmax - xmin + self.layout.node0_margin[0]
         yrange = ymax - ymin + self.layout.node0_margin[1]
-        half_range = max(xrange, yrange) / 2
-        cx = xmin + (xmax - xmin) / 2
-        cy = ymin + (ymax - ymin) / 2
+        max_range = max(xrange, yrange)
+        
+        pxmin = (xmin + xrange / 2 - max_range / 2)
+        pxmax = (xmin + xrange / 2 + max_range / 2)
+        pymin = (ymin + yrange / 2 - max_range / 2)
+        pymax = (ymin + yrange / 2 + max_range / 2)
 
-        dpg.set_axis_limits(f"{self.tag}_plot_xaxis", cx - half_range, cx + half_range)
-        dpg.set_axis_limits(f"{self.tag}_plot_yaxis", cy - half_range, cy + half_range)
+        dpg.set_axis_limits(f"{self.tag}_plot_xaxis", pxmin, pxmax)
+        dpg.set_axis_limits(f"{self.tag}_plot_yaxis", pymin, pymax)
 
         def release():
             dpg.set_axis_limits_auto(f"{self.tag}_plot_xaxis")
@@ -342,6 +350,7 @@ class GraphWidget:
         )
 
         self._layout_dirty = True
+        self._layout_1st_pass = True
 
         if self.selected_node:
             selected = self.selected_node
@@ -520,6 +529,7 @@ class GraphWidget:
         # Save some cpu cycles when no updates are needed
         if not (
             self._layout_dirty
+            or self._layout_1st_pass
             or dpg.is_mouse_button_down(dpg.mvMouseButton_Left)
             or dpg.is_item_hovered(self.tag)
         ):
@@ -566,7 +576,10 @@ class GraphWidget:
                     node.size = self._estimate_node_size(node)
 
             self._plot_positions = self.layout.compute_layout(self.graph, self.nodes)
-            self._layout_dirty = False
+            if self._layout_1st_pass:
+                self._layout_1st_pass = False
+            else:
+                self._layout_dirty = False
 
         dpg.delete_item(sender, children_only=True, slot=2)
         dpg.push_container_stack(sender)
