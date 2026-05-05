@@ -595,6 +595,13 @@ class GraphWidget:
                 self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
             )
 
+            # Hit-test with pixel-space mouse coords and pixel-space box
+            if not self.hovered_node:
+                x1, y1 = px, py
+                x2, y2 = px + pw_node, py + ph_node
+                if x1 <= mouse_x < x2 and y1 <= mouse_y < y2:
+                    self.hovered_node = node
+
             if self.draw_edges:
                 for child_id in self.graph.successors(node.id):
                     child_node = self.nodes[child_id]
@@ -604,13 +611,6 @@ class GraphWidget:
                         self._draw_edge(
                             node, px, py, pw_node, ph_node, child_node, cx, cy
                         )
-
-            # Hit-test with pixel-space mouse coords and pixel-space box
-            if not self.hovered_node:
-                x1, y1 = px, py
-                x2, y2 = px + pw_node, py + ph_node
-                if x1 <= mouse_x < x2 and y1 <= mouse_y < y2:
-                    self.hovered_node = node
 
             self._draw_node(node, px, py, pw_node, ph_node)
 
@@ -684,9 +684,15 @@ class GraphWidget:
         if dpg.does_item_exist(tag):
             return
 
-        if (self.hover_enabled or self.select_enabled) and (
-            node_a in (self.hovered_node, self.selected_node)
-            or node_b in (self.hovered_node, self.selected_node)
+        if self.hover_enabled and (
+            node_a == self.hovered_node
+            or node_b == self.hovered_node
+        ):
+            color = style.yellow
+            thickness = 2
+        elif self.select_enabled and (
+            node_a == self.selected_node
+            or node_b == self.selected_node
         ):
             color = style.orange
             thickness = 2
