@@ -102,6 +102,12 @@ class GraphWidget:
 
     # Content setup
     def _setup_content(self):
+        cfg = get_config()
+        
+        @cfg.events.pan_button.connect
+        def on_panbutton_changed(new: str, old: str) -> None:
+            dpg.configure_item(self.tag, pan_button=cfg.get_pan_button_id())
+
         with dpg.plot(
             width=-1,
             height=-1,
@@ -110,7 +116,7 @@ class GraphWidget:
             no_box_select=True,
             no_frame=True,
             no_title=True,
-            pan_button=dpg.mvMouseButton_Middle,
+            pan_button=cfg.get_pan_button_id(),
             equal_aspects=True,
             tag=self.tag,
         ):

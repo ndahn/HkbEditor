@@ -1,16 +1,22 @@
 import sys
+from typing import Literal
 from os import path
 import yaml
 import inspect
 from dataclasses import dataclass, field, asdict
+from dearpygui import dearpygui as dpg
+from psygnal import evented
 
 
+@evented
 @dataclass
 class Config:
     recent_files: list[str] = field(default_factory=list)
 
     hklib_exe: str = None
     witchy_exe: str = None
+
+    pan_button: Literal["left", "middle", "right"] = "middle"
 
     invert_zoom: bool = False
     single_branch_mode: bool = True
@@ -36,6 +42,13 @@ class Config:
 
         with open(config_path, "w") as f:
             yaml.safe_dump(asdict(self), f)
+
+    def get_pan_button_id(self) -> int:
+        return {
+            "left": dpg.mvMouseButton_Left,
+            "middle": dpg.mvMouseButton_Middle,
+            "right": dpg.mvMouseButton_Right,
+        }[self.pan_button]
 
 
 _config: Config = None
