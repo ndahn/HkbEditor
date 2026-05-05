@@ -628,6 +628,15 @@ class BehaviorEditor:
                 tag=f"{self.tag}_config_invert_zoom",
                 user_data="invert_zoom",
             )
+            with dpg.group(horizontal=True):
+                dpg.add_text("Pan button: ")
+                dpg.add_button(
+                    label=self.config.pan_button,
+                    callback=self._toggle_pan_button,
+                    tag=f"{self.tag}_toggle_pan_button",
+                    width=-1,
+                )
+            dpg.add_separator()
             dpg.add_menu_item(
                 label="Single Branch Mode",
                 check=True,
@@ -733,6 +742,18 @@ class BehaviorEditor:
             dpg.add_text("Layout restored - restart to apply!")
             dpg.add_separator()
             dpg.add_button(label="Okay", callback=lambda: dpg.delete_item(wnd))
+
+    def _toggle_pan_button(self, sender: str, app_data: Any, user_data: Any) -> None:
+        buttons = ["left", "middle", "right"]
+        current = dpg.get_item_label(sender)
+
+        for idx, label in enumerate(buttons):
+            if label in current:
+                new_btn = buttons[(idx + 1) % len(buttons)]
+                dpg.set_item_label(sender, new_btn)
+                self.config.pan_button = new_btn
+                self.config.save()
+                break
 
     def _update_config(self, sender: str, app_data: Any, config_key: str) -> None:
         if not hasattr(self.config, config_key):
@@ -930,6 +951,7 @@ class BehaviorEditor:
             autosize=True,
             no_close=True,
             no_scrollbar=True,
+            no_scroll_with_mouse=True,
             tag=f"{self.tag}_canvas_window",
         ):
             self.canvas = GraphWidget(
@@ -940,6 +962,8 @@ class BehaviorEditor:
                 get_node_frontpage=self.get_node_frontpage,
                 tag=f"{self.tag}_canvas",
             )
+
+        dpg.bind_item_theme(f"{self.tag}_canvas_window", style.window_no_padding_theme)
 
         # Attributes panel
         with dpg.window(
@@ -1692,10 +1716,8 @@ class BehaviorEditor:
         # Make sure the graph is complete
         self.canvas.set_graph(self.beh.build_graph(root.object_id))
         # Reveal the node in the state machine graph
-        path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
         self.clear_attributes()
-        self.canvas.show_node_path(path)
-        self.canvas.look_at_node(object_id)
+        self.canvas.reveal(object_id)
 
     def search_attribute(self, path: str, value: XmlValueHandler):
         path = re.sub(r":[0-9]+", ":*", path)

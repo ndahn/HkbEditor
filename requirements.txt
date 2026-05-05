@@ -12,3 +12,4 @@ natsort
 pyyaml
 psutil
 pykdtree
+psygnal
