@@ -160,6 +160,7 @@ class GraphWidget:
 
     def set_graph(self, graph: nx.DiGraph) -> None:
         self.clear()
+        self.nodes.clear()
         self.graph = graph
 
         if graph:
