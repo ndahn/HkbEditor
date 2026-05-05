@@ -26,6 +26,7 @@ class GraphWidget:
         rainbow_edges: bool = False,
         select_enabled: bool = True,
         hover_enabled: bool = True,
+        default_axis_range: int = 600,
         tag: str = None,
     ):
         if not layout:
@@ -49,15 +50,13 @@ class GraphWidget:
         self.hover_enabled = hover_enabled
         self.tag = tag
 
-        self.color_generator = style.HighContrastColorGenerator(
-            0.0, 0.02
-        )  # before: 0.18
+        self.color_generator = style.HighContrastColorGenerator(0.0, 0.18)
         self.graph = None
         self.root: str = None
         self.nodes: dict[str, Node] = {}
         self.hovered_node: Node = None
         self.selected_node: Node = None
-        self.default_axis_range = 600
+        self.default_axis_range = default_axis_range
         self._x_scale = 1.0
         self._x_offset = 0.0
         self._y_scale = 1.0
@@ -231,6 +230,16 @@ class GraphWidget:
         )
         self._unlock_axes()
 
+    def look_at_node(self, node: str | Node) -> None:
+        if not node:
+            return
+
+        if isinstance(node, str):
+            node = self.nodes[node]
+
+        # n.pos and n.size are plot-space; compute the node centre directly
+        self.look_at(node.x + node.width / 2, node.y + node.height / 2)
+
     def look_at(self, px: float, py: float) -> None:
         xmin, xmax = dpg.get_axis_limits(f"{self.tag}_plot_xaxis")
         ymin, ymax = dpg.get_axis_limits(f"{self.tag}_plot_yaxis")
@@ -243,16 +252,6 @@ class GraphWidget:
             f"{self.tag}_plot_yaxis", py + axis_range * 0.1, py - axis_range * 0.9
         )
         self._unlock_axes()
-
-    def look_at_node(self, node: str | Node) -> None:
-        if not node:
-            return
-
-        if isinstance(node, str):
-            node = self.nodes[node]
-        
-        # n.pos and n.size are plot-space; compute the node centre directly
-        self.look_at(node.x + node.width / 2, node.y + node.height / 2)
 
     def show_all(self) -> None:
         xmin = 0
@@ -703,14 +702,12 @@ class GraphWidget:
             return
 
         if self.hover_enabled and (
-            node_a == self.hovered_node
-            or node_b == self.hovered_node
+            node_a == self.hovered_node or node_b == self.hovered_node
         ):
             color = style.yellow
             thickness = 2
         elif self.select_enabled and (
-            node_a == self.selected_node
-            or node_b == self.selected_node
+            node_a == self.selected_node or node_b == self.selected_node
         ):
             color = style.orange
             thickness = 2
