@@ -57,6 +57,7 @@ class GraphWidget:
         self.nodes: dict[str, Node] = {}
         self.hovered_node: Node = None
         self.selected_node: Node = None
+        self.default_axis_range = 600
         self._x_scale = 1.0
         self._x_offset = 0.0
         self._y_scale = 1.0
@@ -205,21 +206,7 @@ class GraphWidget:
 
         return None
 
-    def look_at(self, px: float, py: float) -> None:
-        xmin, xmax = dpg.get_axis_limits(f"{self.tag}_plot_xaxis")
-        ymin, ymax = dpg.get_axis_limits(f"{self.tag}_plot_yaxis")
-        axis_range = max(xmax - xmin, ymax - ymin)
-
-        if axis_range == 0:
-            axis_range = 10
-
-        dpg.set_axis_limits(
-            f"{self.tag}_plot_xaxis", px - axis_range * 0.1, px + axis_range * 0.9
-        )
-        dpg.set_axis_limits(
-            f"{self.tag}_plot_yaxis", py - axis_range * 0.1, py + axis_range * 0.9
-        )
-
+    def _unlock_axes(self) -> None:
         def release():
             dpg.set_axis_limits_auto(f"{self.tag}_plot_xaxis")
             dpg.set_axis_limits_auto(f"{self.tag}_plot_yaxis")
@@ -228,10 +215,44 @@ class GraphWidget:
 
         dpg.set_frame_callback(dpg.get_frame_count() + 1, release)
 
-    def look_at_node(self, node: str) -> None:
-        n = self.nodes[node]
+    def goto_node(self, node: str | Node) -> None:
+        if not node:
+            return
+
+        if isinstance(node, str):
+            node = self.nodes[node]
+
+        ar = self.default_axis_range
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_xaxis", node.x - ar * 0.1, node.x + ar * 0.9
+        )
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_yaxis", node.y + ar * 0.1, node.y - ar * 0.9
+        )
+        self._unlock_axes()
+
+    def look_at(self, px: float, py: float) -> None:
+        xmin, xmax = dpg.get_axis_limits(f"{self.tag}_plot_xaxis")
+        ymin, ymax = dpg.get_axis_limits(f"{self.tag}_plot_yaxis")
+        axis_range = max(xmax - xmin, ymax - ymin, self.default_axis_range)
+
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_xaxis", px - axis_range * 0.1, px + axis_range * 0.9
+        )
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_yaxis", py + axis_range * 0.1, py - axis_range * 0.9
+        )
+        self._unlock_axes()
+
+    def look_at_node(self, node: str | Node) -> None:
+        if not node:
+            return
+
+        if isinstance(node, str):
+            node = self.nodes[node]
+        
         # n.pos and n.size are plot-space; compute the node centre directly
-        self.look_at(n.x + n.width / 2, n.y + n.height / 2)
+        self.look_at(node.x + node.width / 2, node.y + node.height / 2)
 
     def show_all(self) -> None:
         xmin = 0
@@ -250,7 +271,7 @@ class GraphWidget:
 
         xrange = xmax - xmin + self.layout.node0_margin[0]
         yrange = ymax - ymin + self.layout.node0_margin[1]
-        max_range = max(xrange, yrange, 600)
+        max_range = max(xrange, yrange, self.default_axis_range)
         margin = max_range * 0.1
 
         pxmin = xmin - margin
@@ -260,14 +281,7 @@ class GraphWidget:
 
         dpg.set_axis_limits(f"{self.tag}_plot_xaxis", pxmin, pxmax)
         dpg.set_axis_limits(f"{self.tag}_plot_yaxis", pymin, pymax)
-
-        def release():
-            dpg.set_axis_limits_auto(f"{self.tag}_plot_xaxis")
-            dpg.set_axis_limits_auto(f"{self.tag}_plot_yaxis")
-            dpg.split_frame()
-            self._layout_dirty = True
-
-        dpg.set_frame_callback(dpg.get_frame_count() + 1, release)
+        self._unlock_axes()
 
     # === Canvas interactions ==============================
 
@@ -298,6 +312,10 @@ class GraphWidget:
             no_saved_settings=True,
             on_close=lambda: dpg.delete_item(wnd),
         ) as wnd:
+            dpg.add_menu_item(
+                label="Show Selection",
+                callback=lambda s, a, u: self.goto_node(self.selected_node),
+            )
             dpg.add_menu_item(
                 label="Show All",
                 callback=self.show_all,
