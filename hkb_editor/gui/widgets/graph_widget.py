@@ -252,12 +252,13 @@ class GraphWidget:
 
         xrange = xmax - xmin + self.layout.node0_margin[0]
         yrange = ymax - ymin + self.layout.node0_margin[1]
-        max_range = max(xrange, yrange)
+        max_range = max(xrange, yrange, 600)
+        margin = max_range * 0.1
         
-        pxmin = (xmin + xrange / 2 - max_range / 2)
-        pxmax = (xmin + xrange / 2 + max_range / 2)
-        pymin = (ymin + yrange / 2 - max_range / 2)
-        pymax = (ymin + yrange / 2 + max_range / 2)
+        pxmin = xmin - margin
+        pxmax = pxmin + max_range + margin
+        pymin = ymin + margin
+        pymax = pymin - max_range - margin
 
         dpg.set_axis_limits(f"{self.tag}_plot_xaxis", pxmin, pxmax)
         dpg.set_axis_limits(f"{self.tag}_plot_yaxis", pymin, pymax)

@@ -752,6 +752,7 @@ class BehaviorEditor:
                 new_btn = buttons[(idx + 1) % len(buttons)]
                 dpg.set_item_label(sender, new_btn)
                 self.config.pan_button = new_btn
+                self.config.save()
                 break
 
     def _update_config(self, sender: str, app_data: Any, config_key: str) -> None:
