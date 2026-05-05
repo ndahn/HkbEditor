@@ -49,7 +49,9 @@ class GraphWidget:
         self.hover_enabled = hover_enabled
         self.tag = tag
 
-        self.color_generator = style.HighContrastColorGenerator(0.0, 0.02)  # before: 0.18
+        self.color_generator = style.HighContrastColorGenerator(
+            0.0, 0.02
+        )  # before: 0.18
         self.graph = None
         self.root: str = None
         self.nodes: dict[str, Node] = {}
@@ -103,10 +105,15 @@ class GraphWidget:
     # Content setup
     def _setup_content(self):
         cfg = get_config()
-        
+
         @cfg.events.pan_button.connect
         def on_panbutton_changed(new: str, old: str) -> None:
-            dpg.configure_item(self.tag, pan_button=cfg.get_pan_button_id())
+            dpg.configure_item(self.tag, pan_button=cfg.pan_button_id)
+
+        @cfg.events.invert_zoom.connect
+        def on_invertzoom_changed(new: bool, old: bool) -> None:
+            rate = -0.1 if cfg.invert_zoom else 0.1
+            dpg.configure_item(self.tag, zoom_rate=rate)
 
         with dpg.plot(
             width=-1,
@@ -116,8 +123,9 @@ class GraphWidget:
             no_box_select=True,
             no_frame=True,
             no_title=True,
-            pan_button=cfg.get_pan_button_id(),
+            pan_button=cfg.pan_button_id,
             equal_aspects=True,
+            zoom_rate=-0.1 if cfg.invert_zoom else 0.1,
             tag=self.tag,
         ):
             dpg.add_plot_axis(
@@ -214,7 +222,7 @@ class GraphWidget:
             dpg.set_axis_limits_auto(f"{self.tag}_plot_yaxis")
             dpg.split_frame()
             self._layout_dirty = True
- 
+
         dpg.set_frame_callback(dpg.get_frame_count() + 1, release)
 
     def look_at_node(self, node: str) -> None:
@@ -242,7 +250,7 @@ class GraphWidget:
         half_range = max(xrange, yrange) / 2
         cx = xmin + (xmax - xmin) / 2
         cy = ymin + (ymax - ymin) / 2
-        
+
         dpg.set_axis_limits(f"{self.tag}_plot_xaxis", cx - half_range, cx + half_range)
         dpg.set_axis_limits(f"{self.tag}_plot_yaxis", cy - half_range, cy + half_range)
 
@@ -251,7 +259,7 @@ class GraphWidget:
             dpg.set_axis_limits_auto(f"{self.tag}_plot_yaxis")
             dpg.split_frame()
             self._layout_dirty = True
- 
+
         dpg.set_frame_callback(dpg.get_frame_count() + 1, release)
 
     # === Canvas interactions ==============================
@@ -301,7 +309,7 @@ class GraphWidget:
         self.selected_node = None
         self._layout_dirty = True
 
-        #self.look_at(0.0, 0.0)
+        # self.look_at(0.0, 0.0)
 
     def regenerate(self):
         if not self.graph:
@@ -440,7 +448,7 @@ class GraphWidget:
 
     def fold_node(self, node: Node) -> None:
         subtree = nx.descendants(self.graph, node.id) | {node.id}
- 
+
         # Topological order: a parent's visibility is settled before its children
         for desc_id in nx.descendants(self.graph, node.id):
             desc = self.nodes[desc_id]
@@ -453,7 +461,7 @@ class GraphWidget:
             if not has_outside_parent:
                 desc.visible = False
                 desc.unfolded = False
- 
+
         node.unfolded = False
         self._layout_dirty = True
 
@@ -507,7 +515,7 @@ class GraphWidget:
         return estimate_drawn_text_size(
             max_len, num_lines=len(lines), font_size=12, scale=1, margin=margin
         )
-        
+
     def _render_graph(self, sender: str, app_data: list, user_data: Any) -> None:
         # Save some cpu cycles when no updates are needed
         if not (
@@ -572,7 +580,9 @@ class GraphWidget:
                 continue
 
             px, py = self._to_pixel(*plot_pos)
-            pw_node, ph_node = self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
+            pw_node, ph_node = (
+                self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
+            )
 
             if self.draw_edges:
                 for child_id in self.graph.successors(node.id):

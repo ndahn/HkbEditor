@@ -636,6 +636,7 @@ class BehaviorEditor:
                     tag=f"{self.tag}_toggle_pan_button",
                     width=-1,
                 )
+            dpg.add_separator()
             dpg.add_menu_item(
                 label="Single Branch Mode",
                 check=True,
