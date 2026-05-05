@@ -331,12 +331,12 @@ class GraphWidget:
             node.visible = False
             node.unfolded = False
 
-        self.selected_node = None
-        self._layout_dirty = True
-
         if self.graph:
             root = next(n for n, in_deg in self.graph.in_degree() if in_deg == 0)
             self.nodes[root].visible = True
+
+        self.selected_node = None
+        self._layout_dirty = True
 
         # self.look_at(0.0, 0.0)
 
