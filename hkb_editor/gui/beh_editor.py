@@ -1716,10 +1716,8 @@ class BehaviorEditor:
         # Make sure the graph is complete
         self.canvas.set_graph(self.beh.build_graph(root.object_id))
         # Reveal the node in the state machine graph
-        path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
         self.clear_attributes()
-        self.canvas.show_node_path(path)
-        self.canvas.look_at_node(object_id)
+        self.canvas.reveal(object_id)
 
     def search_attribute(self, path: str, value: XmlValueHandler):
         path = re.sub(r":[0-9]+", ":*", path)

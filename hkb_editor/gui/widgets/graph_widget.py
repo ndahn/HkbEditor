@@ -333,6 +333,10 @@ class GraphWidget:
         self.selected_node = None
         self._layout_dirty = True
 
+        if self.graph:
+            root = next(n for n, in_deg in self.graph.in_degree() if in_deg == 0)
+            self.nodes[root].visible = True
+
         # self.look_at(0.0, 0.0)
 
     def regenerate(self):
@@ -375,16 +379,19 @@ class GraphWidget:
         self.show_all()
 
     def show_node_path(self, path: list[Node | str]) -> None:
-        self.clear(False)
-
         if not path:
             return
 
+        self.reveal()
+
+        self.clear()
         for node in path:
             if isinstance(node, str):
                 node = self.nodes[node]
             self.unfold_node(node)
 
+        self.regenerate()
+        self.look_at_node(path[-1])
         self.select(path[-1])
 
     def isolate_branch(self, node: Node | str) -> None:
@@ -490,14 +497,21 @@ class GraphWidget:
         self._layout_dirty = True
 
     def reveal(self, node: Node | str) -> None:
+        if not node:
+            return
+        
         if isinstance(node, str):
             node = self.nodes[node]
 
-        self.clear(False)
+        self.clear()
 
         path = nx.shortest_path(self.graph, self.root, node.id)
         for n in path:
             self.unfold_node(self.nodes[n])
+
+        self.regenerate()
+        self.look_at_node(node)
+        self.select(node)
 
     def reveal_descendant_nodes(self, node: Node | str = None) -> None:
         if not node:
