@@ -120,7 +120,7 @@ class GraphWidget:
             width=-1,
             height=400,
             no_menus=True,
-            #no_mouse_pos=True,
+            # no_mouse_pos=True,
             no_box_select=True,
             no_frame=True,
             no_title=True,
@@ -215,8 +215,12 @@ class GraphWidget:
         if axis_range == 0:
             axis_range = 10
 
-        dpg.set_axis_limits(f"{self.tag}_plot_xaxis", px - axis_range * 0.1, px + axis_range * 0.9)
-        dpg.set_axis_limits(f"{self.tag}_plot_yaxis", py - axis_range * 0.1, py + axis_range * 0.9)
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_xaxis", px - axis_range * 0.1, px + axis_range * 0.9
+        )
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_yaxis", py - axis_range * 0.1, py + axis_range * 0.9
+        )
 
         def release():
             dpg.set_axis_limits_auto(f"{self.tag}_plot_xaxis")
@@ -231,7 +235,7 @@ class GraphWidget:
         # n.pos and n.size are plot-space; compute the node centre directly
         self.look_at(n.x + n.width / 2, n.y + n.height / 2)
 
-    def zoom_show_all(self) -> None:
+    def show_all(self) -> None:
         xmin = 0
         xmax = 0
         ymin = 0
@@ -254,7 +258,7 @@ class GraphWidget:
         yrange = ymax - ymin + self.layout.node0_margin[1]
         max_range = max(xrange, yrange, 600)
         margin = max_range * 0.1
-        
+
         pxmin = xmin - margin
         pxmax = pxmin + max_range + margin
         pymin = ymin + margin
@@ -302,7 +306,7 @@ class GraphWidget:
         ) as wnd:
             dpg.add_menu_item(
                 label="Show All",
-                callback=self.zoom_show_all,
+                callback=self.show_all,
             )
 
     # === Canvas content management ========================
@@ -358,7 +362,7 @@ class GraphWidget:
             self.selected_node = None
             self.select(selected)
 
-        self.zoom_show_all()
+        self.show_all()
 
     def show_node_path(self, path: list[Node | str]) -> None:
         self.clear(False)

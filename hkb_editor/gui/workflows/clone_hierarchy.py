@@ -9,7 +9,12 @@ from lxml import etree as ET
 import networkx as nx
 from dearpygui import dearpygui as dpg
 
-from hkb_editor.hkb.xml import xml_from_str, add_type_comments, make_element, make_subelement
+from hkb_editor.hkb.xml import (
+    xml_from_str,
+    add_type_comments,
+    make_element,
+    make_subelement,
+)
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
 from hkb_editor.hkb.hkb_enums import hkbVariableInfo_VariableType as VariableType
 from hkb_editor.hkb.index_attributes import (
@@ -922,7 +927,7 @@ def ensure_statemachine_wildcards(statemachine: HkbRecord) -> HkbRecord:
         )
         statemachine.tagfile.add_object(wildcards)
         statemachine["wildcardTransitions"].set_value(wildcards)
-        
+
     return wildcards
 
 
@@ -1148,11 +1153,10 @@ def open_merge_hierarchy_dialog(
                     # Reveal everything when first showing
                     graph_preview.reveal_all_nodes(3)
                     dpg.split_frame()  # wait for dimensions to be known
-                    graph_preview.zoom_show_all()
+                    graph_preview.show_all()
 
             # List of conflicts and resolutions
             with dpg.child_window(border=False, height=520):
-
                 # Events
                 with dpg.group():
                     with dpg.tree_node(label=f"Events ({len(results.events)})"):
@@ -1334,7 +1338,7 @@ def open_merge_hierarchy_dialog(
 
                     # Objects
                     with dpg.tree_node(
-                        label=f"Objects ({len(results.objects)})", 
+                        label=f"Objects ({len(results.objects)})",
                         default_open=True,
                     ):
                         with dpg.table(
