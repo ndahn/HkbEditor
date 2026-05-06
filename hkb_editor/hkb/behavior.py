@@ -155,8 +155,8 @@ class HavokBehavior(Tagfile):
         self,
         variable_name: str,
         var_type: VariableType = VariableType.INT32,
-        range_min: int = 0,
-        range_max: int = 0,
+        range_min: int = None,
+        range_max: int = None,
         default: Any = 0,
         idx: int = None,
     ) -> int:
@@ -168,10 +168,12 @@ class HavokBehavior(Tagfile):
 
         var_type = VariableType(var_type)
 
-        with self.transaction():
-            # Update the defaults array first to verify the default value is valid
-            self.set_variable_default(idx, default, vtype=var_type)
+        if range_min is None:
+            range_min = var_type.get_default_min()
+        if range_max is None:
+            range_max = var_type.get_default_max()
 
+        with self.transaction():
             self._variables.insert(idx, variable_name)
 
             # These must have matching entries as well
@@ -196,6 +198,7 @@ class HavokBehavior(Tagfile):
                     },
                 ),
             )
+            self.set_variable_default(idx, default, True, vtype=var_type)
 
         if idx < 0:
             return len(self._variables) - idx
@@ -222,7 +225,7 @@ class HavokBehavior(Tagfile):
                     bounds["max/value"] = range_max
 
             if default is not None:
-                self.set_variable_default(idx, default)
+                self.set_variable_default(idx, default, False)
 
     def get_variables(self, full_info: bool = False) -> list[str] | list[HkbVariable]:
         if full_info:
@@ -328,7 +331,7 @@ class HavokBehavior(Tagfile):
         else:
             raise ValueError(f"Unknown variable type {vtype}")
 
-    def set_variable_default(self, idx: int, default: Any, vtype: VariableType = None) -> Any:
+    def set_variable_default(self, idx: int, default: Any, create_new: bool, vtype: VariableType = None) -> Any:
         # The words array will hold the byte values of all variables that can be represented with
         # at most 32 bit. Where this is not possible (Pointer, Vector3, Vector4, Quaternion), the
         # value will instead be an index into either variantVariableValues (for pointers) or
@@ -423,16 +426,14 @@ class HavokBehavior(Tagfile):
             # As opposed to words, this contains the plain pointers without another record around.
             pointers: HkbArray[HkbPointer] = self._variable_defaults["variantVariableValues"]
 
-            if idx < len(words):
-                # When creating a new variable default we append, otherwise we update
+            if create_new:
+                ptr = HkbPointer.new(self, pointers.element_type_id, default)
+                pointers.insert(idx, ptr)
+                word_value = len(pointers) - 1
+            else:
                 pidx: int = words[idx].get_field("value", resolve=True)
                 pointers[pidx].set_value(default)
                 word_value = pidx
-            else:
-                # We are creating a new default value, append a new entry
-                ptr = HkbPointer.new(self, pointers.element_type_id, default)
-                pointers.append(ptr)
-                word_value = len(pointers) - 1
         elif vtype in (
             VariableType.VECTOR3,
             VariableType.VECTOR4,
@@ -470,32 +471,30 @@ class HavokBehavior(Tagfile):
             # As opposed to words, this contains the array values without another record around.
             quads: HkbArray[HkbArray[HkbFloat]] = self._variable_defaults["quadVariableValues"]
 
-            if idx < len(words):
-                # When creating a new variable default we append, otherwise we update
-                qidx = words[idx].get_field("value", resolve=True)
-                default = quads[qidx]
-                for i in range(len(default)):
-                    default[i].set_value(default[i])
-                word_value = qidx
-            else:
+            if create_new:
                 # We are creating a new default value, append a new entry
                 float_type = self.type_registry.get_subtype(quads.element_type_id)
                 values = [HkbFloat.new(self, float_type, v) for v in default]
                 default = HkbArray.new(self, quads.element_type_id, values)
                 quads.append(default)
                 word_value = len(quads) - 1
+            else:
+                # When creating a new variable default we append, otherwise we update
+                qidx = words[idx].get_field("value", resolve=True)
+                default = quads[qidx]
+                for i in range(len(default)):
+                    default[i].set_value(default[i])
+                word_value = qidx
         else:
             raise ValueError(f"Unknown variable type {vtype}")
 
-        if idx < len(words):
-            # Update an existing variable's default
-            words[idx].set_field("value", word_value)
-        elif idx == len(words):
+        if create_new:
             # We're creating an entry for a new variable
             record = HkbRecord.new(self, words.element_type_id, {"value": default})
-            words.append(record)
+            words.insert(idx, record)
         else:
-            raise ValueError(f"Index {idx} is not a valid variable index")
+            # Update an existing variable's default
+            words[idx].set_field("value", word_value)
 
         return default
 
@@ -504,6 +503,8 @@ class HavokBehavior(Tagfile):
             del self._variables[idx]
             del self._variable_bounds[idx]
             del self._variable_infos[idx]
+            # Even if the default is a quad the reference will be stored 
+            # in wordVariableValues
             del self._variable_defaults["wordVariableValues"][idx]
 
             self._cleanup_variable_defaults()
