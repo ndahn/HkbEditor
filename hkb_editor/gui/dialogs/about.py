@@ -20,16 +20,22 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
         with dpg.texture_registry():
             icon_ufo = os.path.abspath(os.path.join(".", "docs/assets/images/ufo.png"))
             w, h, ch, data = dpg.load_image(icon_ufo)
-            
+
             # 250ms? worth it!
             img_data = np.frombuffer(data, dtype=np.float32).reshape((w, h, ch))
             style.colorshift(
-                img_data, 
+                img_data,
                 hue_shift=rainbow.hue,
                 saturation_scale=random.random(),
             )
-            
+
             dpg.add_static_texture(w, h, img_data, tag="hkbeditor_icon_ufo")
+
+    if not dpg.does_item_exist("hkbeditor_icon_kofi"):
+        with dpg.texture_registry():
+            kofi = os.path.abspath(os.path.join(".", "docs/assets/images/kofi_white.png"))
+            w, h, _, data = dpg.load_image(kofi)
+            dpg.add_static_texture(w, h, data, tag="hkbeditor_icon_kofi")
 
     def add_cat(cat: int, pos: tuple[int, int], wf: float = 1.0) -> None:
         draw_cat(
@@ -101,5 +107,19 @@ def about_dialog(*, tag: str = None, **window_args) -> str:
 
                 dpg.add_text("Bugs, questions, feature request?", color=rainbow())
                 dpg.add_text("Find me on ?ServerName? @Managarm!", color=rainbow())
+
+                # Tooltips don't work on buttons with absolute position
+                # See https://github.com/hoffstadt/DearPyGui/issues/2651
+                with dpg.group(pos=(365, 15)):
+                    dpg.add_image_button(
+                        "hkbeditor_icon_kofi",
+                        width=24,
+                        height=24,
+                        tint_color=(255, 255, 255, 200),
+                        callback=lambda: webbrowser.open("https://ko-fi.com/managarm"),
+                    )
+                    dpg.bind_item_theme(dpg.last_item(), style.button_transparent_theme)
+                    with dpg.tooltip(dpg.last_item()):
+                        dpg.add_text("Buy me a ko-fi?")
 
     return tag

@@ -184,6 +184,7 @@ input_field_error_theme = None
 input_field_okay_theme = None
 
 link_button_theme = None
+button_transparent_theme = None
 
 plot_no_borders_theme = None
 window_no_padding_theme = None
@@ -256,6 +257,7 @@ def setup_styles():
     global input_field_okay_theme
     global input_field_error_theme
     global link_button_theme
+    global button_transparent_theme
     global plot_no_borders_theme
     global window_no_padding_theme
 
@@ -300,6 +302,10 @@ def setup_styles():
     with dpg.theme() as link_button_theme:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Text, blue, category=dpg.mvThemeCat_Core)
+
+    with dpg.theme() as button_transparent_theme:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Button, (0, 0, 0, 0))
 
     with dpg.theme() as plot_no_borders_theme:
         with dpg.theme_component(dpg.mvAll):
