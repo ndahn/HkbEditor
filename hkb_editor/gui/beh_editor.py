@@ -1478,6 +1478,7 @@ class BehaviorEditor:
                 self.add_pinned_object(selector.object_id)
 
             self.regenerate()
+            self.canvas.select(selector.object_id)
 
         create_object_dialog(
             self.beh,
@@ -1718,6 +1719,7 @@ class BehaviorEditor:
         # Reveal the node in the state machine graph
         self.clear_attributes()
         self.canvas.reveal(object_id)
+        self.canvas.select(object_id)
 
     def search_attribute(self, path: str, value: XmlValueHandler):
         path = re.sub(r":[0-9]+", ":*", path)
