@@ -6,11 +6,18 @@
   <script>
     kofiWidgetOverlay.draw('managarm', {
       'type': 'floating-chat',
-      'floating-chat.donateButton.text': 'Buy me a Ko-fi?',
+      'floating-chat.donateButton.text': '',
       'floating-chat.donateButton.background-color': '#f45d22',
       'floating-chat.donateButton.text-color': '#fff'
     });
   </script>
+  <style>
+    .floatingchat-container-wrap { left: unset; right: 50px; width: 50%; }
+    .floatingchat-container-wrap-mobi { left: unset; right: 50px; width: 50%;}
+    .floating-chat-kofi-popup-iframe { left: unset; right: 50px; }
+    .floating-chat-kofi-popup-iframe-mobi { left: unset; right: 50px; }
+    .floating-chat-kofi-popup-iframe-closer-mobi { left: unset; right: 50px; }
+  </style>
   {{ super() }}
   <!-- Add scripts that need to run afterwards here -->
 {% endblock %}
