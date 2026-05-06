@@ -8,7 +8,7 @@ theme:
   favicon: assets/images/icon.png
   logo: assets/images/icon.png
   name: material
-  #custom_dir: docs/overrides
+  custom_dir: docs/overrides
   font:
     text: Noto Sans
   features:
