@@ -2,15 +2,10 @@
 
 {% block scripts %}
   <!-- Add scripts that need to run before here -->
-  <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-  <script>
-    kofiWidgetOverlay.draw('managarm', {
-      'type': 'floating-chat',
-      'floating-chat.donateButton.text': '',
-      'floating-chat.donateButton.background-color': '#f45d22',
-      'floating-chat.donateButton.text-color': '#fff'
-    });
-  </script>
+  <script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script>
+  <script type='text/javascript'>
+    kofiwidget2.init('', '#f58b73', 'L4L51Z1RY4');
+    kofiwidget2.draw();</script> 
   <style>
     [id^="kofi-widget"] { color-scheme: dark; }
     .floatingchat-container-wrap { left: unset; right: 50px; width: 50%; }
