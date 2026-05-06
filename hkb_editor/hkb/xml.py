@@ -567,8 +567,8 @@ def xml_from_file(path: str, undo: bool = False) -> HkbXmlElement:
     return root
 
 
-def xml_to_str(xml: ET.Element) -> str:
-    return ET.tostring(xml, pretty_print=True, encoding="unicode")
+def xml_to_str(xml: ET.Element, **kwargs) -> str:
+    return ET.tostring(xml, pretty_print=True, encoding="unicode", **kwargs)
 
 
 def add_type_comments(root: ET.Element, tagfile: "Tagfile") -> None:

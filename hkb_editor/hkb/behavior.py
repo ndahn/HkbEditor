@@ -73,7 +73,11 @@ class HavokBehavior(Tagfile):
         # to sit idle every time they open a select dialog or similar
         self._events = CachedArray[str](strings_obj["eventNames"])
         self._variables = CachedArray[str](strings_obj["variableNames"])
-        self._animations = CachedArray[str](strings_obj["animationNames"])
+
+        if "animationNames" in strings_obj.fields:
+            self._animations = CachedArray[str](strings_obj["animationNames"])
+        else:
+            self._animations = []
 
     def get_character_id(self) -> str:
         """Returns the character ID of this behavior, e.g. c0000."""

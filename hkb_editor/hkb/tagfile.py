@@ -53,19 +53,19 @@ class Tagfile:
             self._tree: HkbXmlElement = xml_from_file(xml_file, undo=undo)
         elif elem.tag == "hkpackfile":
             # Havok 2014
-            logging.getLogger().info("Detected Havok 2014 format, converting")
+            logging.getLogger().info("Detected Havok 2014 format, converting...")
             self._format = TagfileFormat.HK2014
             from .tagfile_convert import hk2014_to_2018
 
             conv = hk2014_to_2018(Path(xml_file))
             self._tree: HkbXmlElement = xml_from_str(conv, undo)
-            #tmp = path.parent / f"{path.stem}_2014.{path.suffix}"
-            #tmp.write_text(conv)
+            # tmp = path.parent / f"{path.stem}_2014.{path.suffix}"
+            # tmp.write_text(conv)
         else:
             raise ValueError(f"Unknown tagfile format (root={elem})")
 
         self.file = xml_file
-        
+
         # Some versions of HKLib seem to decompile floats with commas
         self.floats_use_commas = bool(
             self._tree.xpath("(//real[contains(@dec, ',')])[1]")
@@ -207,6 +207,13 @@ class Tagfile:
         return self._format
 
     def set_save_format(self, format: TagfileFormat) -> None:
+        """Change the tagfile format used when saving. Note that the internal representation will always be the v3 (2018) format.
+
+        Parameters
+        ----------
+        format : TagfileFormat
+            Tagfile format to use when saving.
+        """
         self._format = format
 
     def save_to_file(
@@ -228,7 +235,9 @@ class Tagfile:
         elif format == TagfileFormat.HK2014:
             from .tagfile_convert import hk2018_to_2014
 
-            conv = hk2018_to_2014(xml_to_str(self._tree))
+            conv = hk2018_to_2014(
+                xml_to_str(self._tree, xml_declaration=True, standalone=False)
+            )
             Path(file_path).write_text(conv, "utf-8")
 
         self.file = str(file_path)

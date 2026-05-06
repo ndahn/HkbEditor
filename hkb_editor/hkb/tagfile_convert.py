@@ -35,7 +35,23 @@ _ENUM = re.compile(r"^[A-Z][A-Z0-9_]+$")  # all-caps identifiers -> enum
 _TUPLE = re.compile(r"\(([^)]*)\)")  # extract groups from (x y z) notation
 
 
+# === type format constants ===
+
+_PRIM_FORMATS: dict[str, int] = {
+    "Void": 0,
+    "Opaque": 1,
+    "hkBool": 2,
+    "hkStringPtr": 3,
+    "hkInt32": 4,
+    "hkReal": 5,
+    "hkRefPtr": 6,
+    "hkBaseObject": 7,
+    "hkArray": 8,
+}
+
+
 # === id helpers ===
+
 
 def _obj_to_ref(obj_id: str) -> str:
     """'object42' -> '#42'  |  'object0' -> 'null'"""
@@ -56,6 +72,7 @@ def _real_val(el: etree._Element) -> str:
 
 # === 2018 -> 2014 ===
 
+
 def hk2018_to_2014(xml_2018: Path | str) -> str:
     """Convert hktagfile v3 (2018) to hkpackfile (2014)."""
     if isinstance(xml_2018, Path):
@@ -71,7 +88,9 @@ def hk2018_to_2014(xml_2018: Path | str) -> str:
         if n is not None:
             tid = t.get("id", "")
             type_map[tid] = n.get("value", "")
-            sig_map[tid] = t.get("hk_sig", "0x0")
+            sig = t.get("hk_sig")  # only present on real classes
+            if sig is not None:
+                sig_map[tid] = sig
 
     out = etree.Element(
         "hkpackfile", classversion="11", contentsversion="hk_2014.1.0-r1"
@@ -109,10 +128,11 @@ def hk2018_to_2014(xml_2018: Path | str) -> str:
                 p.text = "\n"
 
             elif items[0].tag == "record":
-                # class name from elementtypeid -> type_map
-                elem_cls = type_map.get(val.get("elementtypeid", ""), "")
+                elem_tid = val.get("elementtypeid", "")
+                elem_cls = type_map.get(elem_tid, "") if elem_tid in sig_map else ""
+                elem_sig = sig_map.get(elem_tid, "")
                 for rec in items:
-                    _rec_as_hkobj(p, rec, elem_cls)
+                    _rec_as_hkobj(p, rec, elem_cls, sig=elem_sig)
 
             elif items[0].tag == "array":
                 # nested arrays -> (x y z) per line
@@ -128,7 +148,18 @@ def hk2018_to_2014(xml_2018: Path | str) -> str:
                 refs = [_obj_to_ref(c.get("id", "object0")) for c in items]
                 p.text = "\n" + "\n".join(refs) + "\n"
 
+            elif items[0].tag == "string":
+                for child in items:
+                    hkc = etree.SubElement(p, "hkcstring")
+                    hkc.text = child.get("value", "")
+
             else:
+                tag = items[0].tag
+                if tag not in ("real", "integer", "bool"):
+                    print(
+                        f"WARNING: unhandled array element <{tag}> in 2018->2014",
+                        file=sys.stderr,
+                    )
                 vals = [
                     _real_val(c) if c.tag == "real" else c.get("value", "0")
                     for c in items
@@ -136,14 +167,26 @@ def hk2018_to_2014(xml_2018: Path | str) -> str:
                 p.text = "\n" + "\n".join(vals) + "\n"
 
         elif tag == "record":
-            _rec_as_hkobj(p, val)
+            typeid = val.get("typeid", "")
+            rec_cls = type_map.get(typeid, "") if typeid in sig_map else ""
+            rec_sig = sig_map.get(typeid, "")
+            rec_name = name if rec_cls else ""
+            _rec_as_hkobj(p, val, rec_cls, rec_name, rec_sig)
 
     def _rec_as_hkobj(
-        parent: etree._Element, rec: etree._Element, class_name: str = ""
+        parent: etree._Element,
+        rec: etree._Element,
+        class_name: str = "",
+        obj_name: str = "",
+        sig: str = "",
     ) -> None:
         attrib: dict[str, str] = {}
         if class_name:
             attrib["class"] = class_name
+        if obj_name:
+            attrib["name"] = obj_name
+        if sig:
+            attrib["signature"] = sig
         hkobj = etree.SubElement(parent, "hkobject", **attrib)
         for field in rec.findall("field"):
             children = [c for c in field if not isinstance(c, etree._Comment)]
@@ -185,8 +228,12 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
     root = etree.fromstring(xml_2014.encode())
 
     class_to_tid: dict[str, str] = {}  # class name -> typeid
+    class_type_els: dict[str, etree._Element] = {}  # class name -> <type> element
+    class_fields_done: set[str] = set()  # classes whose fields are populated
     enum_to_tid: dict[str, str] = {}  # enum type name -> typeid
     array_elem_to_tid: dict[str, str] = {}  # array elem type name -> typeid
+    array_elem_els: dict[str, etree._Element] = {}  # array elem type name -> <type> el
+    prim_to_tid: dict[str, str] = {}  # primitive name -> typeid
     out = etree.Element("hktagfile", version="3")
     _next = [1]
 
@@ -195,15 +242,70 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
         _next[0] += 1
         return tid
 
+    def _get_prim_tid(name: str) -> str:
+        if name not in prim_to_tid:
+            tid = _next_tid()
+            prim_to_tid[name] = tid
+            t = etree.SubElement(out, "type", id=tid)
+            etree.SubElement(t, "name", value=name)
+            etree.SubElement(t, "format", value=str(_PRIM_FORMATS.get(name, 0)))
+            etree.SubElement(t, "fields", count="0")
+        return prim_to_tid[name]
+
+    # map from value element tag -> typeid lookup
+    def _val_typeid(val: etree._Element) -> str:
+        tag = val.tag
+        if tag == "real":
+            return _get_prim_tid("hkReal")
+        if tag == "bool":
+            return _get_prim_tid("hkBool")
+        if tag == "integer":
+            return _get_prim_tid("hkInt32")
+        if tag == "string":
+            return _get_prim_tid("hkStringPtr")
+        if tag == "pointer":
+            return _get_prim_tid("hkRefPtr")
+        if tag == "enum":
+            return val.get("typeid", "")
+        if tag == "array":
+            return _get_prim_tid("hkArray")
+        if tag == "record":
+            return val.get("typeid", "")
+        return ""
+
     def _get_class_tid(cls: str, sig: str = "0x0") -> str:
         if cls not in class_to_tid:
             tid = _next_tid()
             class_to_tid[cls] = tid
             t = etree.SubElement(out, "type", id=tid, hk_sig=sig)
             etree.SubElement(t, "name", value=cls)
-            etree.SubElement(t, "format", value="7")
-            etree.SubElement(t, "fields", count="0")
+            etree.SubElement(t, "format", value=str(_PRIM_FORMATS["hkBaseObject"]))
+            etree.SubElement(t, "fields", count="0")  # populated on first object
+            class_type_els[cls] = t
         return class_to_tid[cls]
+
+    def _fill_fields(t_el: etree._Element, rec: etree._Element) -> None:
+        """Populate <fields> on a type element from a processed record."""
+        fields_el = t_el.find("fields")
+        if fields_el is None or len(fields_el):
+            return  # already populated
+        field_els = rec.findall("field")
+        fields_el.set("count", str(len(field_els)))
+        for f in field_els:
+            children = [c for c in f if not isinstance(c, etree._Comment)]
+            tid = _val_typeid(children[0]) if children else ""
+            etree.SubElement(
+                fields_el, "field", name=f.get("name", ""), typeid=tid, flags="36"
+            )
+
+    def _populate_fields(cls: str, rec: etree._Element) -> None:
+        """Back-fill <fields> on the class type stub from the first processed record."""
+        if cls in class_fields_done:
+            return
+        class_fields_done.add(cls)
+        t = class_type_els.get(cls)
+        if t is not None:
+            _fill_fields(t, rec)
 
     def _get_enum_tid(cls: str, field_name: str) -> str:
         enum_name = f"{cls}_{field_name}_Enum"
@@ -212,18 +314,60 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
             enum_to_tid[enum_name] = tid
             t = etree.SubElement(out, "type", id=tid)
             etree.SubElement(t, "name", value=enum_name)
-            etree.SubElement(t, "format", value="33284")
+            etree.SubElement(t, "format", value=str(_PRIM_FORMATS["hkStringPtr"]))
+            etree.SubElement(t, "fields", count="0")
         return enum_to_tid[enum_name]
 
-    def _get_array_elem_tid(cls: str, field_name: str, suffix: str = "Type") -> str:
+    def _peek_elem_fmt(raw: str, kids: list[etree._Element]) -> int:
+        """Infer array element format from content; returns Void (0) if empty/unknown."""
+        if kids:
+            tag = kids[0].tag
+            if tag == "hkobject":
+                return _PRIM_FORMATS["hkBaseObject"]
+            if tag == "hkcstring":
+                return _PRIM_FORMATS["hkStringPtr"]
+            return _PRIM_FORMATS["Void"]
+
+        groups = _TUPLE.findall(raw)
+        if groups:
+            return _PRIM_FORMATS["hkArray"]  # outer elements are nested arrays
+
+        tokens = raw.split()
+        if not tokens:
+            return _PRIM_FORMATS["Void"]  # empty array, format unknown
+
+        t = tokens[0].strip()
+        if t == "null" or _REF.fullmatch(t):
+            return _PRIM_FORMATS["hkRefPtr"]
+        if t in ("true", "false"):
+            return _PRIM_FORMATS["hkBool"]
+        if _INT.fullmatch(t):
+            return _PRIM_FORMATS["hkInt32"]
+        if _FLOAT.fullmatch(t):
+            return _PRIM_FORMATS["hkReal"]
+        if _ENUM.fullmatch(t):
+            return _PRIM_FORMATS["hkInt32"]
+
+        return _PRIM_FORMATS["hkStringPtr"]
+
+    def _get_array_elem_tid(
+        cls: str, field_name: str, fmt: int = 0, suffix: str = "Type"
+    ) -> str:
         type_name = f"{cls}_{field_name}_{suffix}"
         if type_name not in array_elem_to_tid:
             tid = _next_tid()
             array_elem_to_tid[type_name] = tid
             t = etree.SubElement(out, "type", id=tid)
             etree.SubElement(t, "name", value=type_name)
-            etree.SubElement(t, "format", value="7")
+            etree.SubElement(t, "format", value=str(fmt))
             etree.SubElement(t, "fields", count="0")
+            array_elem_els[type_name] = t
+        elif fmt != _PRIM_FORMATS["Void"]:
+            # update format if stub was registered while array was empty
+            fmt_el = array_elem_els[type_name].find("format")
+            if fmt_el is not None and fmt_el.get("value") == str(_PRIM_FORMATS["Void"]):
+                fmt_el.set("value", str(fmt))
+
         return array_elem_to_tid[type_name]
 
     def _infer(
@@ -243,7 +387,7 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
             etree.SubElement(parent, "real", value=t)
         elif _ENUM.fullmatch(t):
             etree.SubElement(
-                parent, "enum", value=t, typeid=_get_enum_tid(cls, field_name)
+                parent, "string", value=t, typeid=_get_enum_tid(cls, field_name)
             )
         else:
             etree.SubElement(parent, "string", value=t)
@@ -259,19 +403,59 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
         raw = (param.text or "").strip()
 
         if numelems is not None:
+            kids = [c for c in param if not isinstance(c, etree._Comment)]
+
+            # determine elementtypeid before creating the array element
+            if kids:
+                first_tag = kids[0].tag
+                if first_tag == "hkobject":
+                    ek = kids[0]
+                    ek_cls = ek.get("class", "")
+                    ek_sig = ek.get("signature", "0x0")
+                    elem_tid = (
+                        _get_class_tid(ek_cls, ek_sig)
+                        if ek_cls
+                        else _get_array_elem_tid(
+                            cls, fname, _PRIM_FORMATS["hkBaseObject"]
+                        )
+                    )
+                elif first_tag == "hkcstring":
+                    elem_tid = _get_prim_tid("hkStringPtr")
+                else:
+                    elem_tid = ""
+                    print(
+                        f"WARNING: unhandled array child <{first_tag}> in {cls}.{fname}",
+                        file=sys.stderr,
+                    )
+            else:
+                elem_tid = _get_array_elem_tid(cls, fname, _peek_elem_fmt(raw, kids))
+
             arr = etree.SubElement(
-                field,
-                "array",
-                count=numelems,
-                elementtypeid=_get_array_elem_tid(cls, fname),
+                field, "array", count=numelems, elementtypeid=elem_tid
             )
 
-            if hkobj_kids:
-                for child in hkobj_kids:
-                    rec = etree.SubElement(arr, "record")
-                    for p in child.findall("hkparam"):
-                        _param_to_field(rec, p, cls)
-
+            if kids:
+                if first_tag == "hkobject":
+                    arr.set("count", str(len(kids)))
+                    for i, child in enumerate(kids):
+                        child_cls = child.get("class", "")
+                        child_tid = (
+                            _get_class_tid(child_cls, child.get("signature", "0x0"))
+                            if child_cls
+                            else elem_tid
+                        )
+                        rec = etree.SubElement(arr, "record", typeid=child_tid)
+                        for p in child.findall("hkparam"):
+                            _param_to_field(rec, p, cls)
+                        if i == 0 and not child_cls:
+                            # populate anonymous struct type from first element
+                            t_el = array_elem_els.get(f"{cls}_{fname}_Type")
+                            if t_el is not None:
+                                _fill_fields(t_el, rec)
+                elif first_tag == "hkcstring":
+                    arr.set("count", str(len(kids)))
+                    for child in kids:
+                        etree.SubElement(arr, "string", value=(child.text or ""))
             else:
                 groups = _TUPLE.findall(raw)
                 if groups:
@@ -283,7 +467,9 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
                             arr,
                             "array",
                             count=str(len(tokens)),
-                            elementtypeid=_get_array_elem_tid(cls, fname, "ElemType"),
+                            elementtypeid=_get_array_elem_tid(
+                                cls, fname, _PRIM_FORMATS["hkReal"], "ElemType"
+                            ),
                         )
                         for tok in tokens:
                             etree.SubElement(inner, "real", value=tok)
@@ -292,9 +478,16 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
                         _infer(arr, tok, cls, fname)
 
         elif hkobj_kids:
-            rec = etree.SubElement(field, "record")
-            for p in hkobj_kids[0].findall("hkparam"):
+            child = hkobj_kids[0]
+            child_cls = child.get("class", "")
+            child_tid = _get_class_tid(child_cls, child.get("signature", "0x0"))
+            rec = etree.SubElement(field, "record", typeid=child_tid)
+
+            for p in child.findall("hkparam"):
                 _param_to_field(rec, p, cls)
+
+            if child_cls:
+                _populate_fields(child_cls, rec)
 
         elif raw.startswith("("):
             # single tuple (x y z) without numelements -> plain flat array
@@ -303,7 +496,7 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
                 field,
                 "array",
                 count=str(len(tokens)),
-                elementtypeid=_get_array_elem_tid(cls, fname),
+                elementtypeid=_get_array_elem_tid(cls, fname, _PRIM_FORMATS["hkReal"]),
             )
             for tok in tokens:
                 _infer(arr, tok, cls, fname)
@@ -329,6 +522,16 @@ def hk2014_to_2018(xml_2014: Path | str) -> str:
         rec = etree.SubElement(obj, "record")
         for param in hkobj.findall("hkparam"):
             _param_to_field(rec, param, cls)
+        _populate_fields(cls, rec)
+
+    # Replace all void types with string
+    # TODO present as uneditable items in gui instead
+    _void = str(_PRIM_FORMATS["Void"])
+    _str = str(_PRIM_FORMATS["hkStringPtr"])
+    for t in out.findall("type"):
+        fmt = t.find("format")
+        if fmt is not None and fmt.get("value") == _void:
+            fmt.set("value", _str)
 
     return etree.tostring(out, encoding="unicode", pretty_print=True)
 

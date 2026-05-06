@@ -63,9 +63,10 @@ def get_bound_attributes(behavior: HavokBehavior, record: HkbRecord) -> dict[str
         var_path = bnd["memberPath"].get_value()
         var_idx = bnd["variableIndex"].get_value()
         binding_type = bnd["bindingType"].get_value()
-        if binding_type != 0:
+        # TODO band aid for supporting DS3
+        if binding_type not in (0, "VARIABLE", "BINDING_TYPE_VARIABLE"):
             _logger.warning(
-                "Unknown binding type %i (%s:%i)", binding_type, var_path, var_idx
+                f"Unknown binding type {binding_type} ({var_path}:{var_idx})"
             )
         else:
             ret[var_path] = var_idx
@@ -110,6 +111,4 @@ def select_variable_to_bind(
             if on_bind:
                 on_bind(sender, [selected_idx, binding_set], user_data)
 
-    select_variable(
-        behavior, on_variable_selected, user_data=user_data
-    )
+    select_variable(behavior, on_variable_selected, user_data=user_data)
