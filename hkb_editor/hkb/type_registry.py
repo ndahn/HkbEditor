@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Generator
 from logging import getLogger
 from functools import cache
 from lxml import etree as ET

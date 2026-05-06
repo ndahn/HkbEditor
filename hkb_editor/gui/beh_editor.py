@@ -13,6 +13,7 @@ import pyperclip
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
+from hkb_editor.hkb.tagfile import TagfileFormat
 from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
@@ -181,18 +182,15 @@ class BehaviorEditor:
 
         Thread(target=remove_notification, daemon=True).start()
 
-    def get_supported_file_extensions(self):
-        return {
-            "All supported files": ["*.xml", "*.hkx", "*.behbnd.dcx"],
-            "Behavior XML": "*.xml",
-            "Behavior HKX": "*.hkx",
-            "DCX Binder": "*.behbnd.dcx",
-        }
-
     def file_open(self):
         ret = open_file_dialog(
             default_dir=os.path.dirname(self.loaded_file or ""),
-            filetypes=self.get_supported_file_extensions(),
+            filetypes={
+                "All supported files": ["*.xml", "*.hkx", "*.behbnd.dcx"],
+                "XML Behavior (.xml)": "*.xml",
+                "HKS Behavior (.hkx)": "*.hkx",
+                "DCX Binder (.behbnd.dcx)": "*.behbnd.dcx",
+            },
         )
 
         if ret:
@@ -254,6 +252,11 @@ class BehaviorEditor:
             self.logger.info("Loading behavior...")
             self.beh = HavokBehavior(file_path, undo=True)
 
+            dpg.set_value(
+                f"{self.tag}_menu_file_save_format_radio",
+                self.beh.get_save_format().value,
+            )
+
             self.config.add_recent_file(file_path)
             self.config.save()
             self._regenerate_recent_files_menu()
@@ -291,7 +294,7 @@ class BehaviorEditor:
         ret = save_file_dialog(
             default_dir=os.path.dirname(self.loaded_file or ""),
             default_file=os.path.basename(self.loaded_file or ""),
-            filetypes=self.get_supported_file_extensions(),
+            filetypes={"XML Behavior (.xml)": "*.xml"},
         )
 
         if ret:
@@ -471,14 +474,25 @@ class BehaviorEditor:
                 enabled=False,
                 tag=f"{self.tag}_menu_file_save_as",
             )
+            with dpg.menu(
+                label="Save file format",
+                tag=f"{self.tag}_menu_file_save_format",
+                enabled=False,
+            ):
+                dpg.add_radio_button(
+                    [fmt.value for fmt in TagfileFormat],
+                    callback=lambda s, a, u: self.beh.set_save_format(TagfileFormat(a)),
+                    tag=f"{self.tag}_menu_file_save_format_radio",
+                )
+
+            dpg.add_separator()
+
             dpg.add_menu_item(
                 label="Update name ID files...",
                 callback=self.open_update_name_ids_dialog,
                 enabled=False,
                 tag=f"{self.tag}_menu_file_update_name_ids",
             )
-            dpg.add_separator()
-
             dpg.add_menu_item(
                 label="Repack Binder",
                 shortcut="f4",
@@ -894,6 +908,7 @@ class BehaviorEditor:
         func = dpg.enable_item if enabled else dpg.disable_item
         func(f"{self.tag}_menu_file_save")
         func(f"{self.tag}_menu_file_save_as")
+        func(f"{self.tag}_menu_file_save_format")
         func(f"{self.tag}_menu_file_update_name_ids")
         func(f"{self.tag}_menu_repack_binder")
         func(f"{self.tag}_menu_reload_character")
@@ -1779,7 +1794,7 @@ class BehaviorEditor:
             if old_value[1] != new_value[1]:
                 new_value[2] = None
                 new_value[3] = None
-            
+
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
 

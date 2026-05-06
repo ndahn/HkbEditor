@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 from typing import Any, Callable, Generator, Iterator, TYPE_CHECKING
 import logging
+from enum import StrEnum
+from pathlib import Path
 from collections import deque
 from contextlib import contextmanager
 from copy import deepcopy
@@ -10,7 +14,14 @@ import re
 from lxml import etree as ET
 import networkx as nx
 
-from .xml import xml_from_file, add_type_comments, HkbXmlElement, MutationType
+from .xml import (
+    xml_from_file,
+    xml_from_str,
+    xml_to_str,
+    add_type_comments,
+    HkbXmlElement,
+    MutationType,
+)
 from .type_registry import TypeRegistry
 from .query import query_objects
 
@@ -19,6 +30,11 @@ if TYPE_CHECKING:
 
 
 _undefined = object()
+
+
+class TagfileFormat(StrEnum):
+    HK2014 = "hk2014"
+    HK2018 = "hk2018"
 
 
 class Tagfile:
@@ -30,9 +46,26 @@ class Tagfile:
     ):
         from .hkb_types import HkbRecord
 
-        self.file = xml_file
-        self._tree: HkbXmlElement = xml_from_file(xml_file, undo=undo)
+        _, elem = next(ET.iterparse(xml_file, events=("start",)), (None, None))
+        if elem.tag == "hktagfile" and elem.attrib.get("version") == "3":
+            # Havok 2018
+            self._format = TagfileFormat.HK2018
+            self._tree: HkbXmlElement = xml_from_file(xml_file, undo=undo)
+        elif elem.tag == "hkpackfile":
+            # Havok 2014
+            logging.getLogger().info("Detected Havok 2014 format, converting")
+            self._format = TagfileFormat.HK2014
+            from .tagfile_convert import hk2014_to_2018
 
+            conv = hk2014_to_2018(Path(xml_file))
+            self._tree: HkbXmlElement = xml_from_str(conv, undo)
+            #tmp = path.parent / f"{path.stem}_2014.{path.suffix}"
+            #tmp.write_text(conv)
+        else:
+            raise ValueError(f"Unknown tagfile format (root={elem})")
+
+        self.file = xml_file
+        
         # Some versions of HKLib seem to decompile floats with commas
         self.floats_use_commas = bool(
             self._tree.xpath("(//real[contains(@dec, ',')])[1]")
@@ -52,7 +85,12 @@ class Tagfile:
             if k.startswith("object")
         ]
         self._next_object_id = max(objectid_values, default=0) + 1
-        self.behavior_root: HkbRecord = self.find_first_by_type_name(root_object_type)
+        self.behavior_root = None
+
+        if root_object_type:
+            self.behavior_root: HkbRecord = self.find_first_by_type_name(
+                root_object_type
+            )
 
     def _regenerate_cache(self) -> None:
         from .hkb_types import HkbRecord
@@ -165,15 +203,35 @@ class Tagfile:
             self._regenerate_cache()
         return ret
 
-    def save_to_file(self, file_path: str) -> None:
-        # Add comments on the copy. We don't want to keep these as they can mess up
-        # parsing and object evaluation (e.g. locating fields)
-        tmp = deepcopy(self._tree)
-        add_type_comments(tmp, self)
-        ET.indent(tmp)
-        tmp.getroottree().write(file_path)
+    def get_save_format(self) -> TagfileFormat:
+        return self._format
 
-        self.file = file_path
+    def set_save_format(self, format: TagfileFormat) -> None:
+        self._format = format
+
+    def save_to_file(
+        self,
+        file_path: Path | str,
+        format: TagfileFormat = None,
+    ) -> None:
+        if format is None:
+            format = self._format
+
+        if format == TagfileFormat.HK2018:
+            # Add comments on the copy. We don't want to keep these as they can mess up
+            # parsing and object evaluation (e.g. locating fields)
+            tmp = deepcopy(self._tree)
+            add_type_comments(tmp, self)
+            ET.indent(tmp)
+            tmp.getroottree().write(str(file_path))
+
+        elif format == TagfileFormat.HK2014:
+            from .tagfile_convert import hk2018_to_2014
+
+            conv = hk2018_to_2014(xml_to_str(self._tree))
+            Path(file_path).write_text(conv, "utf-8")
+
+        self.file = str(file_path)
 
     def root_graph(self):
         # Caching this would be nice, but then we'd have to update it anytime there are
@@ -396,7 +454,7 @@ class Tagfile:
 
         if isinstance(object_id, HkbRecord):
             object_id = object_id.object_id
-        
+
         parents: list[HkbXmlElement] = self._tree.xpath(
             f"/*/object[.//pointer[@id='{object_id}']]"
         )

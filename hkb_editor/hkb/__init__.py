@@ -1,5 +1,5 @@
 from .type_registry import TypeRegistry
-from .tagfile import Tagfile
+from .tagfile import Tagfile, TagfileFormat
 from .behavior import HavokBehavior
 from .hkb_types import (
     XmlValueHandler,
