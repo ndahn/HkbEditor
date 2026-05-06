@@ -1,4 +1,4 @@
-![](docs/assets/images/icon.png)
+![](docs/assets/images/cats_banner.png)
 
 This program allows you to edit Havok behavior graphs which are used in several FromSoft games like *Nightreign*, *Elden Ring*, and *Sekiro - Shadows Die Twice*. 
 
