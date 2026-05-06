@@ -57,6 +57,9 @@ class GraphWidget:
         self.hovered_node: Node = None
         self.selected_node: Node = None
         self.default_axis_range = default_axis_range
+
+        self._manual_highlights: dict[str, style.RGBA] = {}
+
         self._x_scale = 1.0
         self._x_offset = 0.0
         self._y_scale = 1.0
@@ -66,7 +69,7 @@ class GraphWidget:
 
         # Set when visibility changes; cleared after layout is recomputed
         self._layout_dirty: bool = False
-        self._layout_1st_pass: bool = False
+        self._render_required: bool = False
 
         self._setup_content()
         self.set_graph(graph)
@@ -178,6 +181,24 @@ class GraphWidget:
 
             self.nodes[self.root].visible = True
             self.regenerate()
+
+    def clear_highlights(self) -> None:
+        self._manual_highlights.clear()
+        self._render_required = True
+
+    def highlight_node(self, node: Node | str, color: style.RGBA = style.green) -> None:
+        if isinstance(node, Node):
+            node = node.id
+        
+        self._manual_highlights[node] = color
+        self._render_required = True
+
+    def unhighlight_node(self, node: Node | str) -> None:
+        if isinstance(node, Node):
+            node = node.id
+        
+        del self._manual_highlights[node]
+        self._render_required = True
 
     @property
     def zoom_factor(self) -> float:
@@ -558,7 +579,7 @@ class GraphWidget:
         # Save some cpu cycles when no updates are needed
         if not (
             self._layout_dirty
-            or self._layout_1st_pass
+            or self._render_required
             or dpg.is_mouse_button_down(dpg.mvMouseButton_Left)
             or dpg.is_item_hovered(self.tag)
         ):
@@ -598,7 +619,7 @@ class GraphWidget:
         self._x_offset = tx0 - px0 * self._x_scale
         self._y_offset = ty0 - py0 * self._y_scale
 
-        self._layout_1st_pass = False
+        self._render_required = False
 
         if self._layout_dirty:
             for node in self.nodes.values():
@@ -607,7 +628,7 @@ class GraphWidget:
                     node.size = self._estimate_node_size(node)
 
             self._plot_positions = self.layout.compute_layout(self.graph, self.nodes)
-            self._layout_1st_pass = True
+            self._render_required = True
             self._layout_dirty = False
 
         dpg.delete_item(sender, children_only=True, slot=2)
@@ -643,11 +664,11 @@ class GraphWidget:
                             node, px, py, pw_node, ph_node, child_node, cx, cy
                         )
 
-            self._draw_node(node, px, py, pw_node, ph_node)
+            self._draw_node_box(node, px, py, pw_node, ph_node)
 
         dpg.pop_container_stack()
 
-    def _draw_node(
+    def _draw_node_box(
         self, node: Node, px: float, py: float, pixel_w: float, pixel_h: float
     ) -> None:
         tag = f"{self.tag}_node_{node.id}"
@@ -673,15 +694,18 @@ class GraphWidget:
         max_len = max(len(s) for s in lines)
         lines = [s.center(max_len) for s in lines]
 
+        edge_color = style.white
+        thickness = 1
+
         if self.select_enabled and node == self.selected_node:
             edge_color = style.blue
             thickness = 2
-        elif self.hover_enabled and node == self.hovered_node:
-            edge_color = style.white
-            thickness = 2
         else:
-            edge_color = style.white
-            thickness = 1
+            if node.id in self._manual_highlights:
+                edge_color = self._manual_highlights[node.id]
+            
+            if self.hover_enabled and node == self.hovered_node:
+                thickness = 2
 
         dpg.draw_rectangle(
             (px, py),
