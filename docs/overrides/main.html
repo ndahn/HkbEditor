@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block scripts %}
+  <!-- Add scripts that need to run before here -->
+  <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+  <script>
+    kofiWidgetOverlay.draw('managarm', {
+      'type': 'floating-chat',
+      'floating-chat.donateButton.text': 'Buy me a Ko-fi?',
+      'floating-chat.donateButton.background-color': '#f45d22',
+      'floating-chat.donateButton.text-color': '#fff'
+    });
+  </script>
+  {{ super() }}
+  <!-- Add scripts that need to run afterwards here -->
+{% endblock %}
