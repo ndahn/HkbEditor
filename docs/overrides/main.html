@@ -1,19 +1,53 @@
 {% extends "base.html" %}
 
-{% block scripts %}
-  <!-- Add scripts that need to run before here -->
-  <script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script>
-  <script type='text/javascript'>
-    kofiwidget2.init('', '#f58b73', 'L4L51Z1RY4');
-    kofiwidget2.draw();</script> 
+{% block extrahead %}
   <style>
-    [id^="kofi-widget"] { color-scheme: dark; }
-    .floatingchat-container-wrap { left: unset; right: 50px; width: 50%; }
-    .floatingchat-container-wrap-mobi { left: unset; right: 50px; width: 50%;}
-    .floating-chat-kofi-popup-iframe { left: unset; right: 50px; }
-    .floating-chat-kofi-popup-iframe-mobi { left: unset; right: 50px; }
-    .floating-chat-kofi-popup-iframe-closer-mobi { left: unset; right: 50px; }
+    .kofi-btn {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 999;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      background-color: #f58b73;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      text-decoration: none;
+
+      /* subtle lift on hover, no animation */
+      transition: box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    .kofi-btn:hover {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+      transform: translateY(-2px);
+    }
+
+    /* Ko-fi cup SVG */
+    .kofi-btn svg {
+      width: 1.5rem;
+      height: 1.5rem;
+      fill: #fff;
+    }
   </style>
+{% endblock %}
+
+{% block content %}
   {{ super() }}
-  <!-- Add scripts that need to run afterwards here -->
+
+  <a
+    class="kofi-btn"
+    href="https://ko-fi.com/managarm"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="Buy me a Ko-fi?"
+    title="Buy me a Ko-fi?"
+  >
+    <img src="https://storage.ko-fi.com/cdn/cup-border.png" alt="Ko-fi donations">
+  </a>
 {% endblock %}
