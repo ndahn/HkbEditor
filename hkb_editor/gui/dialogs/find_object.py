@@ -39,7 +39,7 @@ def find_dialog(
     selected_rows = set()
 
     if item_limit is None:
-        item_limit = 2000 / len(columns)
+        item_limit = 6000 / len(columns)
         # round to nearest hundred
         item_limit = max(100, int(round(item_limit / 100)) * 100)
 

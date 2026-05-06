@@ -1,4 +1,4 @@
-from typing import Any, Callable, Type
+from typing import Any, Callable, Type, Optional
 import logging
 import re
 from dearpygui import dearpygui as dpg
@@ -31,7 +31,7 @@ def edit_simple_array_dialog(
     help: str = None,
     choices: dict[int, list[str | tuple[str, Any]]] = None,
     on_add: Callable[[int, list], bool] = None,
-    on_update: Callable[[int, tuple, list], None] = None,
+    on_update: Callable[[int, tuple, list], Optional[tuple]] = None,
     on_delete: Callable[[int], None] = None,
     on_move: Callable[[int, int], None] = None,
     on_close: Callable[[str, list[str], Any], None] = None,
@@ -44,7 +44,7 @@ def edit_simple_array_dialog(
         tag = dpg.generate_uuid()
 
     if item_limit is None:
-        item_limit = 1000 / len(columns)
+        item_limit = 4000 / len(columns)
         # round to nearest hundred
         item_limit = max(100, int(round(item_limit / 100)) * 100)
 
@@ -120,13 +120,17 @@ def edit_simple_array_dialog(
         # May raise as a veto
         if on_update:
             try:
-                on_update(item_idx, old_item, new_item)
-            except Exception:
-                # Rejected, regenerate the table before chickening out
-                fill_table()
-                raise
+                redacted = on_update(item_idx, old_item, new_item)
+                if redacted:
+                    # on_update may edit the new item
+                    new_item = redacted
+            except Exception as e:
+                # on_update may veto the change
+                logging.getLogger().error(f"Update rejected: {e}")
+                return
 
         items[item_idx] = tuple(new_item)
+        fill_table()
 
     def toggle_advanced(sender: str, enabled: bool, user_data: Any):
         if enabled:
