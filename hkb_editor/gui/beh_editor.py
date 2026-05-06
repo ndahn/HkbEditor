@@ -49,8 +49,6 @@ except (ImportError, AttributeError) as e:
         f"Failed to load character reloader: {e}",
     )
 
-from hkb_editor.hkb.version_updates import fix_variable_defaults
-
 from .widgets.graph_widget import GraphWidget, HorizontalGraphLayout, Node
 from .widgets.attributes_widget import AttributesWidget
 from .widgets.graphmap import GraphMap  # TODO
@@ -263,9 +261,6 @@ class BehaviorEditor:
             # Save an initial backup that won't be overwritten on save
             if self.config.session_backup:
                 shutil.copy(self.beh.file, self.beh.file + ".session_backup")
-
-            # Fix anything that was amiss in previous versions
-            fix_variable_defaults(self.beh)
 
             filename = os.path.basename(file_path)
             dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
@@ -1772,7 +1767,7 @@ class BehaviorEditor:
             idx: int,
             old_value: tuple[str, VariableType, int, int, str],
             new_value: tuple[str, VariableType, int, int, str],
-        ):
+        ) -> tuple:
             new_value = list(new_value)
             try:
                 new_value[4] = literal_eval(new_value[4])
@@ -1780,9 +1775,22 @@ class BehaviorEditor:
                 # Assume it's actually a string
                 pass
 
-            # TODO Use update_variable instead, this approach has a lot of problems
+            # Reset the ranges if the type changed
+            if old_value[1] != new_value[1]:
+                new_value[2] = None
+                new_value[3] = None
+            
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
+
+            new_var = self.beh.get_variable(idx)
+            return (
+                new_var.name,
+                new_var.vtype.value,
+                new_var.vmin,
+                new_var.vmax,
+                str(new_var.default),
+            )
 
         def on_delete(idx: int):
             self.beh.delete_variable(idx)
@@ -1971,6 +1979,9 @@ class BehaviorEditor:
         )
 
     def open_graphmap_dialog(self):
+        if not self.selected_roots:
+            return
+
         tag = f"{self.tag}_graphmap_dialog"
         if dpg.does_item_exist(tag):
             # TODO just for testing
