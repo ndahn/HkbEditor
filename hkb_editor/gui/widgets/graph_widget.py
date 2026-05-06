@@ -430,7 +430,7 @@ class GraphWidget:
         if isinstance(node, str):
             node = self.nodes.get(node)
 
-        if not node or node not in self.nodes.values():
+        if not node or node.id not in self.nodes:
             return
 
         if get_config().single_branch_mode:
@@ -512,7 +512,6 @@ class GraphWidget:
 
         self.regenerate()
         self.look_at_node(node)
-        self.select(node)
 
     def reveal_descendant_nodes(self, node: Node | str = None) -> None:
         if not node:
