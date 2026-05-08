@@ -7,10 +7,6 @@
 
 Creates new NPC attack slots starting at aXXX_YYYYYY, where X is the category and Y equals `anim_id_start + anim_id_step * i` and `i` going from 0 to num_attacks (exclusive). The attacks will be associated with the events `W_AttackYYYY` and `W_EventYYYY` (leading 0s not included).
 
-???+ warning
-    
-    Usually NPC attacks should be in the range from 3000 to 3100. Attacks outside this range need special changes in the HKS to be useful.
-
 For every generated attack you should add the following functions to your enemy's HKS (usually `c9997.hks`):
 
 ```lua
@@ -24,6 +20,10 @@ function AttackYYYY_onUpdate()
     end
 end
 ```
+
+???+ warning
+    
+    Usually NPC attacks should be in the range from 3000 to 3100. Attacks outside this range need special changes in the HKS to be useful.
 
 `c9997.hks` is controlled from the enemies' battle AI scripts, which makes a request to execute a certain action by posting the `YYYY` to the engine. This ID is then retrieved in HKS via `env(GetAIActionType)` and leads to more specific animation management (e.g. attacking, guarding, parrying, etc.) based on the *range* it is in. The ranges are set via a couple of global variables. There are a lot of predefined ranges, but the most important ones for Elden Ring (SotE) are:
 
