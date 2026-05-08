@@ -20,7 +20,7 @@ flowchart TD
     H --> |regular| K(ExecEventAllBody)
     H --> |halfblend| L(ExecEventHalfBlend)
 
-    K --> |event| M[Transition to new StateInfo]
+    K --> |event| M[State Transition]
     L --> |events| N[Upper/Lower_SM]
 ```
 
