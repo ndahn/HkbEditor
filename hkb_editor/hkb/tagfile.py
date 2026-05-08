@@ -59,7 +59,7 @@ class Tagfile:
 
             conv = hk2014_to_2018(Path(xml_file))
             self._tree: HkbXmlElement = xml_from_str(conv, undo)
-            # tmp = path.parent / f"{path.stem}_2014.{path.suffix}"
+            # tmp = path.parent / f"{path.stem}_2014{path.suffix}"
             # tmp.write_text(conv)
         else:
             raise ValueError(f"Unknown tagfile format (root={elem})")
