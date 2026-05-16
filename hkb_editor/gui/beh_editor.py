@@ -1526,17 +1526,19 @@ class BehaviorEditor:
         for n in children:
             for parent in root_graph.predecessors(n):
                 if parent != node.id and parent not in children:
-                    # Found a parent outside the to be deleted subtree, keep this child
+                    # Found a parent outside the to-be-deleted subtree, keep this child
                     break
             else:
+                # All parents are in the to-be-deleted subtree, nuke it
                 delete_list.append(n)
 
         self.logger.info(
             f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents"
         )
         with self.beh.transaction():
+            # Update all references while the node is still alive, then delete all 
+            # descendants with no outside parents
             self._on_node_delete(node.id)
-
             for n in reversed(delete_list):
                 self.beh.delete_object(n)
 
