@@ -1520,18 +1520,16 @@ class BehaviorEditor:
             return
 
         root_graph = self.beh.root_graph()
-        node_graph = self.beh.build_graph(node.id)
-
-        delete_list: list[str] = []
+        delete_list: list[str] = [node.id]
         children = set(nx.descendants(root_graph, node.id))
-        for child, in_degree in root_graph.in_degree(children):
-            # Ignore any in-edges from parents in the node's subtree
-            for parent in root_graph.predecessors(child):
-                if parent in node_graph:
-                    in_degree -= 1
 
-            if in_degree == 0:
-                delete_list.append(child)
+        for n in children:
+            for parent in root_graph.predecessors(n):
+                if parent != node.id and parent not in children:
+                    # Found a parent outside the to be deleted subtree, keep this child
+                    break
+            else:
+                delete_list.append(n)
 
         self.logger.info(
             f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents"
@@ -1539,9 +1537,8 @@ class BehaviorEditor:
         with self.beh.transaction():
             self._on_node_delete(node.id)
 
-            self.beh.delete_object(node.id)
-            for child in delete_list:
-                self.beh.delete_object(child)
+            for n in reversed(delete_list):
+                self.beh.delete_object(n)
 
         self.regenerate()
 
@@ -1558,7 +1555,10 @@ class BehaviorEditor:
                 first_parent = parent_id
 
             parent = self.beh.objects[parent_id]
-            for path, ptr in parent.find_fields_by_class(HkbPointer):
+            references = list(parent.find_fields_by_class(HkbPointer))
+
+            # Reverse so array indices stay valid
+            for path, ptr in reversed(references):
                 if ptr.get_value() == object_id:
                     index_match = re.match(r"^(.*):([0-9]+)$", path)
                     if index_match:
