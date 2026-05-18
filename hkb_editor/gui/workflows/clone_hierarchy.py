@@ -227,8 +227,8 @@ def import_hierarchy(
     def resolve_root_path(root_path: list[str]) -> HkbPointer:
         try:
             target_obj = behavior.resolve_unique_object_path(root_path[:-1])
-        except Exception:
-            logger.error(f"Failed to resolve root path {root_path}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Failed to resolve root path {root_path}", exc_info=e)
             return None
 
         # Check if the last path component went into a pointer array. If so, append

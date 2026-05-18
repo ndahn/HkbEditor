@@ -24,12 +24,13 @@ def main():
     )
     _logger = logging.getLogger(__name__)
 
-    # TODO use this and remove redundant logging
-    # def handle_uncaught(exc_type, exc_value, exc_traceback):
-    #     sys.__excepthook__(exc_type, exc_value, exc_traceback)
-    #     _logger.error(str(exc_value))
+    # Handle uncaught exceptions
+    def handle_uncaught(exc_type, exc_value, exc_traceback):
+        if exc_type is not KeyboardInterrupt:
+            _logger.error(str(exc_value), exc_info=exc_value)
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
 
-    # sys.excepthook = handle_uncaught
+    sys.excepthook = handle_uncaught
 
     # Check for clipboard support, will print instructions if it fails
     try:

@@ -277,12 +277,6 @@ class BehaviorEditor:
             self._set_menus_enabled(True)
 
             dpg.focus_item(f"{self.tag}_roots_filter")
-        except Exception as e:
-            details = traceback.format_exception_only(e)
-            self.logger.error(
-                f"Loading behavior failed: {details[0]}\nSee log for details!"
-            )
-            raise e
         finally:
             dpg.delete_item(loading_screen)
 
@@ -328,7 +322,7 @@ class BehaviorEditor:
                 title="Locate WitchyBND.exe", filetypes={"WitchyBND": "WitchyBND.exe"}
             )
             if not witchy_exe:
-                self.logger.error("WitchyBND is required for repacking behavior")
+                raise RuntimeError("WitchyBND is required for repacking behavior")
 
             self.config.witchy_exe = witchy_exe
             self.config.save()
@@ -341,7 +335,7 @@ class BehaviorEditor:
                 title="Locate HKLib.exe", filetypes={"HKLib": "HKLib.CLI.exe"}
             )
             if not hklib_exe:
-                self.logger.error("HKLib is required for repacking behavior")
+                raise RuntimeError("HKLib is required for repacking behavior")
 
             self.config.hklib_exe = hklib_exe
             self.config.save()
@@ -362,13 +356,9 @@ class BehaviorEditor:
                     game_config = detect_game_config()
                     self.chr_reloader = ChrReloader(game_config)
                 else:
-                    self.logger.error("ChrReloader is not available")
-                    return
+                    raise RuntimeError("ChrReloader is not available")
 
             self.chr_reloader.reload_character(chr)
-        except Exception as e:
-            self.logger.error(f"Reloading {chr} failed: {e}")
-            self.chr_reloader = None
         finally:
             dpg.delete_item(loading)
             self._busy = False
@@ -2163,25 +2153,22 @@ class BehaviorEditor:
         if not file_path:
             return
 
-        try:
-            self.logger.info("Loading bone names from %s", file_path)
+        self.logger.info("Loading bone names from %s", file_path)
 
-            bones = load_skeleton_bones(file_path)
-            self.loaded_skeleton_path = file_path
+        bones = load_skeleton_bones(file_path)
+        self.loaded_skeleton_path = file_path
 
-            boneweights_type_id = self.beh.type_registry.find_first_type_by_name(
-                "hkbBoneWeightArray"
-            )
-            basepath = "boneWeights"
-            aliases = AliasMap()
+        boneweights_type_id = self.beh.type_registry.find_first_type_by_name(
+            "hkbBoneWeightArray"
+        )
+        basepath = "boneWeights"
+        aliases = AliasMap()
 
-            for idx, bone in enumerate(bones):
-                aliases.add(bone, f"{basepath}:{idx}", boneweights_type_id, None)
+        for idx, bone in enumerate(bones):
+            aliases.add(bone, f"{basepath}:{idx}", boneweights_type_id, None)
 
-            # Insert left so that these aliases take priority
-            self.alias_manager.aliases.insert(0, aliases)
-        except ValueError as e:
-            self.logger.error("Loading bone names failed: %s", e, exc_info=True)
+        # Insert left so that these aliases take priority
+        self.alias_manager.aliases.insert(0, aliases)
 
     def open_fix_common_problems_dialog(self):
         tag = f"{self.tag}_fix_common_problems"

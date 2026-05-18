@@ -1139,43 +1139,39 @@ class AttributesWidget:
             self._on_value_changed(sender, handler, (old_value, new_value))
 
         if sender and dpg.does_item_exist(sender):
-            try:
-                todo = [sender]
-                while todo:
-                    widget = todo.pop()
-                    if not dpg.does_item_exist(widget):
-                        continue
+            todo = [sender]
+            while todo:
+                widget = todo.pop()
+                if not dpg.does_item_exist(widget):
+                    continue
 
-                    dpg_type = dpg.get_item_type(widget)
-                    if (
-                        dpg_type
-                        in (
-                            "mvAppItemType::mvInputText",
-                            "mvAppItemType::mvInputInt",
-                            "mvAppItemType::mvInputFloat",
-                            "mvAppItemType::mvInputDouble",
-                            "mvAppItemType::mvCheckbox",
-                            "mvAppItemType::mvCombo",
-                        )
-                        and dpg.is_item_visible(widget)
-                        and "bindable_attribute" not in dpg.get_item_alias(widget)
-                    ):
-                        if dpg_type == "mvAppItemType::mvCombo":
-                            items: list[str] = dpg.get_item_configuration(widget)[
-                                "items"
-                            ]
-                            if isinstance(ui_repr, int):
-                                ui_repr = items[ui_repr]
-                            else:
-                                ui_repr = items.index(str(ui_repr))
+                dpg_type = dpg.get_item_type(widget)
+                if (
+                    dpg_type
+                    in (
+                        "mvAppItemType::mvInputText",
+                        "mvAppItemType::mvInputInt",
+                        "mvAppItemType::mvInputFloat",
+                        "mvAppItemType::mvInputDouble",
+                        "mvAppItemType::mvCheckbox",
+                        "mvAppItemType::mvCombo",
+                    )
+                    and dpg.is_item_visible(widget)
+                    and "bindable_attribute" not in dpg.get_item_alias(widget)
+                ):
+                    if dpg_type == "mvAppItemType::mvCombo":
+                        items: list[str] = dpg.get_item_configuration(widget)[
+                            "items"
+                        ]
+                        if isinstance(ui_repr, int):
+                            ui_repr = items[ui_repr]
+                        else:
+                            ui_repr = items.index(str(ui_repr))
 
-                        dpg.set_value(widget, ui_repr)
-                        break
-                    else:
-                        todo.extend(dpg.get_item_children(widget, 1))
-            except Exception as e:
-                self.logger.error(f"dpg.set_value failed: {e}")
-                raise e
+                    dpg.set_value(widget, ui_repr)
+                    break
+                else:
+                    todo.extend(dpg.get_item_children(widget, 1))
 
     def _cut_value(self, sender: str, app_data: Any, user_data: Any) -> None:
         # deselect the selectable
@@ -1185,13 +1181,7 @@ class AttributesWidget:
         widget = self._selected_attribute_info.widget
         val = dpg.get_value(widget)
 
-        try:
-            pyperclip.copy(str(val))
-        except pyperclip.PyperclipException as e:
-            self.logger.error("Cut value failed: %s", e)
-            # Not nice, but clearing the value without having copied it is worse
-            return
-
+        pyperclip.copy(str(val))
         default_val = type(val)()
         self._update_attribute(widget, default_val, attribute)
 
@@ -1241,13 +1231,10 @@ class AttributesWidget:
                 new_value = data
 
             # Let the handler handle the rest
-            try:
-                self._update_attribute(widget, new_value, attribute)
+            self._update_attribute(widget, new_value, attribute)
 
-                if isinstance(attribute, HkbPointer) and self._on_graph_changed:
-                    self._on_graph_changed()
-            except Exception as e:
-                self.logger.error(f"Paste value to {path} failed: {e}")
+            if isinstance(attribute, HkbPointer) and self._on_graph_changed:
+                self._on_graph_changed()
 
     def _move_array_item(self, sender: str, offset: int) -> None:
         # deselect the selectable

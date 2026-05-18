@@ -134,11 +134,8 @@ def apply_template_dialog(
 
             # Undo any changes that might have already happened
             if prev_undo != behavior.top_undo_id():
-                try:
-                    behavior.undo()
-                    logger.warning("All recorded changes undone")
-                except Exception as e:
-                    logger.error(f"Some of the changes the failed template made could not be undone: {e}")
+                behavior.undo()
+                logger.warning("All recorded changes undone")
 
         else:
             logger.info(f"Template '{template._title}' finished successfully")
