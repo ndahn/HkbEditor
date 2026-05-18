@@ -146,6 +146,8 @@ class GraphWidget:
             no_title=True,
             pan_button=cfg.pan_button_id,
             equal_aspects=True,
+            width=-1,
+            height=-1,
             zoom_rate=-0.1 if cfg.invert_zoom else 0.1,
             tag=self.tag,
         ):

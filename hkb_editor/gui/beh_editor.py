@@ -2189,7 +2189,7 @@ class BehaviorEditor:
         skeleton_mirror_dialog(self.loaded_skeleton_path, tag=tag)
 
     def verify_behavior(self):
-        with loading_indicator("Validating behavior...")
+        with loading_indicator("Validating behavior..."):
             verify_behavior(self.beh)
             # TODO summary dialog?
             logging.info("Validation complete, check log for results!")
