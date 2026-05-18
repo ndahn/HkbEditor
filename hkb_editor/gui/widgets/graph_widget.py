@@ -22,7 +22,7 @@ class GraphWidget:
         ] = None,
         get_edge_label: Callable[[Node, Node], str] = None,
         draw_edges: bool = True,
-        edge_style: Literal["manhattan", "straight"] = "manhattan",
+        edge_style: Literal["manhattan", "bezier", "straight"] = "manhattan",
         rainbow_edges: bool = False,
         select_enabled: bool = True,
         hover_enabled: bool = True,
@@ -65,10 +65,26 @@ class GraphWidget:
         self._x_offset = 0.0
         self._y_scale = 1.0
         self._y_offset = 0.0
+        # Previous-frame transform; used to detect pan/zoom changes
+        self._prev_x_scale = 0.0
+        self._prev_y_scale = 0.0
+        self._prev_x_offset = 0.0
+        self._prev_y_offset = 0.0
         # Plot-space positions from the last layout pass; used to transform to pixels
         self._plot_positions: dict[str, tuple[float, float]] = {}
         self._graph_layers: list[str] = None
+        # Persistent draw-item bookkeeping for diff-based updates
         self._rendered_nodes: set[str] = set()
+        self._rendered_edges: set[tuple[str, str]] = set()
+        # Tracks which rendered items currently have show=True so we don't re-set it each frame
+        self._visible_nodes: set[str] = set()
+        self._visible_edges: set[tuple[str, str]] = set()
+        self._node_line_counts: dict[str, int] = {}
+        self._edge_base_colors: dict[tuple[str, str], tuple] = {}
+        # Cached label length (chars) per edge so we don't have to read it back from DPG
+        self._edge_label_lens: dict[tuple[str, str], int] = {}
+        # Track previous hover/selection so style transitions can be applied incrementally
+        self._prev_selected: Node = None
 
         # Set when visibility changes; cleared after layout is recomputed
         self._layout_dirty: bool = False
@@ -188,22 +204,31 @@ class GraphWidget:
             self.regenerate()
 
     def clear_highlights(self) -> None:
+        affected = list(self._manual_highlights.keys())
         self._manual_highlights.clear()
-        self._render_required = True
+        # Restyle each previously-highlighted node so the highlight visually clears
+        for nid in affected:
+            node = self.nodes.get(nid)
+            if node:
+                self._apply_node_style(node)
 
     def highlight_node(self, node: Node | str, color: style.RGBA = style.green) -> None:
         if isinstance(node, Node):
             node = node.id
 
         self._manual_highlights[node] = color
-        self._render_required = True
+        target = self.nodes.get(node)
+        if target:
+            self._apply_node_style(target)
 
     def unhighlight_node(self, node: Node | str) -> None:
         if isinstance(node, Node):
             node = node.id
 
-        del self._manual_highlights[node]
-        self._render_required = True
+        self._manual_highlights.pop(node, None)
+        target = self.nodes.get(node)
+        if target:
+            self._apply_node_style(target)
 
     @property
     def zoom_factor(self) -> float:
@@ -353,6 +378,18 @@ class GraphWidget:
         dpg.delete_item(f"{self.tag}_plot_yaxis", children_only=True, slot=1)
         self.color_generator.reset()
 
+        # The series and all its children are gone; reset diff tracking
+        self._rendered_nodes.clear()
+        self._rendered_edges.clear()
+        self._visible_nodes.clear()
+        self._visible_edges.clear()
+        self._node_line_counts.clear()
+        self._edge_base_colors.clear()
+        self._edge_label_lens.clear()
+        self._prev_selected = None
+        self.prev_hover = None
+        self.hovered_node = None
+
         for node in self.nodes.values():
             node.visible = False
             node.unfolded = False
@@ -372,6 +409,15 @@ class GraphWidget:
 
         dpg.delete_item(f"{self.tag}_plot_yaxis", children_only=True, slot=1)
         self.color_generator.reset()
+
+        # Series children are gone; reset diff tracking before the new series is created
+        self._rendered_nodes.clear()
+        self._rendered_edges.clear()
+        self._visible_nodes.clear()
+        self._visible_edges.clear()
+        self._node_line_counts.clear()
+        self._edge_base_colors.clear()
+        self._edge_label_lens.clear()
 
         # Pre-compute a layout at the current zoom so the series has real
         # plot-space positions for DPG to auto-fit and transform. _layout_dirty
@@ -611,8 +657,6 @@ class GraphWidget:
         self.hovered_node = None
 
         # One series anchor gives us offset once we know scale.
-        # scale ~ widget_pixels / axis_range (the border eats a few px, but the
-        # anchor corrects for that via offset).
         tx0, ty0 = app_data[1][0], app_data[2][0]
         plot_vals = dpg.get_value(f"{self.tag}_plot_series")
         px0, py0 = plot_vals[0][0], plot_vals[1][0]
@@ -625,46 +669,198 @@ class GraphWidget:
         self._x_offset = tx0 - px0 * self._x_scale
         self._y_offset = ty0 - py0 * self._y_scale
 
-        self._render_required = False
+        # Detect transform changes so we only update positions when needed
+        transform_changed = (
+            self._x_scale != self._prev_x_scale
+            or self._y_scale != self._prev_y_scale
+            or self._x_offset != self._prev_x_offset
+            or self._y_offset != self._prev_y_offset
+        )
+        zoom_changed = (
+            self._x_scale != self._prev_x_scale or self._y_scale != self._prev_y_scale
+        )
 
         if self._layout_dirty:
-            dpg.delete_item(sender, children_only=True, slot=2)
-            self._rendered_nodes.clear()
-
             for node in self.nodes.values():
                 if node.visible and node.size is None:
                     # Estimate size in plot space; layout uses plot-space units
                     node.size = self._estimate_node_size(node)
 
             self._plot_positions = self.layout.compute_layout(self.graph, self.nodes)
-            self._render_required = True
             self._layout_dirty = False
+            # Layout move requires position update even if transform didn't change
+            transform_changed = True
+
+        geometry_update = transform_changed
+        self._render_required = False
 
         dpg.push_container_stack(sender)
         dpg.configure_item(sender, tooltip=False)
 
+        # Pixel positions used by both node and edge passes; built during node pass
+        node_pixels: dict[str, tuple[float, float, float, float]] = {}
+
+        # Topological order ensures parents are created before children, which means
+        # edges (created with the parent) have valid child positions on the same frame
         for n in self._graph_layers:
             node = self.nodes[n]
+            plot_pos = self._plot_positions.get(n)
+
+            if not node.visible or plot_pos is None:
+                if n in self._rendered_nodes:
+                    self._hide_node_items(n)
+                continue
+
+            px, py = self._to_pixel(*plot_pos)
+            pw, ph = self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
+            node_pixels[n] = (px, py, pw, ph)
+
+            # Hit-test in pixel space; first match wins
+            if not self.hovered_node:
+                if px <= mouse_x < px + pw and py <= mouse_y < py + ph:
+                    self.hovered_node = node
+
             if n not in self._rendered_nodes:
-                self._draw_node(node, mouse_x, mouse_y)
+                self._draw_node(node, px, py, pw, ph)
                 self._rendered_nodes.add(n)
             else:
-                self._update_node(node, mouse_x, mouse_y)
+                # Re-show in case it was hidden previously
+                self._show_node_items(n)
+                if geometry_update:
+                    self._update_node_geometry(node, px, py, pw, ph, zoom_changed)
 
+        # Edge pass — separate from nodes so both endpoints have known pixel positions
+        if self.draw_edges:
+            for a_id, b_id in self.graph.edges:
+                key = (a_id, b_id)
+                a_geom = node_pixels.get(a_id)
+                b_geom = node_pixels.get(b_id)
+
+                if a_geom is None or b_geom is None:
+                    if key in self._rendered_edges:
+                        self._hide_edge_items(key)
+                    continue
+
+                ax, ay, aw, ah = a_geom
+                bx, by, bw, bh = b_geom
+
+                if key not in self._rendered_edges:
+                    self._draw_edge(
+                        self.nodes[a_id],
+                        ax,
+                        ay,
+                        aw,
+                        ah,
+                        self.nodes[b_id],
+                        bx,
+                        by,
+                        bw,
+                        bh,
+                    )
+                    self._rendered_edges.add(key)
+                else:
+                    self._show_edge_items(key)
+                    if geometry_update:
+                        self._update_edge_geometry(
+                            a_id, b_id, ax, ay, aw, ah, bx, by, bw, bh, zoom_changed
+                        )
+
+        # Apply style transitions for hover and selection changes
         if self.prev_hover != self.hovered_node:
-            self._set_node_hover_style(self.prev_hover)
-            self._set_node_hover_style(node)
+            self._apply_node_style(self.prev_hover)
+            self._apply_node_style(self.hovered_node)
+            self._apply_adjacent_edge_styles(self.prev_hover)
+            self._apply_adjacent_edge_styles(self.hovered_node)
+
+        if self._prev_selected != self.selected_node:
+            self._apply_node_style(self._prev_selected)
+            self._apply_node_style(self.selected_node)
+            self._apply_adjacent_edge_styles(self._prev_selected)
+            self._apply_adjacent_edge_styles(self.selected_node)
+            self._prev_selected = self.selected_node
+
+        # Cache transform for next-frame change detection
+        self._prev_x_scale = self._x_scale
+        self._prev_y_scale = self._y_scale
+        self._prev_x_offset = self._x_offset
+        self._prev_y_offset = self._y_offset
 
         dpg.pop_container_stack()
 
-    def _node_tag(self, node: Node, suffix: str = None) -> str:
-        t = f"{self.tag}_node_{node.id}"
+    # === Draw-item helpers ================================
+
+    def _node_tag(self, node: Node | str, suffix: str = None) -> str:
+        nid = node.id if isinstance(node, Node) else node
+        t = f"{self.tag}_node_{nid}"
         if suffix:
             t += "_" + suffix
         return t
 
-    def _set_node_hover_style(self, node: Node) -> None:
-        if not node or not dpg.does_item_exist(self._node_tag(node, "box")):
+    def _edge_tag(self, a_id: str, b_id: str, suffix: str = None) -> str:
+        t = f"{self.tag}_edge_{a_id}_TO_{b_id}"
+        if suffix:
+            t += "_" + suffix
+        return t
+
+    def _hide_node_items(self, node_id: str) -> None:
+        if node_id not in self._visible_nodes:
+            return
+        box_tag = self._node_tag(node_id, "box")
+        if dpg.does_item_exist(box_tag):
+            dpg.configure_item(box_tag, show=False)
+        for i in range(self._node_line_counts.get(node_id, 0)):
+            line_tag = self._node_tag(node_id, f"text_{i}")
+            if dpg.does_item_exist(line_tag):
+                dpg.configure_item(line_tag, show=False)
+        self._visible_nodes.discard(node_id)
+
+    def _show_node_items(self, node_id: str) -> None:
+        if node_id in self._visible_nodes:
+            return
+        box_tag = self._node_tag(node_id, "box")
+        if dpg.does_item_exist(box_tag):
+            dpg.configure_item(box_tag, show=True)
+        for i in range(self._node_line_counts.get(node_id, 0)):
+            line_tag = self._node_tag(node_id, f"text_{i}")
+            if dpg.does_item_exist(line_tag):
+                dpg.configure_item(line_tag, show=True)
+        self._visible_nodes.add(node_id)
+
+    def _hide_edge_items(self, key: tuple[str, str]) -> None:
+        if key not in self._visible_edges:
+            return
+        a_id, b_id = key
+        edge_tag = self._edge_tag(a_id, b_id)
+        if dpg.does_item_exist(edge_tag):
+            dpg.configure_item(edge_tag, show=False)
+        for suffix in ("label", "label_bg"):
+            t = self._edge_tag(a_id, b_id, suffix)
+            if dpg.does_item_exist(t):
+                dpg.configure_item(t, show=False)
+        self._visible_edges.discard(key)
+
+    def _show_edge_items(self, key: tuple[str, str]) -> None:
+        if key in self._visible_edges:
+            return
+        a_id, b_id = key
+        edge_tag = self._edge_tag(a_id, b_id)
+        if dpg.does_item_exist(edge_tag):
+            dpg.configure_item(edge_tag, show=True)
+        for suffix in ("label", "label_bg"):
+            t = self._edge_tag(a_id, b_id, suffix)
+            if dpg.does_item_exist(t):
+                dpg.configure_item(t, show=True)
+        self._visible_edges.add(key)
+
+    # === Style application ================================
+
+    def _apply_node_style(self, node: Node) -> None:
+        # Compute the box color and thickness from current select/hover/highlight state
+        if not node:
+            return
+
+        box_tag = self._node_tag(node, "box")
+        if not dpg.does_item_exist(box_tag):
             return
 
         color = style.white
@@ -676,73 +872,60 @@ class GraphWidget:
         else:
             if node.id in self._manual_highlights:
                 color = self._manual_highlights[node.id]
-
             if self.hover_enabled and node == self.hovered_node:
                 thickness = 2
 
-        dpg.configure_item(self._node_tag(node, "box"), thickness=thickness, color=color)
+        dpg.configure_item(box_tag, color=color, thickness=thickness)
 
-    def _update_node(self, node: Node, mouse_x: float, mouse_y: float) -> None:
-        plot_pos = self._plot_positions.get(node.id)
-        if not node.visible or plot_pos is None:
+    def _apply_edge_style(self, a_id: str, b_id: str) -> None:
+        # Edge color follows hover (yellow) > selection (orange) > base color
+        edge_tag = self._edge_tag(a_id, b_id)
+        if not dpg.does_item_exist(edge_tag):
             return
 
-        px, py = self._to_pixel(*plot_pos)
-        pw, ph = self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
-        margin = self.layout.text_margin
+        node_a = self.nodes.get(a_id)
+        node_b = self.nodes.get(b_id)
+        base_color = self._edge_base_colors.get((a_id, b_id), style.white)
 
-        # Hit-test with pixel-space mouse coords and pixel-space box
-        if not self.hovered_node:
-            x1, y1 = px, py
-            x2, y2 = px + pw, py + ph
-            if x1 <= mouse_x < x2 and y1 <= mouse_y < y2:
-                self.hovered_node = node
+        if self.hover_enabled and (
+            node_a is self.hovered_node or node_b is self.hovered_node
+        ):
+            color = style.yellow
+            thickness = 2
+        elif self.select_enabled and (
+            node_a is self.selected_node or node_b is self.selected_node
+        ):
+            color = style.orange
+            thickness = 2
+        else:
+            color = base_color
+            thickness = 1
 
-        dpg.configure_item(self._node_tag(node, "box"), pmin=(px, py), pmax=(px + pw, py + ph))
-        
-        for i in range(9):
-            line_tag = self._node_tag(node, f"text_{i}")
-            if dpg.does_item_exist(line_tag):
-                # TODO adjust py
-                dpg.configure_item(line_tag, pos=(px + margin, py + margin))
+        dpg.configure_item(edge_tag, color=color, thickness=thickness)
 
-        # TODO edges
+        # Edge label colour matches the edge
+        label_tag = self._edge_tag(a_id, b_id, "label")
+        if dpg.does_item_exist(label_tag):
+            dpg.configure_item(label_tag, color=color)
 
-    def _draw_node(self, node: Node, mouse_x: float, mouse_y: float) -> str:
-        plot_pos = self._plot_positions.get(node.id)
-        if not node.visible or plot_pos is None:
+    def _apply_adjacent_edge_styles(self, node: Node) -> None:
+        # Restyle every edge touching this node so hover/select highlights propagate
+        if not node or not self.graph:
             return
+        for child_id in self.graph.successors(node.id):
+            self._apply_edge_style(node.id, child_id)
+        for parent_id in self.graph.predecessors(node.id):
+            self._apply_edge_style(parent_id, node.id)
 
-        px, py = self._to_pixel(*plot_pos)
-        pw, ph = self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
+    # === Node and edge creation / geometry updates =======
 
-        # Hit-test with pixel-space mouse coords and pixel-space box
-        if not self.hovered_node:
-            x1, y1 = px, py
-            x2, y2 = px + pw, py + ph
-            if x1 <= mouse_x < x2 and y1 <= mouse_y < y2:
-                self.hovered_node = node
-
-        if self.draw_edges:
-            for child_id in self.graph.successors(node.id):
-                child_node = self.nodes[child_id]
-                child_pos = self._plot_positions.get(child_id)
-                if child_node.visible and child_pos is not None:
-                    cx, cy = self._to_pixel(*child_pos)
-                    self._draw_edge(node, px, py, pw, ph, child_node, cx, cy)
-
-        return self._draw_node_box(node, px, py, pw, ph)
-
-    def _draw_node_box(
+    def _draw_node(
         self, node: Node, px: float, py: float, pw: float, ph: float
     ) -> None:
-        if dpg.does_item_exist(self._node_tag(node, "box")):
-            return
-
+        # Create persistent box and text-line items for the node
         scale = self.zoom_factor
         margin = self.layout.text_margin
-        text_h = 12
-        text_offset_y = text_h * scale
+        text_offset_y = 12 * scale
         lines = self.get_node_frontpage(node)
         colors = None
 
@@ -775,6 +958,40 @@ class GraphWidget:
                 tag=self._node_tag(node, f"text_{i}"),
             )
 
+        self._node_line_counts[node.id] = len(lines)
+        self._visible_nodes.add(node.id)
+
+        # Apply current select/hover/highlight state to the freshly drawn box
+        self._apply_node_style(node)
+
+    def _update_node_geometry(
+        self,
+        node: Node,
+        px: float,
+        py: float,
+        pw: float,
+        ph: float,
+        zoom_changed: bool,
+    ) -> None:
+        # Move and resize the persistent box and text lines for a layout/pan/zoom change
+        dpg.configure_item(
+            self._node_tag(node, "box"), pmin=(px, py), pmax=(px + pw, py + ph)
+        )
+
+        scale = self.zoom_factor
+        margin = self.layout.text_margin
+        text_offset_y = 12 * scale
+
+        for i in range(self._node_line_counts.get(node.id, 0)):
+            line_tag = self._node_tag(node, f"text_{i}")
+            if not dpg.does_item_exist(line_tag):
+                continue
+            pos = (px + margin, py + margin + text_offset_y * i)
+            if zoom_changed:
+                dpg.configure_item(line_tag, pos=pos, size=12 * scale)
+            else:
+                dpg.configure_item(line_tag, pos=pos)
+
     def _draw_edge(
         self,
         node_a: Node,
@@ -785,56 +1002,56 @@ class GraphWidget:
         node_b: Node,
         bx: float,
         by: float,
+        bw: float,
+        bh: float,
     ) -> None:
-        tag = f"{self.tag}_edge_{node_a.id}_TO_{node_b.id}"
-        if dpg.does_item_exist(tag):
-            return
+        # Create the persistent edge geometry plus optional label
+        tag = self._edge_tag(node_a.id, node_b.id)
 
-        if self.hover_enabled and (
-            node_a == self.hovered_node or node_b == self.hovered_node
-        ):
-            color = style.yellow
-            thickness = 2
-        elif self.select_enabled and (
-            node_a == self.selected_node or node_b == self.selected_node
-        ):
-            color = style.orange
-            thickness = 2
-        elif self.rainbow_edges:
-            color = self.color_generator(node_a.id)
-            color = tuple((c + 255) // 2 for c in color)
-            thickness = 1
+        # Resolve and remember a base color so style transitions can revert correctly
+        if self.rainbow_edges:
+            base = self.color_generator(node_a.id)
+            base = tuple((c + 255) // 2 for c in base)
         else:
-            color = style.white
-            thickness = 1
+            base = style.white
+        self._edge_base_colors[(node_a.id, node_b.id)] = base
 
-        # Pixel size of node_b; needed for mid-point calculations.
-        # node_b.size is plot-space, so scale it.
         scale = self.zoom_factor
-        bw = node_b.width * scale if node_b.size else 0.0
-        bh = node_b.height * scale if node_b.size else 0.0
 
         if self.edge_style == "manhattan":
-            p0x = ax + aw  # right edge of node_a (pixels)
-            p0y = ay + ah / 2  # vertical centre of node_a (pixels)
-            p1x = bx  # left edge of node_b (pixels)
-            p1y = by + bh / 2  # vertical centre of node_b (pixels)
-
+            p0x = ax + aw
+            p0y = ay + ah / 2
+            p1x = bx
+            p1y = by + bh / 2
             mid_x = p1x - self.layout.gap_x * scale / 2
 
             dpg.draw_polygon(
                 [(p0x, p0y), (mid_x, p0y), (mid_x, p1y), (p1x, p1y)],
-                color=color,
-                thickness=thickness,
+                color=base,
+                thickness=1,
                 tag=tag,
             )
-        elif self.edge_style == "straight":
+        elif self.edge_style == "bezier":
+            p0x = ax + aw / 2
+            p0y = ay + ah / 2
+            p1x = bx + bw / 2
+            p1y = by + bh / 2
+            dpg.draw_bezier_cubic(
+                (p0x, p0y),
+                (p1x, p0y),
+                (p0x, p1y),
+                (p1x, p1y),
+                color=base,
+                thickness=1,
+                tag=tag,
+            )
+        else:  # "straight"
             p0x = ax + aw / 2
             p0y = ay + ah / 2
             p1x = bx + bw / 2
             p1y = by + bh / 2
 
-            dpg.draw_line((p0x, p0y), (p1x, p1y), color=color, tag=tag)
+            dpg.draw_line((p0x, p0y), (p1x, p1y), color=base, thickness=1, tag=tag)
 
         if self.get_edge_label:
             label = self.get_edge_label(node_a, node_b)
@@ -846,21 +1063,94 @@ class GraphWidget:
                 lx = (p0x + p1x) / 2 - tw / 2
                 ly = (p0y + p1y) / 2 - th * 2 / 5
 
-                with dpg.draw_node(
-                    tag=f"{tag}_label",
-                    parent=f"{self.tag}_node_layer",
-                ):
-                    dpg.draw_rectangle(
-                        (lx, ly),
-                        (lx + tw, ly + th),  # absolute pmax, not size
-                        fill=style.dark_grey,
-                        color=None,
-                        show=False,
-                        tag=f"{tag}_label_bg",
-                    )
-                    dpg.draw_text(
-                        (lx + margin, ly + margin),
-                        label,
-                        size=11 * scale,
-                        color=color,
-                    )
+                # Stored as siblings of the edge so configure_item works on them directly
+                dpg.draw_rectangle(
+                    (lx, ly),
+                    (lx + tw, ly + th),
+                    fill=style.dark_grey,
+                    color=None,
+                    show=False,
+                    tag=self._edge_tag(node_a.id, node_b.id, "label_bg"),
+                )
+                dpg.draw_text(
+                    (lx + margin, ly + margin),
+                    label,
+                    size=11 * scale,
+                    color=base,
+                    tag=self._edge_tag(node_a.id, node_b.id, "label"),
+                )
+                self._edge_label_lens[(node_a.id, node_b.id)] = len(label)
+
+        self._visible_edges.add((node_a.id, node_b.id))
+
+        # Apply current hover/select state in case this edge is adjacent to either
+        self._apply_edge_style(node_a.id, node_b.id)
+
+    def _update_edge_geometry(
+        self,
+        a_id: str,
+        b_id: str,
+        ax: float,
+        ay: float,
+        aw: float,
+        ah: float,
+        bx: float,
+        by: float,
+        bw: float,
+        bh: float,
+        zoom_changed: bool,
+    ) -> None:
+        # Reposition the polygon/line points; update label position and size on zoom
+        tag = self._edge_tag(a_id, b_id)
+        scale = self.zoom_factor
+
+        if self.edge_style == "manhattan":
+            p0x = ax + aw
+            p0y = ay + ah / 2
+            p1x = bx
+            p1y = by + bh / 2
+            mid_x = p1x - self.layout.gap_x * scale / 2
+            dpg.configure_item(
+                tag,
+                points=[(p0x, p0y), (mid_x, p0y), (mid_x, p1y), (p1x, p1y)],
+            )
+        elif self.edge_style == "bezier":
+            p0x = ax + aw / 2
+            p0y = ay + ah / 2
+            p1x = bx + bw / 2
+            p1y = by + bh / 2
+            dpg.draw_bezier_cubic(
+                tag,
+                p0=(p0x, p0y),
+                p1=(p1x, p0y),
+                p2=(p0x, p1y),
+                p3=(p1x, p1y),
+            )
+        else:  # "straight"
+            p0x = ax + aw / 2
+            p0y = ay + ah / 2
+            p1x = bx + bw / 2
+            p1y = by + bh / 2
+            dpg.configure_item(tag, p1=(p0x, p0y), p2=(p1x, p1y))
+
+        label_tag = self._edge_tag(a_id, b_id, "label")
+        if dpg.does_item_exist(label_tag):
+            # Use cached label length to recompute the bounding box
+            label_len = self._edge_label_lens.get((a_id, b_id), 0)
+            margin = self.layout.text_margin
+            tw, th = estimate_drawn_text_size(
+                label_len, font_size=11, scale=scale, margin=margin
+            )
+            lx = (p0x + p1x) / 2 - tw / 2
+            ly = (p0y + p1y) / 2 - th * 2 / 5
+
+            if zoom_changed:
+                dpg.configure_item(
+                    label_tag, pos=(lx + margin, ly + margin), size=11 * scale
+                )
+            else:
+                dpg.configure_item(label_tag, pos=(lx + margin, ly + margin))
+
+            bg_tag = self._edge_tag(a_id, b_id, "label_bg")
+            if dpg.does_item_exist(bg_tag):
+                dpg.configure_item(bg_tag, pmin=(lx, ly), pmax=(lx + tw, ly + th))
