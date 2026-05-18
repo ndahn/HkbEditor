@@ -54,6 +54,7 @@ class GraphWidget:
         self.graph = None
         self.root: str = None
         self.nodes: dict[str, Node] = {}
+        self.prev_hover: Node = None
         self.hovered_node: Node = None
         self.selected_node: Node = None
         self.default_axis_range = default_axis_range
@@ -66,6 +67,8 @@ class GraphWidget:
         self._y_offset = 0.0
         # Plot-space positions from the last layout pass; used to transform to pixels
         self._plot_positions: dict[str, tuple[float, float]] = {}
+        self._graph_layers: list[str] = None
+        self._rendered_nodes: set[str] = set()
 
         # Set when visibility changes; cleared after layout is recomputed
         self._layout_dirty: bool = False
@@ -167,6 +170,8 @@ class GraphWidget:
         self.graph = graph
 
         if graph:
+            # Topological order ensures parents are drawn (and positioned) before children
+            self._graph_layers = list(nx.topological_sort(graph))
             self.root = next(n for n, in_deg in graph.in_degree() if in_deg == 0)
 
             for n, data in graph.nodes.items():
@@ -189,14 +194,14 @@ class GraphWidget:
     def highlight_node(self, node: Node | str, color: style.RGBA = style.green) -> None:
         if isinstance(node, Node):
             node = node.id
-        
+
         self._manual_highlights[node] = color
         self._render_required = True
 
     def unhighlight_node(self, node: Node | str) -> None:
         if isinstance(node, Node):
             node = node.id
-        
+
         del self._manual_highlights[node]
         self._render_required = True
 
@@ -521,7 +526,7 @@ class GraphWidget:
     def reveal(self, node: Node | str) -> None:
         if not node:
             return
-        
+
         if isinstance(node, str):
             node = self.nodes[node]
 
@@ -602,6 +607,7 @@ class GraphWidget:
         helper_data = app_data[0]
         mouse_x = helper_data["MouseX_PixelSpace"]
         mouse_y = helper_data["MouseY_PixelSpace"]
+        self.prev_hover = self.hovered_node
         self.hovered_node = None
 
         # One series anchor gives us offset once we know scale.
@@ -622,6 +628,9 @@ class GraphWidget:
         self._render_required = False
 
         if self._layout_dirty:
+            dpg.delete_item(sender, children_only=True, slot=2)
+            self._rendered_nodes.clear()
+
             for node in self.nodes.values():
                 if node.visible and node.size is None:
                     # Estimate size in plot space; layout uses plot-space units
@@ -631,49 +640,103 @@ class GraphWidget:
             self._render_required = True
             self._layout_dirty = False
 
-        dpg.delete_item(sender, children_only=True, slot=2)
         dpg.push_container_stack(sender)
         dpg.configure_item(sender, tooltip=False)
 
-        # Topological order ensures parents are drawn (and positioned) before children
-        for n in nx.topological_sort(self.graph):
+        for n in self._graph_layers:
             node = self.nodes[n]
-            plot_pos = self._plot_positions.get(n)
-            if not node.visible or plot_pos is None:
-                continue
+            if n not in self._rendered_nodes:
+                self._draw_node(node, mouse_x, mouse_y)
+                self._rendered_nodes.add(n)
+            else:
+                self._update_node(node, mouse_x, mouse_y)
 
-            px, py = self._to_pixel(*plot_pos)
-            pw_node, ph_node = (
-                self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
-            )
-
-            # Hit-test with pixel-space mouse coords and pixel-space box
-            if not self.hovered_node:
-                x1, y1 = px, py
-                x2, y2 = px + pw_node, py + ph_node
-                if x1 <= mouse_x < x2 and y1 <= mouse_y < y2:
-                    self.hovered_node = node
-
-            if self.draw_edges:
-                for child_id in self.graph.successors(node.id):
-                    child_node = self.nodes[child_id]
-                    child_pos = self._plot_positions.get(child_id)
-                    if child_node.visible and child_pos is not None:
-                        cx, cy = self._to_pixel(*child_pos)
-                        self._draw_edge(
-                            node, px, py, pw_node, ph_node, child_node, cx, cy
-                        )
-
-            self._draw_node_box(node, px, py, pw_node, ph_node)
+        if self.prev_hover != self.hovered_node:
+            self._set_node_hover_style(self.prev_hover)
+            self._set_node_hover_style(node)
 
         dpg.pop_container_stack()
 
-    def _draw_node_box(
-        self, node: Node, px: float, py: float, pixel_w: float, pixel_h: float
-    ) -> None:
-        tag = f"{self.tag}_node_{node.id}"
+    def _node_tag(self, node: Node, suffix: str = None) -> str:
+        t = f"{self.tag}_node_{node.id}"
+        if suffix:
+            t += "_" + suffix
+        return t
 
-        if dpg.does_item_exist(tag):
+    def _set_node_hover_style(self, node: Node) -> None:
+        if not node or not dpg.does_item_exist(self._node_tag(node, "box")):
+            return
+
+        color = style.white
+        thickness = 1
+
+        if self.select_enabled and node == self.selected_node:
+            color = style.blue
+            thickness = 2
+        else:
+            if node.id in self._manual_highlights:
+                color = self._manual_highlights[node.id]
+
+            if self.hover_enabled and node == self.hovered_node:
+                thickness = 2
+
+        dpg.configure_item(self._node_tag(node, "box"), thickness=thickness, color=color)
+
+    def _update_node(self, node: Node, mouse_x: float, mouse_y: float) -> None:
+        plot_pos = self._plot_positions.get(node.id)
+        if not node.visible or plot_pos is None:
+            return
+
+        px, py = self._to_pixel(*plot_pos)
+        pw, ph = self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
+        margin = self.layout.text_margin
+
+        # Hit-test with pixel-space mouse coords and pixel-space box
+        if not self.hovered_node:
+            x1, y1 = px, py
+            x2, y2 = px + pw, py + ph
+            if x1 <= mouse_x < x2 and y1 <= mouse_y < y2:
+                self.hovered_node = node
+
+        dpg.configure_item(self._node_tag(node, "box"), pmin=(px, py), pmax=(px + pw, py + ph))
+        
+        for i in range(9):
+            line_tag = self._node_tag(node, f"text_{i}")
+            if dpg.does_item_exist(line_tag):
+                # TODO adjust py
+                dpg.configure_item(line_tag, pos=(px + margin, py + margin))
+
+        # TODO edges
+
+    def _draw_node(self, node: Node, mouse_x: float, mouse_y: float) -> str:
+        plot_pos = self._plot_positions.get(node.id)
+        if not node.visible or plot_pos is None:
+            return
+
+        px, py = self._to_pixel(*plot_pos)
+        pw, ph = self._size_to_pixel(*node.size) if node.size else (0.0, 0.0)
+
+        # Hit-test with pixel-space mouse coords and pixel-space box
+        if not self.hovered_node:
+            x1, y1 = px, py
+            x2, y2 = px + pw, py + ph
+            if x1 <= mouse_x < x2 and y1 <= mouse_y < y2:
+                self.hovered_node = node
+
+        if self.draw_edges:
+            for child_id in self.graph.successors(node.id):
+                child_node = self.nodes[child_id]
+                child_pos = self._plot_positions.get(child_id)
+                if child_node.visible and child_pos is not None:
+                    cx, cy = self._to_pixel(*child_pos)
+                    self._draw_edge(node, px, py, pw, ph, child_node, cx, cy)
+
+        return self._draw_node_box(node, px, py, pw, ph)
+
+    def _draw_node_box(
+        self, node: Node, px: float, py: float, pw: float, ph: float
+    ) -> None:
+        if dpg.does_item_exist(self._node_tag(node, "box")):
             return
 
         scale = self.zoom_factor
@@ -694,26 +757,13 @@ class GraphWidget:
         max_len = max(len(s) for s in lines)
         lines = [s.center(max_len) for s in lines]
 
-        edge_color = style.white
-        thickness = 1
-
-        if self.select_enabled and node == self.selected_node:
-            edge_color = style.blue
-            thickness = 2
-        else:
-            if node.id in self._manual_highlights:
-                edge_color = self._manual_highlights[node.id]
-            
-            if self.hover_enabled and node == self.hovered_node:
-                thickness = 2
-
         dpg.draw_rectangle(
             (px, py),
-            (px + pixel_w, py + pixel_h),
+            (px + pw, py + ph),
             fill=style.dark_grey,
-            color=edge_color,
-            thickness=thickness,
-            tag=f"{tag}_box",
+            color=style.white,
+            thickness=1,
+            tag=self._node_tag(node, "box"),
         )
 
         for i, text in enumerate(lines):
@@ -722,6 +772,7 @@ class GraphWidget:
                 text,
                 size=12 * scale,
                 color=colors[i],
+                tag=self._node_tag(node, f"text_{i}"),
             )
 
     def _draw_edge(
