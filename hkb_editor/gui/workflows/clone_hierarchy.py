@@ -1,4 +1,4 @@
-from typing import Any, Callable, Generic, TypeVar
+from typing import Callable, Generic, TypeVar
 import logging
 from dataclasses import dataclass, field
 import re
@@ -12,7 +12,6 @@ from dearpygui import dearpygui as dpg
 from hkb_editor.hkb.xml import (
     xml_from_str,
     add_type_comments,
-    make_element,
     make_subelement,
 )
 from hkb_editor.hkb.behavior import HavokBehavior, HkbVariable
@@ -25,7 +24,8 @@ from hkb_editor.hkb.index_attributes import (
 from hkb_editor.hkb import HkbPointer, HkbRecord, HkbArray, XmlValueHandler
 from hkb_editor.hkb.type_registry import TypeMismatch
 from hkb_editor.gui import style
-from hkb_editor.gui.helpers import common_loading_indicator, add_paragraphs
+from hkb_editor.gui.widgets import loading_indicator
+from hkb_editor.gui.helpers import add_paragraphs
 
 
 T = TypeVar("T")
@@ -352,11 +352,8 @@ def paste_hierarchy(
             f"Could not map object type {root_type} ({root_type_name}) to a known type ID"
         )
 
-    loading = common_loading_indicator("Analyzing hierarchy")
-    try:
+    with loading_indicator("Analyzing hierarchy"):
         results = find_conflicts(behavior, xmldoc, target_record)
-    finally:
-        dpg.delete_item(loading)
 
     def add_objects():
         new_root: HkbRecord = results.objects[results.root_id].result
@@ -462,12 +459,9 @@ def paste_children(
         raise ValueError("Not a valid behavior hierarchy")
 
     # Search for conflicts
-    loading = common_loading_indicator("Analyzing hierarchy")
-    try:
+    with loading_indicator("Analyzing hierarchy"):
         results = find_conflicts(behavior, xmldoc, target_record)
         results.objects[results.root_id].action = MergeAction.IGNORE
-    finally:
-        dpg.delete_item(loading)
 
     # Let the user decide what to transfer, or just transfer everything
     if interactive:
@@ -1028,15 +1022,11 @@ def open_merge_hierarchy_dialog(
         resolution.action = MergeAction[action]
 
     def resolve():
-        loading = common_loading_indicator("Merging Hierarchy")
-        try:
+        with loading_indicator("Merging Hierarchy"):
             with behavior.transaction():
                 resolve_conflicts(behavior, target_record, results)
                 results.pin_objects = dpg.get_value(f"{tag}_pin_objects")
                 callback()
-        finally:
-            dpg.delete_item(loading)
-            close()
 
     def close():
         if graph_preview:

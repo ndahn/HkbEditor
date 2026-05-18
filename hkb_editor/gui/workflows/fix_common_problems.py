@@ -4,10 +4,10 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior, HkbArray, HkbPointer
 from hkb_editor.templates.common import Animation
+from hkb_editor.gui.widgets import loading_indicator
 from hkb_editor.gui.helpers import (
     center_window,
     add_paragraphs,
-    common_loading_indicator,
 )
 from hkb_editor.gui import style
 
@@ -116,9 +116,7 @@ def fix_common_problems_dialog(
 
     def on_okay():
         show_message()
-        loading = common_loading_indicator("Fixing")
-
-        try:
+        with loading_indicator("Fixing"):
             with behavior.transaction():
                 fixes = 0
                 if dpg.get_value(f"{tag}_array_null_pointers"):
@@ -139,11 +137,6 @@ def fix_common_problems_dialog(
 
             if callback:
                 callback(tag, fixes, user_data)
-        except Exception:
-            show_message("Error fixing behavior, check terminal!")
-            raise
-        finally:
-            dpg.delete_item(loading)
 
     # Dialog content
     with dpg.window(

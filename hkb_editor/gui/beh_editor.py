@@ -53,6 +53,7 @@ except (ImportError, AttributeError) as e:
 from .widgets.graph_widget import GraphWidget, HorizontalGraphLayout, Node
 from .widgets.attributes_widget import AttributesWidget
 from .widgets.graphmap import GraphMap  # TODO
+from .widgets import loading_indicator
 from .dialogs import (
     about_dialog,
     open_file_dialog,
@@ -81,7 +82,7 @@ from .workflows.clone_hierarchy import (
 from .workflows.duplicate_clipcat import duplicate_clipcat_dialog
 from .workflows.fix_common_problems import fix_common_problems_dialog
 from .workflows.verify_behavior import verify_behavior
-from .helpers import make_copy_menu, center_window, common_loading_indicator
+from .helpers import make_copy_menu, center_window
 from . import style
 
 
@@ -104,7 +105,6 @@ class BehaviorEditor:
         logging.root.addHandler(LogHandler())
 
         self.beh: HavokBehavior = None
-        self._busy = False
         self.alias_manager = AliasManager()
         self.attributes_widget: AttributesWidget = None
         self.pinned_objects_table: str = None
@@ -300,21 +300,12 @@ class BehaviorEditor:
         return False
 
     def _do_write_to_file(self, file_path):
-        if self._busy:
-            return
-
-        self._busy = True
-        loading = common_loading_indicator("Saving")
-
-        try:
+        with loading_indicator("Saving"):
             if self.config.save_backups:
                 shutil.copy(self.beh.file, self.beh.file + ".backup")
 
             self.beh.save_to_file(file_path)
             self.logger.info(f"Saved to {file_path}")
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def _locate_witchy(self) -> str:
         if not self.config.witchy_exe or not os.path.isfile(self.config.witchy_exe):
@@ -343,14 +334,8 @@ class BehaviorEditor:
         return self.config.hklib_exe
 
     def _reload_character(self) -> None:
-        if self._busy:
-            return
-
-        self._busy = True
         chr = self.beh.get_character_id()
-        loading = common_loading_indicator(f"Reloading {chr}...")
-
-        try:
+        with loading_indicator(f"Reloading {chr}..."):
             if not self.chr_reloader:
                 if ChrReloader:
                     game_config = detect_game_config()
@@ -359,23 +344,13 @@ class BehaviorEditor:
                     raise RuntimeError("ChrReloader is not available")
 
             self.chr_reloader.reload_character(chr)
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def _repack_binder(self) -> None:
-        if self._busy:
-            return
-
-        self._busy = True
-
         # Locate external tools
         self._locate_witchy()
         self._locate_hklib()
 
-        loading = common_loading_indicator("Repacking binder...")
-
-        try:
+        with loading_indicator("Repacking binder..."):
             self.logger.info("Saving XML...")
             self.file_save()
             self.logger.info("Converting XML to HKX...")
@@ -383,9 +358,6 @@ class BehaviorEditor:
             self.logger.info("Repacking Binder...")
             pack_binder(self.beh.file)
             self.logger.info("Done!")
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def exit_app(self):
         if not self.beh or self.beh.top_undo_id() == self.last_save_undo_id:
@@ -2217,19 +2189,10 @@ class BehaviorEditor:
         skeleton_mirror_dialog(self.loaded_skeleton_path, tag=tag)
 
     def verify_behavior(self):
-        if self._busy:
-            return
-
-        self._busy = True
-        loading = common_loading_indicator("Validating behavior...")
-
-        try:
+        with loading_indicator("Validating behavior...")
             verify_behavior(self.beh)
             # TODO summary dialog?
             logging.info("Validation complete, check log for results!")
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def open_apply_template_dialog(self, template_file: str):
         tag = f"{self.tag}_apply_template_dialog"
