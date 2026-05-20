@@ -154,7 +154,9 @@ def fix_common_problems_dialog(
             tag=f"{tag}_array_null_pointers",
         )
         with dpg.tooltip(dpg.last_item()):
-            add_paragraphs("Null pointers inside generator arrays can cause game crashes when accessed. When removed from manual selectors this will change array indices.")
+            add_paragraphs(
+                "Null pointers inside generator arrays can cause game crashes when accessed. When removed from manual selectors this will change array indices."
+            )
 
         dpg.add_checkbox(
             label="Fix clip animation IDs",
@@ -162,7 +164,9 @@ def fix_common_problems_dialog(
             tag=f"{tag}_clip_animation_ids",
         )
         with dpg.tooltip(dpg.last_item()):
-            add_paragraphs("ClipGenerators refer to an entry in the animations array that is not updated by ERClipGenerator. This ensures that this array contains all animations and references are valid.")
+            add_paragraphs(
+                "ClipGenerators refer to an entry in the animations array that is not updated by ERClipGenerator. This ensures that this array contains all animations and references are valid."
+            )
 
         dpg.add_checkbox(
             label="Clear invalid pointers",
@@ -170,7 +174,9 @@ def fix_common_problems_dialog(
             tag=f"{tag}_clear_invalid_pointers",
         )
         with dpg.tooltip(dpg.last_item()):
-            add_paragraphs("Any pointers referencing non-existing object IDs will prevent converting the behavior back to havok format.")
+            add_paragraphs(
+                "Any pointers referencing non-existing object IDs will prevent converting the behavior back to havok format."
+            )
 
         dpg.add_checkbox(
             label="Remove orphaned objects",
@@ -178,7 +184,9 @@ def fix_common_problems_dialog(
             tag=f"{tag}_remove_orphans",
         )
         with dpg.tooltip(dpg.last_item()):
-            add_paragraphs("Removes all objects that are not referenced by any other object. The behavior root items are protected.")
+            add_paragraphs(
+                "Removes all objects that are not referenced by any other object. The behavior root items are protected."
+            )
 
         instructions = """\
 Note that most severe issues cannot be fixed automatically. Use "Workflows -> Verify Behavior" and watch the terminal output carefully!

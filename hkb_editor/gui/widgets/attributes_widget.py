@@ -52,7 +52,6 @@ from hkb_editor.gui.workflows.bind_attribute import (
     set_bindable_attribute_state,
 )
 from hkb_editor.gui.workflows.aliases import AliasManager
-from hkb_editor.gui.workflows.clone_hierarchy import paste_hierarchy, MergeAction
 from hkb_editor.gui.helpers import (
     create_flag_checkboxes,
     add_paragraphs,
@@ -1464,6 +1463,8 @@ class AttributesWidget:
         set_bindable_attribute_state(self.tagfile, bindable_attribute, -1)
 
     def _paste_hierarchy(self, sender: str) -> None:
+        from hkb_editor.gui.workflows.clone_hierarchy import paste_hierarchy, MergeAction
+        
         # deselect the selectable
         dpg.set_value(sender, False)
 

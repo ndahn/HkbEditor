@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Callable, Generic, TypeVar
 import logging
 from dataclasses import dataclass, field
@@ -70,11 +71,8 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
     objects: list[HkbRecord] = []
     type_map: dict[str, str] = {}
 
-    todo = [start_id]
-
-    while todo:
-        oid = todo.pop()
-
+    # TODO verify this works
+    for oid in nx.topological_sort(hierarchy_graph):
         obj = behavior.objects.get(oid)
         if not obj:
             continue
@@ -109,8 +107,6 @@ def copy_hierarchy(start_obj: HkbRecord) -> str:
         array: HkbArray
         for _, array in obj.find_fields_by_class(HkbArray):
             type_map[array.element_type_id] = array.element_type_name
-
-        todo.extend(hierarchy_graph.successors(oid))
 
     # The root object might need additional data to be merged correctly
     if start_obj.type_name == "hkbStateMachine::StateInfo":
@@ -1028,6 +1024,8 @@ def open_merge_hierarchy_dialog(
                 results.pin_objects = dpg.get_value(f"{tag}_pin_objects")
                 callback()
 
+        close()
+
     def close():
         if graph_preview:
             graph_preview.deinit()
@@ -1135,8 +1133,6 @@ def open_merge_hierarchy_dialog(
                         on_node_selected=on_node_selected,
                         get_node_frontpage=get_node_frontpage,
                         hover_enabled=True,
-                        width=500,
-                        height=500,
                         tag=f"{tag}_graph_preview",
                     )
 

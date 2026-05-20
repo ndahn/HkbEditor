@@ -1498,7 +1498,7 @@ class BehaviorEditor:
             f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents"
         )
         with self.beh.transaction():
-            # Update all references while the node is still alive, then delete all 
+            # Update all references while the node is still alive, then delete all
             # descendants with no outside parents
             self._on_node_delete(node.id)
             for n in reversed(delete_list):

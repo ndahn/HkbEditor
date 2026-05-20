@@ -271,7 +271,7 @@ class HkbPointer(XmlValueHandler):
         if not oid:
             oid = "object0"
         elif must_exist and oid not in self.tagfile.objects:
-            raise ValueError("Target reference does not exist")
+            raise ValueError(f"Target reference {oid} does not exist")
 
         self.element.set("id", str(oid))
 
