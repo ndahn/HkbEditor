@@ -160,7 +160,7 @@ def create_stateinfo_dialog(
             "Statemachine",
             on_value_change,
             default=values["statemachine"],
-            choices=[sm["name"].get_value() for sm in statemachines],
+            choices=sorted([sm["name"].get_value() for sm in statemachines]),
             tag=f"{tag}_statemachine",
             user_data="statemachine",
         )
