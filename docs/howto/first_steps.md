@@ -4,6 +4,10 @@
 - [Nuxe](https://github.com/JKAnderson/Nuxe): for unpacking the game
 - [WitchyBND](https://github.com/ividyon/WitchyBND): for unpacking the archive files
 - [HKLib](https://github.com/The12thAvenger/HKLib/): for converting .hkb behavior files to .xml
+    - v0.12 for Elden Ring
+    - v0.13 for Nightreign
+    - [hkxconverter](https://discord.com/channels/529802828278005773/529900741998149643/1322128333642924032) for Sekiro
+    - [hkxpack-souls](https://discord.com/channels/529802828278005773/529900741998149643/1187076379116839033) for Dark Souls 3
 - [HkbEditor](https://github.com/ndahn/HkbEditor): for editing the behavior .xml files
 - [c0000.hks](https://github.com/ividyon/EldenRingHKS): often edited to handle behaviors
 
@@ -34,7 +38,7 @@ Inside said folder you will find a few more files and folders, but the one we ar
 
 ??? warning
     
-    Unfortunately, at the time of writing HKLib 0.12 **only** supports Elden Ring, and HKLib 0.13 **only** supports Nightreign. For older games like Sekiro and Dark Souls 3 there are ways to generate an xml using Dropoff's hkxconverter. If you find someone who has extracted these before you can use those as well.
+    Unfortunately, at the time of writing HKLib 0.12 **only** supports Elden Ring, and HKLib 0.13 **only** supports Nightreign. For Sekiro and Dark Souls 3 you need to manually convert them using the tools linked above. If you find someone who has extracted these before you can use those as well.
 
 ???+ info
     
