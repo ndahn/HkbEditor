@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+    <style>
+        @keyframes kofi-wiggle {
+            from, to { transform: scale(1, 1); }
+            25% { transform: scale(0.9, 1.1); }
+            50% { transform: scale(1.1, 0.9); }
+            75% { transform: scale(0.95, 1.05); }
+        }
+
+        .kofi-btn {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 999;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            width: 2.7rem;
+            height: 2.7rem;
+            border-radius: 50%;
+            background-color: #f25555;
+            text-decoration: none;
+        }
+
+        .kofi-btn:hover {
+            animation: kofi-wiggle 0.5s ease;
+        }
+
+        .kofi-btn img {
+            width: 1.5rem;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+  {{ super() }}
+
+    <a
+        class="kofi-btn"
+        href="https://ko-fi.com/managarm"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Buy me a Ko-fi?"
+        title="Buy me a Ko-fi?"
+    >
+        <img src="https://storage.ko-fi.com/cdn/cup-border.png" alt="Ko-fi donations">
+    </a>
+{% endblock %}
