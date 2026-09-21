@@ -4,7 +4,7 @@ from dearpygui import dearpygui as dpg
 
 from hkb_editor.hkb import HavokBehavior
 from hkb_editor.gui import style
-from hkb_editor.gui.helpers import shorten_path, create_value_widget
+from hkb_editor.gui.helpers import shorten_path
 from hkb_editor.gui.dialogs.file_dialog import open_multiple_dialog, choose_folder
 from .dpg_item import DpgItem
 
@@ -37,10 +37,17 @@ class add_widget_table(DpgItem):
         Fired as ``on_remove(tag, (index, item, all_items), user_data)``.
     on_select : callable, optional
         Fired as ``on_select(tag, (index, item, all_items), user_data)``.
+    can_remove : callable, optional
+        Asked as ``can_remove(tag, (item, index), user_data)`` before a row is
+        removed; return False to veto.
     header_row : bool
         Show column headers.
     columns : list of str
         Column header labels.
+    column_weights : list of int, optional
+        Relative width per column; defaults to equal weights.
+    column_policy : int
+        DPG table sizing policy.
     label : str, optional
         Text label rendered above the table.
     add_item_label : str
@@ -64,8 +71,11 @@ class add_widget_table(DpgItem):
         on_add: Callable[[str, tuple[int, _T, list[_T]], Any], None] = None,
         on_remove: Callable[[str, tuple[int, _T, list[_T]], Any], None] = None,
         on_select: Callable[[str, tuple[int, _T, list[_T]], Any], None] = None,
+        can_remove: Callable[[str, tuple[_T, int], Any], bool] = None,
         header_row: bool = False,
         columns: list[str] = ("Value",),
+        column_weights: list[int] = None,
+        column_policy: int = dpg.mvTable_SizingFixedFit,
         selected_row_color: style.RGBA = style.light_blue,
         label: str = None,
         add_item_label: str = "+",
@@ -93,7 +103,19 @@ class add_widget_table(DpgItem):
         # Maps row index -> tag of its select-indicator button
         self._sel_buttons: dict[int, int] = {}
 
-        self._build(header_row, columns, label, parent, width, height)
+        self._can_remove = can_remove
+        self._num_row_handlers = 0
+
+        self._build(
+            header_row,
+            columns,
+            column_weights,
+            column_policy,
+            label,
+            parent,
+            width,
+            height,
+        )
         self.refresh()
 
     # === Build =========================================================
@@ -102,20 +124,32 @@ class add_widget_table(DpgItem):
         self,
         header_row: bool,
         columns: list[str],
+        column_weights: list[int],
+        column_policy: int,
         label: str,
         parent: str | int,
         width: int,
         height: int,
     ) -> None:
-        if label:
-            dpg.add_text(label, parent=parent, tag=self.tag)
+        if not column_weights:
+            column_weights = [100] * len(columns)
 
+        if label:
+            dpg.add_text(label, parent=parent, tag=self._t("label"))
+
+        # self.tag goes on the container so it always refers to a real item,
+        # which is what DpgItem.destroy_tree and the size properties rely on
         with dpg.child_window(
-            border=False, autosize_x=True, auto_resize_y=True, parent=parent
+            border=False,
+            autosize_x=True,
+            auto_resize_y=True,
+            parent=parent,
+            tag=self.tag,
         ):
             with dpg.table(
                 header_row=header_row,
-                policy=dpg.mvTable_SizingFixedFit,
+                policy=column_policy,
+                resizable=True,
                 borders_outerH=True,
                 borders_outerV=True,
                 width=width,
@@ -129,9 +163,9 @@ class add_widget_table(DpgItem):
                     dpg.add_table_column(
                         label="", width_fixed=True, init_width_or_weight=14
                     )
-                for col in columns:
+                for col, weight in zip(columns, column_weights):
                     dpg.add_table_column(
-                        label=col, width_stretch=True, init_width_or_weight=100
+                        label=col, width_stretch=True, init_width_or_weight=weight
                     )
                 if self._new_item:
                     dpg.add_table_column(
@@ -143,11 +177,23 @@ class add_widget_table(DpgItem):
 
     # === Internal row management =======================================
 
+    def destroy(self) -> None:
+        # Handler registries are root level items and are not deleted along
+        # with the rows they are bound to
+        self._destroy_row_handlers()
+
+    def _destroy_row_handlers(self) -> None:
+        for idx in range(self._num_row_handlers):
+            self._delete_item(self._t(f"select_handler_{idx}"))
+        self._num_row_handlers = 0
+
     def refresh(self) -> None:
+        self._destroy_row_handlers()
         self._sel_buttons.clear()
         dpg.delete_item(self._t("table"), children_only=True, slot=1)
         for i, val in enumerate(self._values):
             self._add_row(val, i)
+        self._num_row_handlers = len(self._values)
         self._add_footer()
 
         if self._on_select and self._selected_idx >= 0:
@@ -233,6 +279,11 @@ class add_widget_table(DpgItem):
     # === DPG callbacks =================================================
 
     def _on_remove_clicked(self, sender: int, app_data: Any, idx: int) -> None:
+        if self._can_remove and not self._can_remove(
+            self.tag, (self._values[idx], idx), self._user_data
+        ):
+            return
+
         prev = self._values.pop(idx)
         if idx == self._selected_idx:
             self._selected_idx = -1
@@ -376,8 +427,11 @@ class add_simple_items_table(DpgItem):
         )
 
     def _item_to_row(self, item: tuple, idx: int) -> None:
+        # Imported here as generic_input_widget needs add_simple_items_table
+        from .generic_input_widget import add_behavior_widget
+
         for val, (col, tp) in zip(item, self._columns.items()):
-            create_value_widget(
+            add_behavior_widget(
                 self._behavior,
                 tp,
                 None,

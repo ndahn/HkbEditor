@@ -643,3 +643,37 @@ class HavokBehavior(Tagfile):
         with self.transaction():
             anim = self._animations.pop(idx)
             self._animations.insert(new_idx, anim)
+
+    def get_variable_binding_set(self, record: HkbRecord) -> HkbRecord:
+        """The hkbVariableBindingSet of a record, or None if it has none."""
+        if not isinstance(record, HkbRecord):
+            return None
+
+        try:
+            # TODO we could create a specialized VariableBindingSet subclass
+            binding_ptr: HkbPointer = record["variableBindingSet"]
+            return self.objects[binding_ptr.get_value()]
+        except (AttributeError, KeyError):
+            return None
+
+    def get_bound_attributes(self, record: HkbRecord) -> dict[str, int]:
+        """Map each bound member path of a record to its variable index."""
+        binding_set = self.get_variable_binding_set(record)
+        if not binding_set:
+            return {}
+
+        ret = {}
+        bnd: HkbRecord
+        for bnd in binding_set["bindings"]:
+            var_path = bnd["memberPath"].get_value()
+            var_idx = bnd["variableIndex"].get_value()
+            binding_type = bnd["bindingType"].get_value()
+            # TODO band aid for supporting DS3
+            if binding_type not in (0, "VARIABLE", "BINDING_TYPE_VARIABLE"):
+                logging.getLogger().warning(
+                    f"Unknown binding type {binding_type} ({var_path}:{var_idx})"
+                )
+            else:
+                ret[var_path] = var_idx
+
+        return ret

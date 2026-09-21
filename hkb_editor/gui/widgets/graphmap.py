@@ -5,9 +5,10 @@ import networkx as nx
 from pykdtree.kdtree import KDTree
 
 from hkb_editor.gui import style
+from .dpg_item import DpgItem
 
 
-class GraphMap:
+class GraphMap(DpgItem):
     def __init__(
         self,
         graph: nx.DiGraph,
@@ -19,7 +20,9 @@ class GraphMap:
         self.get_node_data = get_node_data
         self.on_click_callback = on_click_callback
         self.callback_triggered = False
-        self.tag = tag
+
+        # self.tag comes from DpgItem
+        super().__init__(tag)
 
         self._nodes: list[str] = []
         self._node_radius = 10
@@ -32,7 +35,7 @@ class GraphMap:
         self._setup_content()
         self.set_graph(graph)
 
-    def deinit(self):
+    def destroy(self):
         # Prevent double deinitialization
         if getattr(self, "_deinitialized", False):
             return
@@ -63,9 +66,12 @@ class GraphMap:
             # https://github.com/hoffstadt/DearPyGui/issues/2269
             dpg.set_frame_callback(dpg.get_frame_count() + 5, delayed_cleanup)
 
-    def __del__(self):
-        if dpg.does_item_exist(self._handler_tag):
-            dpg.delete_item(self._handler_tag)
+    # Kept for callers that predate the DpgItem convention
+    deinit = destroy
+
+    def __del__(self) -> None:
+        self._delete_item(self._handler_tag)
+        super().__del__()
 
     def _setup_content(self) -> None:
         with dpg.group(tag=self.tag):

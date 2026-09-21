@@ -5,11 +5,12 @@ import networkx as nx
 from hkb_editor.external import get_config
 
 from .graph_layout import GraphLayout, HorizontalGraphLayout, Node
+from .dpg_item import DpgItem
 from hkb_editor.gui import style
 from hkb_editor.gui.helpers import estimate_drawn_text_size
 
 
-class GraphWidget:
+class GraphWidget(DpgItem):
     def __init__(
         self,
         graph: nx.DiGraph = None,
@@ -48,7 +49,9 @@ class GraphWidget:
         self.rainbow_edges = rainbow_edges
         self.select_enabled = select_enabled
         self.hover_enabled = hover_enabled
-        self.tag = tag
+
+        # self.tag comes from DpgItem
+        super().__init__(tag)
 
         self.color_generator = style.HighContrastColorGenerator(0.0, 0.18)
         self.graph = None
@@ -93,7 +96,7 @@ class GraphWidget:
         self._setup_content()
         self.set_graph(graph)
 
-    def deinit(self):
+    def destroy(self):
         # Prevent double deinitialization
         if getattr(self, "_deinitialized", False):
             return
@@ -124,6 +127,9 @@ class GraphWidget:
             # Unfortunately, this is not guaranteed to run due to a bug in dearpygui, see
             # https://github.com/hoffstadt/DearPyGui/issues/2269
             dpg.set_frame_callback(dpg.get_frame_count() + 5, delayed_cleanup)
+
+    # Kept for callers that predate the DpgItem convention
+    deinit = destroy
 
     # Content setup
     def _setup_content(self):
@@ -172,7 +178,7 @@ class GraphWidget:
                 tag=f"{self.tag}_plot_yaxis",
             )
 
-        dpg.bind_item_theme(self.tag, style.plot_no_borders_theme)
+        dpg.bind_item_theme(self.tag, style.themes.plot_no_borders)
 
         with dpg.handler_registry(tag=f"{self.tag}_handler_registry"):
             dpg.add_mouse_release_handler(

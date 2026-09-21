@@ -53,36 +53,32 @@ except (ImportError, AttributeError) as e:
 from .widgets.graph_widget import GraphWidget, HorizontalGraphLayout, Node
 from .widgets.attributes_widget import AttributesWidget
 from .widgets.graphmap import GraphMap  # TODO
-from .widgets import loading_indicator
-from .dialogs import (
-    about_dialog,
-    open_file_dialog,
-    save_file_dialog,
-    edit_simple_array_dialog,
-    search_objects_dialog,
-    mass_rename_dialog,
-)
-from .tools import (
-    skeleton_mirror_dialog,
-    eventlistener_dialog,
-    open_state_graph_viewer,
-)
-from .workflows.aliases import AliasManager, AliasMap
-from .workflows.create_stateinfo import create_stateinfo_dialog
-from .workflows.register_clips import register_clips_dialog
-from .workflows.create_object import create_object_dialog
-from .workflows.apply_template import apply_template_dialog
-from .workflows.update_name_ids import update_name_ids_dialog
-from .workflows.clone_hierarchy import (
+from .widgets import DpgItem, loading_indicator
+from hkb_editor.gui.dialogs.about_dialog import about_dialog
+from hkb_editor.gui.dialogs.file_dialog import open_file_dialog, save_file_dialog
+from hkb_editor.gui.dialogs.edit_simple_array_dialog import edit_simple_array_dialog
+from hkb_editor.gui.dialogs.find_object_dialog import search_objects_dialog
+from hkb_editor.gui.dialogs.mass_rename_dialog import mass_rename_dialog
+from hkb_editor.gui.dialogs.merge_hierarchy_dialog import merge_hierarchy_dialog
+from hkb_editor.gui.dialogs.mirror_skeleton_dialog import mirror_skeleton_dialog
+from hkb_editor.gui.dialogs.event_listener_dialog import event_listener_dialog
+from hkb_editor.gui.dialogs.state_graph_viewer_dialog import state_graph_viewer_dialog
+from hkb_editor.workflows.aliases import AliasManager, AliasMap
+from hkb_editor.gui.dialogs.create_stateinfo_dialog import create_stateinfo_dialog
+from hkb_editor.gui.dialogs.register_clips_dialog import register_clips_dialog
+from hkb_editor.gui.dialogs.create_object_dialog import create_object_dialog
+from hkb_editor.gui.dialogs.apply_template_dialog import apply_template_dialog
+from hkb_editor.gui.dialogs.update_name_ids_dialog import update_name_ids_dialog
+from hkb_editor.workflows.clone_hierarchy import (
     import_hierarchy,
     paste_hierarchy,
     paste_children,
     MergeAction,
 )
-from .workflows.duplicate_clipcat import duplicate_clipcat_dialog
-from .workflows.fix_common_problems import fix_common_problems_dialog
-from .workflows.verify_behavior import verify_behavior
-from .helpers import make_copy_menu, center_window
+from hkb_editor.gui.dialogs.duplicate_clipcat_dialog import duplicate_clipcat_dialog
+from hkb_editor.gui.dialogs.fix_common_problems_dialog import fix_common_problems_dialog
+from hkb_editor.workflows.verify_behavior import verify_behavior
+from hkb_editor.gui.helpers import make_copy_menu, center_window
 from . import style
 
 
@@ -133,7 +129,9 @@ class BehaviorEditor:
         about = about_dialog(
             no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup"
         )
-        dpg.set_frame_callback(dpg.get_frame_count() + 1, lambda: center_window(about))
+        dpg.set_frame_callback(
+            dpg.get_frame_count() + 1, lambda: center_window(about.tag)
+        )
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
         if severity < self.min_notification_severity:
@@ -158,11 +156,11 @@ class BehaviorEditor:
                     dpg.add_text(line, color=style.black)
 
             if severity >= logging.ERROR:
-                theme = style.notification_error_theme
+                theme = style.themes.notification_error
             elif severity >= logging.WARNING:
-                theme = style.notification_warning_theme
+                theme = style.themes.notification_warning
             else:
-                theme = style.notification_info_theme
+                theme = style.themes.notification_info
 
             dpg.bind_item_theme(note, theme)
 
@@ -568,7 +566,7 @@ class BehaviorEditor:
 
             dpg.add_menu_item(
                 label="Event Listener...",
-                callback=lambda: self.open_eventlistener_dialog(),
+                callback=lambda: self.open_event_listener_dialog(),
             )
 
             # TODO needs an overhaul, right now it's just wrong
@@ -935,7 +933,7 @@ class BehaviorEditor:
                 tag=f"{self.tag}_canvas",
             )
 
-        dpg.bind_item_theme(f"{self.tag}_canvas_window", style.window_no_padding_theme)
+        dpg.bind_item_theme(f"{self.tag}_canvas_window", style.themes.window_no_padding)
 
         # Attributes panel
         with dpg.window(
@@ -1291,11 +1289,15 @@ class BehaviorEditor:
 
                 self.regenerate()
 
-            if children_only:
-                paste_children(self.beh, xml, target_obj, target_path, on_merge_success)
-            else:
-                paste_hierarchy(
-                    self.beh, xml, target_obj, target_path, on_merge_success
+            paste = paste_children if children_only else paste_hierarchy
+            with loading_indicator("Analyzing hierarchy"):
+                paste(
+                    self.beh,
+                    xml,
+                    target_obj,
+                    target_path,
+                    on_merge_success,
+                    conflict_resolver=merge_hierarchy_dialog,
                 )
 
         def attach_children(sender: str, app_data: str, target: tuple[HkbRecord, str]):
@@ -1945,9 +1947,8 @@ class BehaviorEditor:
             return
 
         def on_mass_rename(sender: str, renamed: list[HkbRecord], user_data: Any):
-            # This is a bit ugly, but so is adding more stuff to new_object
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: mass_rename_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 for node in renamed:
                     self.add_pinned_object(node.object_id)
 
@@ -1992,14 +1993,14 @@ class BehaviorEditor:
 
         dpg.set_item_user_data(dialog, graph_map)
 
-    def open_eventlistener_dialog(self):
+    def open_event_listener_dialog(self):
         tag = f"{self.tag}_event_listener_dialog"
         if dpg.does_item_exist(tag):
             dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
-        eventlistener_dialog(tag=tag)
+        event_listener_dialog(tag=tag)
 
     def open_stategraph_dialog(self):
         tag = f"{self.tag}_state_graph_dialog"
@@ -2009,7 +2010,7 @@ class BehaviorEditor:
             return
 
         active_sm = self.get_active_statemachine()
-        open_state_graph_viewer(
+        state_graph_viewer_dialog(
             self.beh,
             active_sm.object_id if active_sm else None,
             jump_callback=lambda s, a, u: self.jump_to_object(a.object_id),
@@ -2177,7 +2178,10 @@ class BehaviorEditor:
             self.regenerate()
             self.jump_to_object(hierarchy.root_id)
 
-        import_hierarchy(self.beh, xml, on_import)
+        with loading_indicator("Analyzing hierarchy"):
+            import_hierarchy(
+                self.beh, xml, on_import, conflict_resolver=merge_hierarchy_dialog
+            )
 
     def open_mirror_skeleton_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"
@@ -2186,7 +2190,7 @@ class BehaviorEditor:
             dpg.focus_item(tag)
             return
 
-        skeleton_mirror_dialog(self.loaded_skeleton_path, tag=tag)
+        mirror_skeleton_dialog(self.loaded_skeleton_path, tag=tag)
 
     def verify_behavior(self):
         with loading_indicator("Validating behavior..."):
@@ -2228,21 +2232,24 @@ class BehaviorEditor:
         webbrowser.open("https://ndahn.github.io/HkbEditor/howto/")
 
     def close_all_dialogs(self) -> None:
-        dialogs = [
-            "_edit_variables_dialog",
-            "_edit_events_dialog",
-            "_edit_animation_names_dialog",
-            "_search_dialog",
-            "_state_graph_dialog",
-            "_create_object_dialog",
-            "_register_clip_dialog",
-            "_create_cmsg_dialog",
-            "_bone_mirror_dialog",
-            "_apply_template_dialog",
-        ]
+        # Our dialogs are tagged f"{self.tag}_<name>_dialog", so we can find
+        # them all in the DpgItem registry instead of maintaining a list here.
+        # Everything else (the canvas, the attributes widget, ...) is part of
+        # the main window and has to survive.
+        prefix = f"{self.tag}_"
 
-        for dlg in dialogs:
-            dpg.delete_item(f"{self.tag}{dlg}")
+        for item in DpgItem.instances():
+            tag = item.tag
+            if not isinstance(tag, str) or not tag.startswith(prefix):
+                continue
+
+            suffix = tag[len(prefix) :]
+            if "_dialog" not in suffix and not suffix.endswith("_popup"):
+                continue
+
+            item.destroy()
+            if dpg.does_item_exist(tag):
+                dpg.delete_item(tag)
 
     def open_about_dialog(self) -> None:
         tag = f"{self.tag}_about_dialog"

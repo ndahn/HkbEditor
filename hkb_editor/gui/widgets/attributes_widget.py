@@ -31,7 +31,7 @@ from hkb_editor.hkb.index_attributes import (
 from hkb_editor.hkb.xml import xml_from_str
 from hkb_editor.templates.common import CommonActionsMixin
 
-from hkb_editor.gui.dialogs import (
+from hkb_editor.gui.dialogs.find_object_dialog import (
     select_object,
     select_event,
     select_variable,
@@ -45,19 +45,16 @@ from .table_tree import (
     is_foldable_row_expanded,
 )
 from .rotation_knob import RotationKnob
-from hkb_editor.gui.workflows.bind_attribute import (
+from .dpg_item import DpgItem
+from .loading_indicator import loading_indicator
+from .bindable_attribute import (
     bindable_attribute,
     select_variable_to_bind,
-    get_bound_attributes,
     set_bindable_attribute_state,
 )
-from hkb_editor.gui.workflows.aliases import AliasManager
-from hkb_editor.gui.helpers import (
-    create_flag_checkboxes,
-    add_paragraphs,
-    quat_to_euler,
-    euler_to_quat,
-)
+from hkb_editor.workflows.aliases import AliasManager
+from hkb_editor.gui.widgets import add_flag_checkboxes, add_paragraphs
+from hkb_editor.util import quat_to_euler, euler_to_quat
 from hkb_editor.gui import style
 
 
@@ -69,7 +66,7 @@ class _Attribute:
     simple: bool
 
 
-class AttributesWidget:
+class AttributesWidget(DpgItem):
     def __init__(
         self,
         alias_manager: AliasManager,
@@ -88,7 +85,9 @@ class AttributesWidget:
         if tag in (None, 0, ""):
             tag = dpg.generate_uuid()
 
-        self.tag = str(tag)
+        # self.tag comes from DpgItem
+        super().__init__(str(tag))
+
         self.alias_manager = alias_manager
         self.tagfile: Tagfile = None
         self.record: HkbRecord = None
@@ -105,6 +104,7 @@ class AttributesWidget:
         self._attribute_info: dict[str, _Attribute] = {}
         self._selected_attribute_info: _Attribute = None
         self._attributes_table = None
+        self._rotation_knobs: list[RotationKnob] = []
 
         # Hover explanations for attributes
         expl_file = os.path.join(os.path.dirname(sys.argv[0]), "attributes.yaml")
@@ -115,6 +115,27 @@ class AttributesWidget:
             self.explanations = {}
 
         self._setup_content()
+
+    def destroy(self) -> None:
+        # Handler registries and popups are root level items and are not
+        # deleted along with the widgets they are bound to
+        self._delete_item(self.tag + "_item_handler_registry")
+        self._delete_item(self.tag + "_attribute_menu")
+        self._destroy_attribute_widgets()
+
+    def _destroy_attribute_widgets(self) -> None:
+        """Clean up the root level items the per-attribute widgets created."""
+        # Nested DpgItems (item tables and so on) clean up after themselves
+        self.destroy_tree(self._attributes_table)
+
+        # Rotation knobs live inside a popup, which is a root level container
+        # and therefore not part of the table's item tree
+        for knob in self._rotation_knobs:
+            knob.destroy()
+        self._rotation_knobs.clear()
+
+        for path in self._attribute_info:
+            self._delete_item(f"{self.tag}_{path}_quaternion_popup")
 
     def set_record(self, record: HkbRecord) -> None:
         if record == self.record:
@@ -135,6 +156,10 @@ class AttributesWidget:
             dpg.show_item(f"{self.tag}_attributes_title")
 
     def clear(self) -> None:
+        # Attribute widgets may own root level items which are not deleted
+        # along with their rows
+        self._destroy_attribute_widgets()
+
         self._attribute_info.clear()
         self.set_title("Attributes")
         dpg.delete_item(self._attributes_table, children_only=True, slot=1)
@@ -424,7 +449,7 @@ class AttributesWidget:
         dpg.bind_item_handler_registry(widget, self.tag + "_item_handler_registry")
 
         if is_simple:
-            bound_attributes = get_bound_attributes(self.tagfile, self.record)
+            bound_attributes = self.tagfile.get_bound_attributes(self.record)
             bound_var_idx = bound_attributes.get(path, -1)
             set_bindable_attribute_state(self.tagfile, widget, bound_var_idx)
 
@@ -517,7 +542,7 @@ class AttributesWidget:
             label,
             pointer.get_value(),
             open_pointer_dialog,
-            style.pointer_attribute_theme,
+            style.themes.pointer_attribute,
         )
         return widget
 
@@ -609,6 +634,8 @@ class AttributesWidget:
                         tag=f"{self.tag}_{path}_euler_{label}",
                     )
                     knobs.append(knob)
+                    # Each knob owns a global mouse handler registry
+                    self._rotation_knobs.append(knob)
 
             if dpg.does_item_exist(f"{self.tag}_{path}_quaternion_popup"):
                 dpg.delete_item(f"{self.tag}_{path}_quaternion_popup")
@@ -708,10 +735,12 @@ class AttributesWidget:
 
         flags = flag_type(attribute.get_value())
         with dpg.tree_node(label=label, default_open=True, tag=tag):
-            create_flag_checkboxes(
+            # add_flag_checkboxes tags its group with base_tag, so it must not
+            # be the same tag as the tree node
+            add_flag_checkboxes(
                 flag_type,
                 on_flag_changed,
-                base_tag=tag,
+                base_tag=f"{tag}_flags",
                 active_flags=flags,
             )
 
@@ -781,7 +810,7 @@ class AttributesWidget:
                                 lambda s, a, u: select_event(
                                     self.tagfile, on_event_selected
                                 ),
-                                style.index_attribute_theme,
+                                style.themes.index_attribute,
                             )
 
                         # Variable index
@@ -804,7 +833,7 @@ class AttributesWidget:
                                 lambda s, a, u: select_variable(
                                     self.tagfile, on_variable_selected
                                 ),
-                                style.index_attribute_theme,
+                                style.themes.index_attribute,
                             )
 
                         # Animation index
@@ -827,7 +856,7 @@ class AttributesWidget:
                                 lambda s, a, u: select_animation(
                                     self.tagfile, on_animation_selected
                                 ),
-                                style.index_attribute_theme,
+                                style.themes.index_attribute,
                             )
                         else:
                             dpg.add_input_int(
@@ -1009,7 +1038,7 @@ class AttributesWidget:
         dpg.set_value(self.tag + "_attribute_menu_type", f"<{type_name}>")
 
         if attribute.simple:
-            bound_attributes = get_bound_attributes(self.tagfile, self.record)
+            bound_attributes = self.tagfile.get_bound_attributes(self.record)
             bound_var_idx = bound_attributes.get(path, -1)
 
             extra_label = None
@@ -1463,7 +1492,7 @@ class AttributesWidget:
         set_bindable_attribute_state(self.tagfile, bindable_attribute, -1)
 
     def _paste_hierarchy(self, sender: str) -> None:
-        from hkb_editor.gui.workflows.clone_hierarchy import paste_hierarchy, MergeAction
+        from hkb_editor.workflows.clone_hierarchy import paste_hierarchy, MergeAction
         
         # deselect the selectable
         dpg.set_value(sender, False)
@@ -1489,5 +1518,17 @@ class AttributesWidget:
             if self._on_graph_changed:
                 self._on_graph_changed()
 
+        from hkb_editor.gui.dialogs.merge_hierarchy_dialog import (
+            merge_hierarchy_dialog,
+        )
+
         path = self._selected_attribute_info.path
-        paste_hierarchy(self.tagfile, xml, self.record, path, on_hierarchy_merged)
+        with loading_indicator("Analyzing hierarchy"):
+            paste_hierarchy(
+                self.tagfile,
+                xml,
+                self.record,
+                path,
+                on_hierarchy_merged,
+                conflict_resolver=merge_hierarchy_dialog,
+            )
