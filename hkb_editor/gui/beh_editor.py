@@ -1412,6 +1412,11 @@ class BehaviorEditor:
                 callback=lambda s, a, u: self._insert_selector(u),
                 user_data=node,
             )
+            # dpg.add_selectable(
+            #     label="Add CMSG + Clip",
+            #     callback=lambda s, a, u: self._add_cmsg_clip(u),
+            #     user_data=node,
+            # )
 
             make_copy_menu(obj)
             self._create_attach_menu(node)
@@ -1478,9 +1483,8 @@ class BehaviorEditor:
                 selector["generators"].append(target)
                 parent_ptr.set_value(selector)
 
-            # This is a bit ugly, but so is adding more stuff to new_object
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: create_object_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 self.add_pinned_object(selector.object_id)
 
             self.regenerate()
@@ -2059,9 +2063,8 @@ class BehaviorEditor:
             return
 
         def on_object_created(sender: str, new_object: HkbRecord, user_data: Any):
-            # This is a bit ugly, but so is adding more stuff to new_object
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: create_object_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 self.add_pinned_object(new_object.object_id)
 
         create_object_dialog(
@@ -2079,9 +2082,8 @@ class BehaviorEditor:
             return
 
         def on_clip_registered(sender: str, clips: list[HkbRecord], user_data: Any):
-            # This is a bit ugly, but so is adding more stuff to ids
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: register_clips_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 for clip in clips:
                     self.add_pinned_object(clip)
 
@@ -2102,9 +2104,8 @@ class BehaviorEditor:
             return
 
         def on_clips_duplicated(sender: str, clips: list[HkbRecord], user_data: Any):
-            # This is a bit ugly, but so is adding more stuff to ids
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: duplicate_clipcat_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 for clip in clips:
                     self.add_pinned_object(clip)
 
@@ -2131,9 +2132,8 @@ class BehaviorEditor:
         ):
             stateinfo, cmsg, clip = records
 
-            # This is a bit ugly, but so is adding more stuff to ids
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: create_stateinfo_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 self.add_pinned_object(stateinfo)
                 self.add_pinned_object(cmsg)
                 self.add_pinned_object(clip)
@@ -2242,9 +2242,8 @@ class BehaviorEditor:
         def on_template_finished(
             sender: str, new_objects: list[HkbRecord], user_data: Any
         ):
-            # This is a bit ugly, but so is adding more stuff to ids
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: apply_template_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 for obj in new_objects:
                     self.add_pinned_object(obj.object_id)
 
