@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Type, Any
 from enum import IntEnum
 from functools import cache
 
@@ -37,6 +37,48 @@ class hkbVariableInfo_VariableType(IntEnum):
     VECTOR3 = 6
     VECTOR4 = 7
     QUATERNION = 8
+
+    def get_default_value(self) -> Any:
+        return {
+            -1: None,
+            0: False,
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0.0,
+            5: None,
+            6: [0.0, 0.0, 0.0],
+            7: [0.0 ,0.0, 0.0, 0.0],
+            8: [0.0, 0.0, 0.0, 1.0],
+        }[self.value]
+    
+    def get_default_min(self) -> int:
+        return {
+            -1: 0,
+            0: 0,
+            1: 0,
+            2: 0,
+            3: 0,
+            4: -1_020_002_304,
+            5: 0,
+            6: 0,
+            7: 0,
+            8: 0,
+        }[self.value]
+    
+    def get_default_max(self) -> int:
+        return {
+            -1: 0,
+            0: 1,
+            1: 127,
+            2: 32767,
+            3: 999999,
+            4: 1_127_481_344,
+            5: 0,
+            6: 0,
+            7: 0,
+            8: 0,
+        }[self.value]
 
 
 class hkbRoleAttribute_Role(IntEnum):

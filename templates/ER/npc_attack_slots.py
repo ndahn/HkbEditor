@@ -8,7 +8,7 @@ from hkb_editor.hkb.hkb_enums import (
 
 def run(
     ctx: TemplateContext,
-    anim_id_start: int = 3050,
+    anim_id_start: int = 3040,
     anim_id_step: int = 1,
     num_attacks: int = 1,
     category: int = 0,
@@ -43,14 +43,18 @@ def run(
     transition_effect = ctx.find("name=DefaultTransition")
     state_id = ctx.get_next_state_id(attack_sm)
 
+    warning_given = False
+    new_slots = []
+
     for anim_id in range(
         anim_id_start, anim_id_start + anim_id_step * num_attacks, anim_id_step
     ):
         anim = Animation.make_name(category, anim_id)
         name = f"Attack{anim_id}"
 
-        if not 3000 <= anim_id <= 3099:
+        if not 3000 <= anim_id <= 3099 and not warning_given:
             ctx.logger.warning(f"{name} is outside the typical NPC attack slot range")
+            warning_given = True
 
         if ctx.find(f"animationName={anim}", default=None):
             # Already exists, nothing to do
@@ -76,11 +80,37 @@ def run(
 
             ctx.array_add(attack_sm, "states", state)
             ctx.register_wildcard_transition(
-                attack_sm, state_id, f"W_Attack{anim_id}", transition_effect=transition_effect
+                attack_sm,
+                state_id,
+                f"W_Attack{anim_id}",
+                transition_effect=transition_effect,
             )
             # Useful for EMEVD and AI
             ctx.register_wildcard_transition(
-                attack_sm, state_id, f"W_Event{anim_id}", transition_effect=transition_effect
+                attack_sm,
+                state_id,
+                f"W_Event{anim_id}",
+                transition_effect=transition_effect,
             )
 
+            new_slots.append(anim_id)
             state_id = state_id + 1
+
+    lua = []
+    for anim_id in new_slots:
+        lua.append(f"""
+function Attack{anim_id}_onActivate()
+    CallActionState({anim_id})
+end
+
+function Attack{anim_id}_onUpdate()
+    if AttackCommonFunction({anim_id}, STYLE_DEFAULT, TRUE) == TRUE then
+        return
+    end
+end
+""")
+
+    ctx.logger.info(
+        f"To use the new slots add the following lines to your c9997.hks:\n\n{'\n'.join(lua)}"
+    )
+    ctx.logger.info("Don't forget to update the ANIME_ID_ATTACK_BEGIN/END variables!")

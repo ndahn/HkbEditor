@@ -1,15 +1,16 @@
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 from dearpygui import dearpygui as dpg
 import networkx as nx
-import math
 
 from hkb_editor.external import get_config
+
+from .graph_layout import GraphLayout, HorizontalGraphLayout, Node
+from .dpg_item import DpgItem
 from hkb_editor.gui import style
 from hkb_editor.gui.helpers import estimate_drawn_text_size
-from .graph_layout import GraphLayout, HorizontalGraphLayout, Node
 
 
-class GraphWidget:
+class GraphWidget(DpgItem):
     def __init__(
         self,
         graph: nx.DiGraph = None,
@@ -20,17 +21,14 @@ class GraphWidget:
         get_node_frontpage: Callable[
             [Node], str | list[str] | list[tuple[str, tuple[int, int, int, int]]]
         ] = None,
-        get_node_tooltip: Callable[
-            [Node], list[str] | list[tuple[str, tuple[int, int, int, int]]]
-        ] = None,
         get_edge_label: Callable[[Node, Node], str] = None,
         draw_edges: bool = True,
-        edge_style: Literal["manhattan", "straight"] = "manhattan",
+        edge_style: Literal["manhattan", "bezier", "straight"] = "manhattan",
         rainbow_edges: bool = False,
         select_enabled: bool = True,
         hover_enabled: bool = True,
-        width: int = 800,
-        height: int = 800,
+        default_axis_range: int = 600,
+        min_font_size: float = 6.0,
         tag: str = None,
     ):
         if not layout:
@@ -46,32 +44,73 @@ class GraphWidget:
         self.on_node_selected = on_node_selected
         self.node_menu_func = node_menu_func
         self.get_node_frontpage = get_node_frontpage
-        self.get_node_tooltip = get_node_tooltip
         self.get_edge_label = get_edge_label
         self.draw_edges = draw_edges
         self.edge_style = edge_style
         self.rainbow_edges = rainbow_edges
         self.select_enabled = select_enabled
         self.hover_enabled = hover_enabled
-        self.tag = tag
+        # Text smaller than this many pixels is dropped instead of drawn (see LOD
+        # handling in _render_graph); it is illegible long before it stops costing
+        self.min_font_size = min_font_size
+
+        # self.tag comes from DpgItem
+        super().__init__(tag)
 
         self.color_generator = style.HighContrastColorGenerator(0.0, 0.18)
         self.graph = None
         self.root: str = None
         self.nodes: dict[str, Node] = {}
+        self.prev_hover: Node = None
         self.hovered_node: Node = None
         self.selected_node: Node = None
-        self.transform: tuple[float, float] = (0.0, 0.0)
-        self.dragging = False
-        self.last_drag: tuple[float, float] = (0.0, 0.0)
-        self.zoom_level = 0
-        self.zoom_min = -3
-        self.zoom_max = 3
+        self.default_axis_range = default_axis_range
 
-        self._setup_content(width, height)
+        self._manual_highlights: dict[str, style.RGBA] = {}
+
+        self._x_scale = 1.0
+        self._x_offset = 0.0
+        self._y_scale = 1.0
+        self._y_offset = 0.0
+        # Previous-frame transform; used to detect pan/zoom changes
+        self._prev_x_scale = 0.0
+        self._prev_y_scale = 0.0
+        self._prev_x_offset = 0.0
+        self._prev_y_offset = 0.0
+        # Plot-space positions from the last layout pass; used to transform to pixels.
+        # compute_layout only returns visible nodes, in topological order, so this
+        # doubles as the visible-node set the render pass iterates over.
+        self._plot_positions: dict[str, tuple[float, float]] = {}
+        # Edges between two visible nodes, rebuilt whenever the layout changes so
+        # the render pass never has to walk the full edge list
+        self._visible_edge_list: list[tuple[str, str]] = []
+        self._graph_layers: list[str] = None
+        # Persistent draw-item bookkeeping for diff-based updates
+        self._rendered_nodes: set[str] = set()
+        self._rendered_edges: set[tuple[str, str]] = set()
+        # Tracks which rendered items currently have show=True so we don't re-set it each frame
+        self._visible_nodes: set[str] = set()
+        self._visible_edges: set[tuple[str, str]] = set()
+        self._node_line_counts: dict[str, int] = {}
+        self._edge_base_colors: dict[tuple[str, str], tuple] = {}
+        # Cached label length (chars) per edge so we don't have to read it back from DPG
+        self._edge_label_lens: dict[tuple[str, str], int] = {}
+        # Track previous hover/selection so style transitions can be applied incrementally
+        self._prev_selected: Node = None
+        # Whether text is currently drawn at all (level of detail, see min_font_size)
+        self._text_visible: bool = True
+        # Frontpage lines computed for the size estimate and handed to _draw_node,
+        # so get_node_frontpage runs once per node instead of twice
+        self._pending_node_lines: dict[str, tuple[list[str], list]] = {}
+
+        # Set when visibility changes; cleared after layout is recomputed
+        self._layout_dirty: bool = False
+        self._render_required: bool = False
+
+        self._setup_content()
         self.set_graph(graph)
 
-    def deinit(self):
+    def destroy(self):
         # Prevent double deinitialization
         if getattr(self, "_deinitialized", False):
             return
@@ -96,34 +135,139 @@ class GraphWidget:
                     dpg.delete_item(listener)
                 dpg.delete_item(registry_tag)
 
+        # TODO still needed? issue is fixed, test with graph map
         with dpg.mutex():
             # Calling delayed_cleanup directly sometimes leads to a silent crash.
             # Unfortunately, this is not guaranteed to run due to a bug in dearpygui, see
             # https://github.com/hoffstadt/DearPyGui/issues/2269
             dpg.set_frame_callback(dpg.get_frame_count() + 5, delayed_cleanup)
 
-    @property
-    def zoom_factor(self) -> float:
-        return self.layout.zoom_factor**self.zoom_level
+    # Kept for callers that predate the DpgItem convention
+    deinit = destroy
+
+    # Content setup
+    def _setup_content(self):
+        cfg = get_config()
+
+        @cfg.events.pan_button.connect
+        def on_panbutton_changed(new: str, old: str) -> None:
+            dpg.configure_item(self.tag, pan_button=cfg.pan_button_id)
+
+        @cfg.events.invert_zoom.connect
+        def on_invertzoom_changed(new: bool, old: bool) -> None:
+            rate = -0.1 if cfg.invert_zoom else 0.1
+            dpg.configure_item(self.tag, zoom_rate=rate)
+
+        with dpg.plot(
+            no_menus=True,
+            no_mouse_pos=True,
+            no_box_select=True,
+            no_frame=True,
+            no_title=True,
+            pan_button=cfg.pan_button_id,
+            equal_aspects=True,
+            width=-1,
+            height=-1,
+            zoom_rate=-0.1 if cfg.invert_zoom else 0.1,
+            tag=self.tag,
+        ):
+            dpg.add_plot_axis(
+                dpg.mvXAxis,
+                no_label=True,
+                no_menus=True,
+                no_highlight=True,
+                no_tick_labels=True,
+                no_tick_marks=True,
+                no_initial_fit=True,
+                tag=f"{self.tag}_plot_xaxis",
+            )
+            dpg.add_plot_axis(
+                dpg.mvYAxis,
+                no_label=True,
+                no_menus=True,
+                no_highlight=True,
+                no_tick_labels=True,
+                no_tick_marks=True,
+                no_initial_fit=True,
+                tag=f"{self.tag}_plot_yaxis",
+            )
+
+        dpg.bind_item_theme(self.tag, style.themes.plot_no_borders)
+
+        with dpg.handler_registry(tag=f"{self.tag}_handler_registry"):
+            dpg.add_mouse_release_handler(
+                dpg.mvMouseButton_Left, callback=self._on_left_click
+            )
+            dpg.add_mouse_release_handler(
+                dpg.mvMouseButton_Right, callback=self._on_right_click
+            )
 
     def set_graph(self, graph: nx.DiGraph) -> None:
         self.clear()
+        self.nodes.clear()
         self.graph = graph
 
         if graph:
+            # Topological order ensures parents are drawn (and positioned) before children
+            self._graph_layers = list(nx.topological_sort(graph))
             self.root = next(n for n, in_deg in graph.in_degree() if in_deg == 0)
 
             for n, data in graph.nodes.items():
                 if n not in self.nodes:
                     self.nodes[n] = Node(n, user_data=data)
 
+            # How early can the node be reached?
             paths = nx.shortest_path(self.graph, self.root)
-
             for n in self.nodes.values():
                 if n.id in paths:
                     n.level = len(paths[n.id]) - 1
 
-            self._draw_node(self.nodes[self.root])
+            self.nodes[self.root].visible = True
+            self.regenerate()
+
+    def clear_highlights(self) -> None:
+        affected = list(self._manual_highlights.keys())
+        self._manual_highlights.clear()
+        # Restyle each previously-highlighted node so the highlight visually clears
+        for nid in affected:
+            node = self.nodes.get(nid)
+            if node:
+                self._apply_node_style(node)
+
+    def highlight_node(self, node: Node | str, color: style.RGBA = style.green) -> None:
+        if isinstance(node, Node):
+            node = node.id
+
+        self._manual_highlights[node] = color
+        target = self.nodes.get(node)
+        if target:
+            self._apply_node_style(target)
+
+    def unhighlight_node(self, node: Node | str) -> None:
+        if isinstance(node, Node):
+            node = node.id
+
+        self._manual_highlights.pop(node, None)
+        target = self.nodes.get(node)
+        if target:
+            self._apply_node_style(target)
+
+    @property
+    def zoom_factor(self) -> float:
+        return self._x_scale
+
+    def _to_pixel(self, x: float, y: float) -> tuple[float, float]:
+        return (
+            x * self._x_scale + self._x_offset,
+            y * self._y_scale + self._y_offset,
+        )
+
+    def _size_to_pixel(self, w: float, h: float) -> tuple[float, float]:
+        """Scale a plot-space size delta to pixels (no offset)."""
+        return (
+            w * self._x_scale,
+            h * self._y_scale,
+        )
 
     def get_node_at_pos(self, x: float, y: float) -> Node:
         for node in self.nodes.values():
@@ -135,394 +279,221 @@ class GraphWidget:
 
         return None
 
-    def set_origin(self, ox: float, oy: float) -> None:
-        self.transform = (ox, oy)
-        self.look_at(*self.transform)
+    def _unlock_axes(self) -> None:
+        def release():
+            dpg.set_axis_limits_auto(f"{self.tag}_plot_xaxis")
+            dpg.set_axis_limits_auto(f"{self.tag}_plot_yaxis")
+            dpg.split_frame()
+            self._layout_dirty = True
+
+        dpg.set_frame_callback(dpg.get_frame_count() + 1, release)
+
+    def goto_node(self, node: str | Node) -> None:
+        if not node:
+            return
+
+        if isinstance(node, str):
+            node = self.nodes[node]
+
+        ar = self.default_axis_range
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_xaxis", node.x - ar * 0.1, node.x + ar * 0.9
+        )
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_yaxis", node.y + ar * 0.1, node.y - ar * 0.9
+        )
+        self._unlock_axes()
+
+    def look_at_node(self, node: str | Node) -> None:
+        if not node:
+            return
+
+        if isinstance(node, str):
+            node = self.nodes[node]
+
+        # n.pos and n.size are plot-space; compute the node centre directly
+        self.look_at(node.x + node.width / 2, node.y + node.height / 2)
 
     def look_at(self, px: float, py: float) -> None:
-        dpg.apply_transform(
-            f"{self.tag}_root",
-            dpg.create_translation_matrix((px, py)),
+        xmin, xmax = dpg.get_axis_limits(f"{self.tag}_plot_xaxis")
+        ymin, ymax = dpg.get_axis_limits(f"{self.tag}_plot_yaxis")
+        axis_range = max(xmax - xmin, ymax - ymin, self.default_axis_range)
+
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_xaxis", px - axis_range * 0.1, px + axis_range * 0.9
         )
-
-    def look_at_node(self, node: str) -> None:
-        n = self.nodes[node]
-        cw, ch = dpg.get_item_rect_size(self.tag)
-        # Not sure why it's -n.pos, but it works
-        px = -n.pos[0] + cw / 2 - n.width / 2
-        py = -n.pos[1] + ch / 2 - n.height / 2
-        self.set_origin(px, py)
-
-    def set_zoom(
-        self,
-        zoom_level: int,
-        zoom_point: tuple[float, float] = None,
-        *,
-        limits: bool = True,
-    ) -> None:
-        if zoom_level == self.zoom_level:
-            return
-
-        if limits:
-            zoom_level = min(max(zoom_level, self.zoom_min), self.zoom_max)
-
-        if zoom_point is not None:
-            self.set_origin(*zoom_point)
-
-        self.zoom_level = zoom_level
-        self.regenerate()
-
-    def get_canvas_content_bbox(
-        self, margin: float = 50.0
-    ) -> tuple[float, float, float, float]:
-        x_min = 100000.0
-        x_max = 0.0
-        y_min = 100000.0
-        y_max = 0.0
-
-        for node in self.nodes.values():
-            if node.visible:
-                x_min = min(x_min, node.x)
-                x_max = max(x_max, node.x + node.width)
-                y_min = min(y_min, node.y)
-                y_max = max(y_max, node.y + node.height)
-
-        return (
-            x_min - margin,
-            y_min - margin,
-            x_max - x_min + margin * 2,
-            y_max - y_min + margin * 2,
+        dpg.set_axis_limits(
+            f"{self.tag}_plot_yaxis", py + axis_range * 0.1, py - axis_range * 0.9
         )
+        self._unlock_axes()
 
-    def zoom_show_all(self, *, limits: bool = True) -> None:
-        if not any(n.visible for n in self.nodes.values()):
-            self.set_zoom(0, (0.0, 0.0))
-            return
+    def show_all(self) -> None:
+        xmin = 0
+        xmax = 0
+        ymin = 0
+        ymax = 0
 
-        # Temporarily set zoom to 0 to get the base layout without zoom scaling.
-        # Expensive, but reliable
-        self.zoom_level = 0
-        self.regenerate()
+        for n in self.nodes.values():
+            if not n.visible or n.size is None:
+                continue
 
-        # Get content bounding box at base zoom level
-        bbox = self.get_canvas_content_bbox()
-        content_w = bbox[2]
-        content_h = bbox[3]
+            xmin = min(n.x, xmin)
+            xmax = max(n.x + n.width, xmax)
+            ymin = min(n.y, ymin)
+            ymax = max(n.y + n.height, ymax)
 
-        if content_w == 0 or content_h == 0:
-            # Content not ready yet
-            return
+        xrange = xmax - xmin + self.layout.node0_margin[0]
+        yrange = ymax - ymin + self.layout.node0_margin[1]
+        max_range = max(xrange, yrange, self.default_axis_range)
+        margin = max_range * 0.1
 
-        content_center_x = bbox[0] + content_w / 2
-        content_center_y = bbox[1] + content_h / 2
+        pxmin = xmin - margin
+        pxmax = pxmin + max_range + margin
+        pymin = ymin + margin
+        pymax = pymin - max_range - margin
 
-        canvas_w, canvas_h = dpg.get_item_rect_size(self.tag)
-        canvas_center_x = canvas_w / 2
-        canvas_center_y = canvas_h / 2
+        dpg.set_axis_limits(f"{self.tag}_plot_xaxis", pxmin, pxmax)
+        dpg.set_axis_limits(f"{self.tag}_plot_yaxis", pymin, pymax)
+        self._unlock_axes()
 
-        if canvas_w == 0 or canvas_h == 0:
-            # Canvas not fully drawn yet
-            return
-
-        # Calculate zoom level to fit content
-        zoom_w = math.log(canvas_w / content_w, self.layout.zoom_factor)
-        zoom_h = math.log(canvas_h / content_h, self.layout.zoom_factor)
-        zoom_level = min(zoom_w, zoom_h)
-
-        if limits:
-            zoom_level = min(max(zoom_level, self.zoom_min), self.zoom_max)
-
-        # Calculate final zoom factor and centered origin
-        final_zoom = self.layout.zoom_factor**zoom_level
-
-        # Calculate where to place origin so scaled content center aligns with canvas center
-        new_origin_x = canvas_center_x - content_center_x * final_zoom
-        new_origin_y = canvas_center_y - content_center_y * final_zoom
-
-        # Apply zoom and centering together
-        self.zoom_level = zoom_level
-        self.set_origin(new_origin_x, new_origin_y)
-        self.regenerate()
-
-    # Content setup
-    def _setup_content(self, width: int, height: int):
-        with dpg.drawlist(width, height, tag=self.tag) as self.tag:
-            with dpg.draw_node(tag=f"{self.tag}_root"):
-                dpg.add_draw_node(tag=f"{self.tag}_edge_layer")
-                dpg.add_draw_node(tag=f"{self.tag}_node_layer")
-
-        dpg.add_window(
-            autosize=True,
-            no_title_bar=True,
-            no_move=True,
-            no_resize=True,
-            no_scrollbar=True,
-            no_saved_settings=True,
-            no_focus_on_appearing=True,
-            show=False,
-            tag=f"{self.tag}_tooltip",
-        )
-
-        with dpg.handler_registry(tag=f"{self.tag}_handler_registry"):
-            dpg.add_mouse_release_handler(
-                dpg.mvMouseButton_Left, callback=self._on_left_click
-            )
-            dpg.add_mouse_release_handler(
-                dpg.mvMouseButton_Right, callback=self._on_right_click
-            )
-
-            dpg.add_mouse_down_handler(-1, callback=self._on_drag_start)
-            dpg.add_mouse_release_handler(-1, callback=self._on_drag_release)
-            dpg.add_mouse_drag_handler(-1, callback=self._on_mouse_drag)
-
-            dpg.add_mouse_wheel_handler(callback=self._on_mouse_wheel)
-            dpg.add_mouse_move_handler(callback=self._on_mouse_move)
-
-        with dpg.item_handler_registry():
-            dpg.add_item_resize_handler(callback=self._on_resize)
-
-        parent = dpg.get_item_parent(self.tag)
-        dpg.bind_item_handler_registry(parent, dpg.last_container())
-
-    def _on_resize(self, *args):
-        pass
-
-    # Canvas interactions
-    def _get_graph_mouse_pos(self) -> tuple[float, float]:
-        # x+: right, y+: down
-        if not dpg.is_item_hovered(self.tag):
-            return (0.0, 0.0)
-
-        mx, my = dpg.get_drawing_mouse_pos()
-        ox, oy = self.transform
-        return ((mx - ox), (my - oy))
+    # === Canvas interactions ==============================
 
     def _on_left_click(self) -> None:
         if not dpg.is_item_hovered(self.tag):
             return
 
-        if self.dragging:
-            return
-
-        mx, my = self._get_graph_mouse_pos()
-        node = self.get_node_at_pos(mx, my)
-
-        if not node:
-            # Folding when clicking the canvas feels bad
-            # self.deselect()
-            pass
-        else:
-            self.select(node)
+        if self.hovered_node:
+            self.select(self.hovered_node)
 
     def _on_right_click(self) -> None:
         if not dpg.is_item_hovered(self.tag):
             return
 
-        mx, my = self._get_graph_mouse_pos()
-        node = self.get_node_at_pos(mx, my)
-
-        if node:
-            if node != self.selected_node:
-                self.select(node)
+        if self.hovered_node:
+            if self.hovered_node != self.selected_node:
+                self.select(self.hovered_node)
 
             if self.node_menu_func:
-                self.node_menu_func(node)
+                self.node_menu_func(self.hovered_node)
         else:
             self._open_canvas_menu()
 
     def _open_canvas_menu(self) -> None:
-        actions = [
-            "Reset View",
-            "Show All",
-            "Zoom In",
-            "Zoom Out",
-        ]
-
-        def on_item_select(sender, app_data, selected_item: str):
-            dpg.set_value(sender, False)
-
-            if selected_item == "Reset View":
-                self.set_zoom(0, (0.0, 0.0))
-
-            elif selected_item == "Show All":
-                self.zoom_show_all(limits=False)
-
-            elif selected_item == "Zoom In":
-                self.set_zoom(self.zoom_level + 1)
-
-            elif selected_item == "Zoom Out":
-                self.set_zoom(self.zoom_level - 1)
-
         with dpg.window(
             popup=True,
             min_size=(100, 20),
             no_saved_settings=True,
             on_close=lambda: dpg.delete_item(wnd),
         ) as wnd:
-            for item in actions:
-                dpg.add_selectable(label=item, callback=on_item_select, user_data=item)
+            dpg.add_menu_item(
+                label="Show Selection",
+                callback=lambda s, a, u: self.goto_node(self.selected_node),
+            )
+            dpg.add_menu_item(
+                label="Show All",
+                callback=self.show_all,
+            )
 
-    def _is_mouse_drag_active(self) -> bool:
-        return dpg.is_mouse_button_down(dpg.mvMouseButton_Middle) or (
-            dpg.is_key_down(dpg.mvKey_ModAlt)
-            and dpg.is_mouse_button_down(dpg.mvMouseButton_Left)
-        )
+    # === Canvas content management ========================
 
-    def _on_drag_start(self) -> None:
-        if self._is_mouse_drag_active() and dpg.is_item_hovered(self.tag):
-            self.dragging = True
-
-    def _on_mouse_drag(self, sender, mouse_delta: list[float]) -> None:
-        if not self.dragging:
-            return
-
-        _, delta_x, delta_y = mouse_delta
-        self.last_drag = (delta_x, delta_y)
-        self.look_at(self.transform[0] + delta_x, self.transform[1] + delta_y)
-
-    def _on_drag_release(self, sender, mouse_button) -> None:
-        if not self.dragging:
-            return
-
-        self.set_origin(
-            self.transform[0] + self.last_drag[0],
-            self.transform[1] + self.last_drag[1],
-        )
-
-        self.last_drag = (0.0, 0.0)
-        self.dragging = False
-
-    def _on_mouse_wheel(self, sender, wheel_delta: int):
-        if not dpg.is_item_hovered(self.tag):
-            return
-
-        if dpg.is_key_down(dpg.mvKey_ModCtrl):
-            self.last_drag = self.last_drag[0]
-
-        if get_config().invert_zoom:
-            wheel_delta = -wheel_delta
-
-        # +/-1 only
-        wheel_delta /= abs(wheel_delta)
-
-        # Scrolling too fast can cause problems
-        with dpg.mutex():
-            # Don't set the zoom point, it will just mess things up
-            self.set_zoom(self.zoom_level + wheel_delta)
-
-    def _on_mouse_move(self) -> None:
-        if not self.hover_enabled:
-            return
-
-        if dpg.is_item_hovered(self.tag):
-            mx, my = self._get_graph_mouse_pos()
-            node = self.get_node_at_pos(mx, my)
-        else:
-            node = None
-
-        hover_changed = (self.hovered_node != node)
-
-        if self.hovered_node:
-            self.set_hovered(self.hovered_node, False)
-            for n in nx.all_neighbors(self.graph, self.hovered_node.id):
-                neighbor = self.nodes[n]
-                if neighbor.visible:
-                    self.set_hovered(n, False)
-                    self._set_edge_highlight(self.hovered_node, neighbor, False)
-
-        if node:
-            self.set_hovered(node, True)
-            for n in nx.all_neighbors(self.graph, node.id):
-                neighbor = self.nodes[n]
-                if neighbor.visible:
-                    self.set_hovered(n, True)
-                    self._set_edge_highlight(node, neighbor, True)
-
-            if self.get_node_tooltip:
-                if hover_changed:
-                    dpg.delete_item(f"{self.tag}_tooltip", children_only=True)
-
-                    hover_content = self.get_node_tooltip(node)
-                    if hover_content:
-                        for line in hover_content:
-                            color = style.white
-                            if isinstance(line, tuple):
-                                line, color = line
-                            dpg.add_text(line, parent=f"{self.tag}_tooltip", color=color)
-                
-                if len(dpg.get_item_children(f"{self.tag}_tooltip", 1)) > 0:
-                    mx, my = dpg.get_mouse_pos()
-                    dpg.set_item_pos(f"{self.tag}_tooltip", (mx + 20, my + 20))
-                    dpg.show_item(f"{self.tag}_tooltip")
-        else:
-            dpg.hide_item(f"{self.tag}_tooltip")
-
-        self.hovered_node = node
-
-    # Canvas content management
-    def clear(self, reset_origin: bool = True):
-        dpg.delete_item(f"{self.tag}_edge_layer", children_only=True)
-        dpg.delete_item(f"{self.tag}_node_layer", children_only=True)
+    def clear(self):
+        dpg.delete_item(f"{self.tag}_plot_yaxis", children_only=True, slot=1)
         self.color_generator.reset()
+
+        # The series and all its children are gone; reset diff tracking
+        self._rendered_nodes.clear()
+        self._rendered_edges.clear()
+        self._visible_nodes.clear()
+        self._visible_edges.clear()
+        self._node_line_counts.clear()
+        self._edge_base_colors.clear()
+        self._edge_label_lens.clear()
+        self._pending_node_lines.clear()
+        self._plot_positions = {}
+        self._visible_edge_list = []
+        self._prev_selected = None
+        self.prev_hover = None
+        self.hovered_node = None
 
         for node in self.nodes.values():
             node.visible = False
             node.unfolded = False
 
+        if self.graph:
+            root = next(n for n, in_deg in self.graph.in_degree() if in_deg == 0)
+            self.nodes[root].visible = True
+
         self.selected_node = None
-        if reset_origin:
-            self.set_origin(0.0, 0.0)
+        self._layout_dirty = True
+
+        # self.look_at(0.0, 0.0)
 
     def regenerate(self):
         if not self.graph:
             return
 
-        dpg.delete_item(f"{self.tag}_edge_layer", children_only=True)
-        dpg.delete_item(f"{self.tag}_node_layer", children_only=True)
+        dpg.delete_item(f"{self.tag}_plot_yaxis", children_only=True, slot=1)
         self.color_generator.reset()
 
-        want_visible = []
-        selected = self.selected_node
-        self.selected_node = None
+        # Series children are gone; reset diff tracking before the new series is created
+        self._rendered_nodes.clear()
+        self._rendered_edges.clear()
+        self._visible_nodes.clear()
+        self._visible_edges.clear()
+        self._node_line_counts.clear()
+        self._edge_base_colors.clear()
+        self._edge_label_lens.clear()
+        self._pending_node_lines.clear()
 
-        # By using a topological sort we ensure that nodes closer to the root are drawn first
-        for n in nx.topological_sort(self.graph):
-            node = self.nodes[n]
-            if node.visible:
-                want_visible.append(node)
-                node.visible = False
+        # Pre-compute a layout at the current zoom so the series has real
+        # plot-space positions for DPG to auto-fit and transform. _layout_dirty
+        # triggers a recompute on the first callback with the actual zoom factor.
+        self._recompute_layout()
 
-        for node in want_visible:
-            self._draw_node(node)
+        visible = [n for n in self.nodes.values() if n.visible and n.pos is not None]
+        px = [n.x for n in visible] or [0.0]
+        py = [n.y for n in visible] or [0.0]
 
-        for node in want_visible:
-            for child_id in self.graph.successors(node.id):
-                child_node = self.nodes[child_id]
-                if child_node.visible and self.draw_edges:
-                    self._draw_edge(node, child_node)
+        dpg.add_custom_series(
+            px,
+            py,
+            2,
+            callback=self._render_graph,
+            tooltip=False,
+            parent=f"{self.tag}_plot_yaxis",
+            tag=f"{self.tag}_plot_series",
+        )
 
-        if selected:
+        self._layout_dirty = True
+
+        if self.selected_node:
+            selected = self.selected_node
+            self.selected_node = None
             self.select(selected)
 
-    def show_node_path(self, path: list[Node | str]) -> None:
-        self.clear(False)
+        self.show_all()
 
+    def show_node_path(self, path: list[Node | str]) -> None:
         if not path:
             return
 
+        self.clear()
         for node in path:
             if isinstance(node, str):
                 node = self.nodes[node]
-            self._unfold_node(node)
+            self.unfold_node(node)
 
+        self.regenerate()
+        self.look_at_node(path[-1])
         self.select(path[-1])
 
     def isolate_branch(self, node: Node | str) -> None:
         if isinstance(node, str):
             node = self.nodes[node]
 
-        # Remove all nodes that don't need to be visible anymore. This is more complicated as it
-        # seems, as we need to keep the branch unfolded by the user as it is
+        # Remove all nodes that don't need to be visible anymore. This is
+        # more complicated than it seems, as we need to keep the branch
+        # unfolded by the user as it is
         branch = [node.id]
 
         while True:
@@ -538,8 +509,11 @@ class GraphWidget:
 
         branch_nodes = set(branch)
         for n in self.nodes.values():
-            if n.visible and n.id not in branch_nodes:
-                self._remove_from_canvas(n)
+            on_branch = n.id in branch_nodes
+            n.visible = on_branch
+            n.unfolded = on_branch
+
+        self._layout_dirty = True
 
     def select(self, node: Node | str):
         if not self.select_enabled:
@@ -548,26 +522,28 @@ class GraphWidget:
         if isinstance(node, str):
             node = self.nodes.get(node)
 
-        if not node or node not in self.nodes.values():
+        if not node or node.id not in self.nodes:
             return
 
         if get_config().single_branch_mode:
             if node != self.selected_node:
-                if self.selected_node:
-                    self.set_highlight(self.selected_node, style.white)
-                self.reveal(node)
+                # For programmatic reveal
+                if not node.visible:
+                    self.reveal(node)
+
+                else:
+                    # Fold all other nodes on the same level
+                    for n in self.nodes.values():
+                        if n.visible and n.level == node.level:
+                            self.fold_node(n)
         else:
             if node == self.selected_node:
                 self.deselect()
                 return
-            else:
-                if self.selected_node:
-                    self.set_highlight(self.selected_node, style.white)
-                self._unfold_node(node)
 
         self.selected_node = node
-        self._unfold_node(node)
-        self.set_highlight(node, style.blue)
+        self.unfold_node(node)
+        self._layout_dirty = True
 
         if self.on_node_selected:
             self.on_node_selected(node)
@@ -576,93 +552,60 @@ class GraphWidget:
         if self.selected_node is None:
             return
 
-        self.set_highlight(self.selected_node, style.white)
-        self._fold_node(self.selected_node)
+        self.fold_node(self.selected_node)
         self.selected_node = None
+        self._layout_dirty = True
 
         if self.on_node_selected:
             self.on_node_selected(None)
 
-    def clear_highlights(self) -> None:
-        for node in self.nodes.values():
-            if node.visible:
-                dpg.configure_item(f"{self.tag}_node_{node.id}_box", color=style.white)
-
-    def set_highlight(self, node: Node | str, color: tuple = style.white) -> None:
-        if isinstance(node, Node):
-            node = node.id
-
-        if node not in self.nodes or not self.nodes[node].visible:
-            return
-
-        dpg.configure_item(f"{self.tag}_node_{node}_box", color=color)
-
-    def set_hovered(self, node: Node | str, hovered: bool) -> None:
-        if isinstance(node, Node):
-            node = node.id
-
-        if node not in self.nodes or not self.nodes[node].visible:
-            return
-
-        thickness = 2 if hovered else 1
-        dpg.configure_item(f"{self.tag}_node_{node}_box", thickness=thickness)
-
-    def _set_edge_highlight(
-        self, node_a: Node | str, node_b: Node | str, highlighted: bool
-    ) -> None:
-        if isinstance(node_a, Node):
-            node_a = node_a.id
-
-        if isinstance(node_b, Node):
-            node_b = node_b.id
-
-        tag = f"{self.tag}_edge_{node_a}_TO_{node_b}"
-        if not dpg.does_item_exist(tag):
-            tag = f"{self.tag}_edge_{node_b}_TO_{node_a}"
-
-        if not dpg.does_item_exist(tag):
-            # Seems to happen sometimes on quick mouse movements or jump-to-object
-            return
-
-        params = {"thickness": 2 if highlighted else 1}
-        if not self.rainbow_edges:
-            params["color"] = style.orange if highlighted else style.white
-
-        dpg.configure_item(tag, **params)
-
-        # highlight edge label if it exists, redraw it to place it on top
-        if self.get_edge_label:
-            label = f"{tag}_label"
-            if dpg.does_item_exist(label):
-                if highlighted:
-                    dpg.move_item(label, parent=f"{self.tag}_node_layer")
-                    if not self.rainbow_edges:
-                        dpg.configure_item(label, color=style.green)
-                    dpg.configure_item(f"{label}_bg", show=True)
-                else:
-                    dpg.configure_item(f"{label}_bg", show=False)
-
-    def _unfold_node(self, node: Node) -> None:
-        self._draw_node(node)
+    def unfold_node(self, node: Node) -> None:
+        node.visible = True
+        node.unfolded = True
 
         for child_id in self.graph.successors(node.id):
             child_node = self.nodes.get(child_id)
             if child_node:
-                self._draw_node(child_node)
-                if self.draw_edges:
-                    self._draw_edge(node, child_node)
+                child_node.visible = True
 
-        node.unfolded = True
+        self._layout_dirty = True
+
+    def fold_node(self, node: Node) -> None:
+        # Walking the descendants is the expensive part of folding, so do it once
+        descendants = nx.descendants(self.graph, node.id)
+        subtree = descendants | {node.id}
+
+        # Topological order: a parent's visibility is settled before its children
+        for desc_id in descendants:
+            desc = self.nodes[desc_id]
+            # A descendant is hidden unless it has a visible parent outside the subtree
+            has_outside_parent = any(
+                self.nodes[p].visible
+                for p in self.graph.predecessors(desc_id)
+                if p not in subtree
+            )
+            if not has_outside_parent:
+                desc.visible = False
+                desc.unfolded = False
+
+        node.unfolded = False
+        self._layout_dirty = True
 
     def reveal(self, node: Node | str) -> None:
+        if not node:
+            return
+
         if isinstance(node, str):
             node = self.nodes[node]
 
-        self.clear(False)
+        self.clear()
 
         path = nx.shortest_path(self.graph, self.root, node.id)
         for n in path:
-            self._unfold_node(self.nodes[n])
+            self.unfold_node(self.nodes[n])
+
+        self.regenerate()
+        self.look_at_node(node)
 
     def reveal_descendant_nodes(self, node: Node | str = None) -> None:
         if not node:
@@ -676,7 +619,7 @@ class GraphWidget:
             succ.visible = True
             succ.unfolded = True
 
-        self.regenerate()
+        self._layout_dirty = True
 
     def reveal_all_nodes(self, max_depth: int = -1) -> None:
         if max_depth == 0:
@@ -688,180 +631,664 @@ class GraphWidget:
                 node.visible = True
                 node.unfolded = True
 
-        self.regenerate()
+        self._layout_dirty = True
 
-    def _fold_node(self, node: Node) -> None:
-        # Set visible status first, otherwise we make mistakes if nodes have multiple parents
-        for child_id in self.graph.successors(self.selected_node.id):
-            child_node = self.nodes[child_id]
-            child_node.visible = False
+    def _get_node_lines(self, node: Node) -> tuple[list[str], list]:
+        """Frontpage text lines and their colors, in normalized form.
 
-        # Remove all children without still visible parents
-        for child_id in nx.descendants(self.graph, self.selected_node.id):
-            for parent_id in self.graph.predecessors(child_id):
-                if parent_id != node.id and self.nodes[parent_id].visible:
-                    break
-            else:
-                # Did not find any parents that should still be visible, delete the node
-                self._remove_from_canvas(self.nodes[child_id])
+        get_node_frontpage can be expensive, and both the size estimate and the
+        draw pass need the same result, so it is computed once per node and held
+        until _draw_node consumes it.
+        """
+        cached = self._pending_node_lines.get(node.id)
+        if cached is not None:
+            return cached
 
-        node.unfolded = False
-
-    def _draw_node(self, node: Node) -> None:
-        tag = f"{self.tag}_node_{node.id}"
-
-        if dpg.does_item_exist(tag):
-            if not node.visible:
-                # Make the item appear in a sensible place
-                node.pos = self.layout.get_pos_for_node(self.graph, node, self.nodes)
-                node.visible = True
-            
-            dpg.show_item(tag)
-            return
-
-        scale = self.zoom_factor
-        margin = self.layout.text_margin
-        text_h = 12
-        text_offset_y = text_h * scale
         lines = self.get_node_frontpage(node)
         colors = None
 
         if isinstance(lines, str):
             lines = [lines]
-        elif isinstance(lines[0], tuple):
+        elif lines and isinstance(lines[0], tuple):
             lines, colors = zip(*lines)
+            lines = list(lines)
 
         if not colors:
             colors = [style.white] * len(lines)
 
+        result = (lines, colors)
+        self._pending_node_lines[node.id] = result
+        return result
+
+    def _estimate_node_size(self, node: Node) -> tuple[float, float]:
+        # Size in plot-space units, zoom-independent
+        margin = self.layout.text_margin
+        lines, _ = self._get_node_lines(node)
+
         max_len = max(len(s) for s in lines)
-        lines = [s.center(max_len) for s in lines]
-        w, h = estimate_drawn_text_size(
-            max_len, num_lines=len(lines), font_size=text_h, scale=scale, margin=margin
+        return estimate_drawn_text_size(
+            max_len, num_lines=len(lines), font_size=12, scale=1, margin=margin
         )
 
-        with dpg.draw_node(tag=tag, parent=f"{self.tag}_node_layer"):
-            # Background
-            dpg.draw_rectangle(
-                (0.0, 0.0),
-                (w, h),
-                fill=style.dark_grey,
-                color=style.white,
-                thickness=1,
-                tag=f"{tag}_box",  # for highlighting
-            )
+    def _recompute_layout(self) -> None:
+        """Recompute node positions and refresh the cached visible node/edge sets.
 
-            # Text
-            for i, text in enumerate(lines):
-                dpg.draw_text(
-                    (margin, margin + text_offset_y * i),
-                    text,
-                    size=12 * scale,
-                    color=colors[i],
-                )
-
-        node.size = (w, h)
-        node.pos = self.layout.get_pos_for_node(self.graph, node, self.nodes)
-        node.visible = True
-        dpg.apply_transform(tag, dpg.create_translation_matrix([node.x, node.y]))
-
-    def _draw_edge(self, node_a: Node, node_b: Node) -> None:
-        tag = f"{self.tag}_edge_{node_a.id}_TO_{node_b.id}"
-        if dpg.does_item_exist(tag):
+        Everything the per-frame render pass iterates over is derived here, so
+        that pass never has to walk the full graph. Runs only when visibility
+        actually changed, not every frame.
+        """
+        if not self.graph:
+            self._plot_positions = {}
+            self._visible_edge_list = []
+            self._layout_dirty = False
             return
 
-        if self.rainbow_edges:
-            color = self.color_generator(node_a.id)
-            color = tuple((c + 255) // 2 for c in color)
+        for node in self.nodes.values():
+            if node.visible and node.size is None:
+                # Estimate size in plot space; layout uses plot-space units
+                node.size = self._estimate_node_size(node)
+
+        # Pass the topological order we already computed in set_graph, otherwise
+        # the layout re-sorts the whole graph on every fold/unfold
+        self._plot_positions = self.layout.compute_layout(
+            self.graph, self.nodes, self._graph_layers
+        )
+        self._layout_dirty = False
+
+        visible = self._plot_positions
+        succ = self.graph.succ
+        self._visible_edge_list = [
+            (a, b) for a in visible for b in succ[a] if b in visible
+        ]
+
+        # Retire draw items belonging to anything that just left the visible set
+        for gone in self._visible_nodes.difference(visible):
+            self._hide_node_items(gone)
+
+        for gone in self._visible_edges.difference(self._visible_edge_list):
+            self._hide_edge_items(gone)
+
+    def _render_graph(self, sender: str, app_data: list, user_data: Any) -> None:
+        # Save some cpu cycles when no updates are needed
+        if not (
+            self._layout_dirty
+            or self._render_required
+            or dpg.is_mouse_button_down(dpg.mvMouseButton_Left)
+            or dpg.is_item_hovered(self.tag)
+        ):
+            return
+
+        widget_w, widget_h = dpg.get_item_rect_size(self.tag)
+        if widget_w == 0 or widget_h == 0:
+            return
+
+        # Derive the plot -> pixel linear transform from axis limits and widget size.
+        #   pixel(p) = p * scale + offset
+        xmin, xmax = dpg.get_axis_limits(f"{self.tag}_plot_xaxis")
+        ymin, ymax = dpg.get_axis_limits(f"{self.tag}_plot_yaxis")
+
+        x_range = xmax - xmin
+        y_range = ymax - ymin
+        if x_range == 0 or y_range == 0:
+            return
+
+        helper_data = app_data[0]
+        mouse_x = helper_data["MouseX_PixelSpace"]
+        mouse_y = helper_data["MouseY_PixelSpace"]
+        self.prev_hover = self.hovered_node
+        self.hovered_node = None
+
+        # One series anchor gives us offset once we know scale.
+        tx0, ty0 = app_data[1][0], app_data[2][0]
+        plot_vals = dpg.get_value(f"{self.tag}_plot_series")
+        px0, py0 = plot_vals[0][0], plot_vals[1][0]
+
+        # pixel(p) = p * scale + offset
+        # scale = widget_pixels / axis_range  (approximation; corrected by offset below)
+        # offset = anchor_pixel - anchor_plot * scale  (pins the transform to one known point)
+        self._x_scale = widget_w / x_range
+        self._y_scale = widget_h / y_range
+        self._x_offset = tx0 - px0 * self._x_scale
+        self._y_offset = ty0 - py0 * self._y_scale
+
+        # Detect transform changes so we only update positions when needed
+        transform_changed = (
+            self._x_scale != self._prev_x_scale
+            or self._y_scale != self._prev_y_scale
+            or self._x_offset != self._prev_x_offset
+            or self._y_offset != self._prev_y_offset
+        )
+        zoom_changed = (
+            self._x_scale != self._prev_x_scale or self._y_scale != self._prev_y_scale
+        )
+
+        if self._layout_dirty:
+            self._recompute_layout()
+            # Layout move requires position update even if transform didn't change
+            transform_changed = True
+
+        geometry_update = transform_changed
+        self._render_required = False
+
+        # Level of detail: below a few pixels the text is unreadable, so stop
+        # drawing it entirely rather than paying for glyphs nobody can see
+        text_visible = (12 * self._x_scale) >= self.min_font_size
+        text_lod_changed = text_visible != self._text_visible
+        self._text_visible = text_visible
+
+        # Cull against the widget rect in pixel space. This has to use the same
+        # transform as the hit test: the axis limits only supply the scale, while
+        # the offset comes from the series anchor, so plot-space axis limits and
+        # node positions are not directly comparable.
+        wx0, wy0 = dpg.get_item_rect_min(self.tag)
+        cull_margin = 64.0
+        vis_x0 = wx0 - cull_margin
+        vis_x1 = wx0 + widget_w + cull_margin
+        vis_y0 = wy0 - cull_margin
+        vis_y1 = wy0 + widget_h + cull_margin
+
+        dpg.push_container_stack(sender)
+        dpg.configure_item(sender, tooltip=False)
+
+        # Pixel positions used by both node and edge passes; built during node pass
+        node_pixels: dict[str, tuple[float, float, float, float]] = {}
+        # Normalized pixel bounds, so the edge pass can cull without recomputing them
+        node_boxes: dict[str, tuple[float, float, float, float]] = {}
+
+        # _plot_positions holds exactly the visible nodes, in topological order, so
+        # parents are still created before children (which controls draw order)
+        for n, plot_pos in self._plot_positions.items():
+            node = self.nodes[n]
+            ppx, ppy = plot_pos
+            plot_w, plot_h = node.size if node.size else (0.0, 0.0)
+
+            px, py = self._to_pixel(ppx, ppy)
+            pw, ph = self._size_to_pixel(plot_w, plot_h)
+            node_pixels[n] = (px, py, pw, ph)
+
+            # Normalized so the bounds stay valid even if an axis is inverted
+            sx0, sx1 = (px, px + pw) if pw >= 0 else (px + pw, px)
+            sy0, sy1 = (py, py + ph) if ph >= 0 else (py + ph, py)
+            node_boxes[n] = (sx0, sy0, sx1, sy1)
+
+            # Hit-test in pixel space; first match wins
+            if not self.hovered_node:
+                if px <= mouse_x < px + pw and py <= mouse_y < py + ph:
+                    self.hovered_node = node
+
+            if sx1 < vis_x0 or sx0 > vis_x1 or sy1 < vis_y0 or sy0 > vis_y1:
+                # Off-screen: keep the position (edges may still need it) but
+                # don't pay to create or move its draw items
+                if n in self._rendered_nodes:
+                    self._hide_node_items(n)
+                continue
+
+            if n not in self._rendered_nodes:
+                self._draw_node(node, px, py, pw, ph)
+                self._rendered_nodes.add(n)
+            else:
+                # Re-show in case it was hidden previously. Items hidden by culling
+                # were not kept up to date, so re-entering the view always needs a
+                # geometry update, not just a transform change.
+                was_hidden = n not in self._visible_nodes
+                self._show_node_items(n)
+                if text_lod_changed:
+                    self._apply_node_text_lod(n)
+                if geometry_update or was_hidden:
+                    self._update_node_geometry(node, px, py, pw, ph, zoom_changed)
+
+        # Edge pass — separate from nodes so both endpoints have known pixel positions
+        if self.draw_edges:
+            for key in self._visible_edge_list:
+                a_id, b_id = key
+                ax0, ay0, ax1, ay1 = node_boxes[a_id]
+                bx0, by0, bx1, by1 = node_boxes[b_id]
+
+                if (
+                    max(ax1, bx1) < vis_x0
+                    or min(ax0, bx0) > vis_x1
+                    or max(ay1, by1) < vis_y0
+                    or min(ay0, by0) > vis_y1
+                ):
+                    if key in self._rendered_edges:
+                        self._hide_edge_items(key)
+                    continue
+
+                ax, ay, aw, ah = node_pixels[a_id]
+                bx, by, bw, bh = node_pixels[b_id]
+
+                if key not in self._rendered_edges:
+                    self._draw_edge(
+                        self.nodes[a_id],
+                        ax,
+                        ay,
+                        aw,
+                        ah,
+                        self.nodes[b_id],
+                        bx,
+                        by,
+                        bw,
+                        bh,
+                    )
+                    self._rendered_edges.add(key)
+                else:
+                    was_hidden = key not in self._visible_edges
+                    self._show_edge_items(key)
+                    if text_lod_changed:
+                        self._apply_edge_text_lod(key)
+                    if geometry_update or was_hidden:
+                        self._update_edge_geometry(
+                            a_id, b_id, ax, ay, aw, ah, bx, by, bw, bh, zoom_changed
+                        )
+
+        # Apply style transitions for hover and selection changes
+        if self.prev_hover != self.hovered_node:
+            self._apply_node_style(self.prev_hover)
+            self._apply_node_style(self.hovered_node)
+            self._apply_adjacent_edge_styles(self.prev_hover)
+            self._apply_adjacent_edge_styles(self.hovered_node)
+
+        if self._prev_selected != self.selected_node:
+            self._apply_node_style(self._prev_selected)
+            self._apply_node_style(self.selected_node)
+            self._apply_adjacent_edge_styles(self._prev_selected)
+            self._apply_adjacent_edge_styles(self.selected_node)
+            self._prev_selected = self.selected_node
+
+        # Cache transform for next-frame change detection
+        self._prev_x_scale = self._x_scale
+        self._prev_y_scale = self._y_scale
+        self._prev_x_offset = self._x_offset
+        self._prev_y_offset = self._y_offset
+
+        dpg.pop_container_stack()
+
+    # === Draw-item helpers ================================
+
+    def _node_tag(self, node: Node | str, suffix: str = None) -> str:
+        nid = node.id if isinstance(node, Node) else node
+        t = f"{self.tag}_node_{nid}"
+        if suffix:
+            t += "_" + suffix
+        return t
+
+    def _edge_tag(self, a_id: str, b_id: str, suffix: str = None) -> str:
+        t = f"{self.tag}_edge_{a_id}_TO_{b_id}"
+        if suffix:
+            t += "_" + suffix
+        return t
+
+    def _hide_node_items(self, node_id: str) -> None:
+        if node_id not in self._visible_nodes:
+            return
+        box_tag = self._node_tag(node_id, "box")
+        if dpg.does_item_exist(box_tag):
+            dpg.configure_item(box_tag, show=False)
+        for i in range(self._node_line_counts.get(node_id, 0)):
+            line_tag = self._node_tag(node_id, f"text_{i}")
+            if dpg.does_item_exist(line_tag):
+                dpg.configure_item(line_tag, show=False)
+        self._visible_nodes.discard(node_id)
+
+    def _show_node_items(self, node_id: str) -> None:
+        if node_id in self._visible_nodes:
+            return
+        box_tag = self._node_tag(node_id, "box")
+        if dpg.does_item_exist(box_tag):
+            dpg.configure_item(box_tag, show=True)
+        # Text follows the current level of detail, not just node visibility
+        show_text = self._text_visible
+        for i in range(self._node_line_counts.get(node_id, 0)):
+            line_tag = self._node_tag(node_id, f"text_{i}")
+            if dpg.does_item_exist(line_tag):
+                dpg.configure_item(line_tag, show=show_text)
+        self._visible_nodes.add(node_id)
+
+    def _apply_node_text_lod(self, node_id: str) -> None:
+        # Called only when the LOD threshold is actually crossed
+        show_text = self._text_visible
+        for i in range(self._node_line_counts.get(node_id, 0)):
+            line_tag = self._node_tag(node_id, f"text_{i}")
+            if dpg.does_item_exist(line_tag):
+                dpg.configure_item(line_tag, show=show_text)
+
+    def _apply_edge_text_lod(self, key: tuple[str, str]) -> None:
+        label_tag = self._edge_tag(*key, "label")
+        if dpg.does_item_exist(label_tag):
+            dpg.configure_item(label_tag, show=self._text_visible)
+
+    def _hide_edge_items(self, key: tuple[str, str]) -> None:
+        if key not in self._visible_edges:
+            return
+        a_id, b_id = key
+        edge_tag = self._edge_tag(a_id, b_id)
+        if dpg.does_item_exist(edge_tag):
+            dpg.configure_item(edge_tag, show=False)
+        for suffix in ("label", "label_bg"):
+            t = self._edge_tag(a_id, b_id, suffix)
+            if dpg.does_item_exist(t):
+                dpg.configure_item(t, show=False)
+        self._visible_edges.discard(key)
+
+    def _show_edge_items(self, key: tuple[str, str]) -> None:
+        if key in self._visible_edges:
+            return
+        a_id, b_id = key
+        edge_tag = self._edge_tag(a_id, b_id)
+        if dpg.does_item_exist(edge_tag):
+            dpg.configure_item(edge_tag, show=True)
+        # Labels follow the current level of detail, like node text does
+        if self._text_visible:
+            for suffix in ("label", "label_bg"):
+                t = self._edge_tag(a_id, b_id, suffix)
+                if dpg.does_item_exist(t):
+                    dpg.configure_item(t, show=True)
+        self._visible_edges.add(key)
+
+    # === Style application ================================
+
+    def _apply_node_style(self, node: Node) -> None:
+        # Compute the box color and thickness from current select/hover/highlight state
+        if not node:
+            return
+
+        box_tag = self._node_tag(node, "box")
+        if not dpg.does_item_exist(box_tag):
+            return
+
+        color = style.white
+        thickness = 1
+
+        if self.select_enabled and node == self.selected_node:
+            color = style.blue
+            thickness = 2
         else:
-            color = style.white
+            if node.id in self._manual_highlights:
+                color = self._manual_highlights[node.id]
+            if self.hover_enabled and node == self.hovered_node:
+                thickness = 2
+
+        dpg.configure_item(box_tag, color=color, thickness=thickness)
+
+    def _apply_edge_style(self, a_id: str, b_id: str) -> None:
+        # Edge color follows hover (yellow) > selection (orange) > base color
+        edge_tag = self._edge_tag(a_id, b_id)
+        if not dpg.does_item_exist(edge_tag):
+            return
+
+        node_a = self.nodes.get(a_id)
+        node_b = self.nodes.get(b_id)
+        base_color = self._edge_base_colors.get((a_id, b_id), style.white)
+
+        if self.hover_enabled and (
+            node_a is self.hovered_node or node_b is self.hovered_node
+        ):
+            color = style.yellow
+            thickness = 2
+        elif self.select_enabled and (
+            node_a is self.selected_node or node_b is self.selected_node
+        ):
+            color = style.orange
+            thickness = 2
+        else:
+            color = base_color
+            thickness = 1
+
+        dpg.configure_item(edge_tag, color=color, thickness=thickness)
+
+        # Edge label colour matches the edge
+        label_tag = self._edge_tag(a_id, b_id, "label")
+        if dpg.does_item_exist(label_tag):
+            dpg.configure_item(label_tag, color=color)
+
+    def _apply_adjacent_edge_styles(self, node: Node) -> None:
+        # Restyle every edge touching this node so hover/select highlights propagate
+        if not node or not self.graph:
+            return
+        for child_id in self.graph.successors(node.id):
+            self._apply_edge_style(node.id, child_id)
+        for parent_id in self.graph.predecessors(node.id):
+            self._apply_edge_style(parent_id, node.id)
+
+    # === Node and edge creation / geometry updates =======
+
+    def _draw_node(
+        self, node: Node, px: float, py: float, pw: float, ph: float
+    ) -> None:
+        # Create persistent box and text-line items for the node
+        scale = self.zoom_factor
+        margin = self.layout.text_margin
+        text_offset_y = 12 * scale
+
+        # Reuses the lines computed for the size estimate, if they are still around
+        lines, colors = self._get_node_lines(node)
+        self._pending_node_lines.pop(node.id, None)
+
+        max_len = max(len(s) for s in lines)
+        lines = [s.center(max_len) for s in lines]
+        show_text = self._text_visible
+
+        dpg.draw_rectangle(
+            (px, py),
+            (px + pw, py + ph),
+            fill=style.dark_grey,
+            color=style.white,
+            thickness=1,
+            tag=self._node_tag(node, "box"),
+        )
+
+        for i, text in enumerate(lines):
+            dpg.draw_text(
+                (px + margin, py + margin + text_offset_y * i),
+                text,
+                size=12 * scale,
+                color=colors[i],
+                show=show_text,
+                tag=self._node_tag(node, f"text_{i}"),
+            )
+
+        self._node_line_counts[node.id] = len(lines)
+        self._visible_nodes.add(node.id)
+
+        # Apply current select/hover/highlight state to the freshly drawn box
+        self._apply_node_style(node)
+
+    def _update_node_geometry(
+        self,
+        node: Node,
+        px: float,
+        py: float,
+        pw: float,
+        ph: float,
+        zoom_changed: bool,
+    ) -> None:
+        # Move and resize the persistent box and text lines for a layout/pan/zoom change
+        dpg.configure_item(
+            self._node_tag(node, "box"), pmin=(px, py), pmax=(px + pw, py + ph)
+        )
+
+        if not self._text_visible:
+            # Text is not being drawn, so there is nothing to move
+            return
+
+        scale = self.zoom_factor
+        margin = self.layout.text_margin
+        text_offset_y = 12 * scale
+
+        for i in range(self._node_line_counts.get(node.id, 0)):
+            line_tag = self._node_tag(node, f"text_{i}")
+            if not dpg.does_item_exist(line_tag):
+                continue
+            pos = (px + margin, py + margin + text_offset_y * i)
+            if zoom_changed:
+                dpg.configure_item(line_tag, pos=pos, size=12 * scale)
+            else:
+                dpg.configure_item(line_tag, pos=pos)
+
+    def _draw_edge(
+        self,
+        node_a: Node,
+        ax: float,
+        ay: float,
+        aw: float,
+        ah: float,
+        node_b: Node,
+        bx: float,
+        by: float,
+        bw: float,
+        bh: float,
+    ) -> None:
+        # Create the persistent edge geometry plus optional label
+        tag = self._edge_tag(node_a.id, node_b.id)
+
+        # Resolve and remember a base color so style transitions can revert correctly
+        if self.rainbow_edges:
+            base = self.color_generator(node_a.id)
+            base = tuple((c + 255) // 2 for c in base)
+        else:
+            base = style.white
+        self._edge_base_colors[(node_a.id, node_b.id)] = base
+
+        scale = self.zoom_factor
 
         if self.edge_style == "manhattan":
-            ax = node_a.x + node_a.width
-            ay = node_a.y + node_a.height / 2
-            bx = node_b.x
-            by = node_b.y + node_b.height / 2
-
-            # The right side of node_a depends on its width, whereas the left side of all nodes
-            # on the same level should be aligned, so this will give a more consistent look.
-            mid_x = bx - self.layout.gap_x / 2
-            # mid_x = ax + (bx - ax) / 2
+            p0x = ax + aw
+            p0y = ay + ah / 2
+            p1x = bx
+            p1y = by + bh / 2
+            mid_x = p1x - self.layout.gap_x * scale / 2
 
             dpg.draw_polygon(
-                [
-                    (ax, ay),
-                    (mid_x, ay),
-                    (mid_x, by),
-                    (bx, by),
-                ],
-                color=color,
+                [(p0x, p0y), (mid_x, p0y), (mid_x, p1y), (p1x, p1y)],
+                color=base,
+                thickness=1,
                 tag=tag,
-                parent=f"{self.tag}_edge_layer",
             )
-        elif self.edge_style == "straight":
-            ax = node_a.x + node_a.width / 2
-            ay = node_a.y + node_a.height / 2
-            bx = node_b.x + node_b.width / 2
-            by = node_b.y + node_b.height / 2
+        elif self.edge_style == "bezier":
+            p0x = ax + aw / 2
+            p0y = ay + ah / 2
+            p1x = bx + bw / 2
+            p1y = by + bh / 2
+            dpg.draw_bezier_cubic(
+                (p0x, p0y),
+                (p1x, p0y),
+                (p0x, p1y),
+                (p1x, p1y),
+                color=base,
+                thickness=1,
+                tag=tag,
+            )
+        else:  # "straight"
+            p0x = ax + aw / 2
+            p0y = ay + ah / 2
+            p1x = bx + bw / 2
+            p1y = by + bh / 2
 
-            dpg.draw_line(
-                (ax, ay),
-                (bx, by),
-                color=color,
-                tag=tag,
-                parent=f"{self.tag}_edge_layer",
-            )
+            dpg.draw_line((p0x, p0y), (p1x, p1y), color=base, thickness=1, tag=tag)
 
         if self.get_edge_label:
             label = self.get_edge_label(node_a, node_b)
             if label:
-                # TODO render text to buffer and rotate to match edge
                 margin = self.layout.text_margin
-                scale = self.zoom_factor
-
                 tw, th = estimate_drawn_text_size(
                     len(label), font_size=11, scale=scale, margin=margin
                 )
-                tx = (ax + bx) / 2 - tw / 2
-                ty = (ay + by) / 2 - th * 2 / 5
+                lx = (p0x + p1x) / 2 - tw / 2
+                ly = (p0y + p1y) / 2 - th * 2 / 5
 
-                # Drawn on the node layer so we can bring it to the front
-                with dpg.draw_node(
-                    tag=f"{tag}_label",
-                    parent=f"{self.tag}_node_layer",
-                ):
-                    dpg.draw_rectangle(
-                        (0.0, 0.0),
-                        (tw, th),
-                        fill=style.dark_grey,
-                        color=None,
-                        show=False,
-                        tag=f"{tag}_label_bg",  # for highlighting
-                    )
-                    dpg.draw_text(
-                        (margin, margin),
-                        label,
-                        size=11 * scale,
-                        color=color,
-                    )
-
-                dpg.apply_transform(
-                    f"{tag}_label", dpg.create_translation_matrix((tx, ty))
+                # Stored as siblings of the edge so configure_item works on them directly
+                dpg.draw_rectangle(
+                    (lx, ly),
+                    (lx + tw, ly + th),
+                    fill=style.dark_grey,
+                    color=None,
+                    show=False,
+                    tag=self._edge_tag(node_a.id, node_b.id, "label_bg"),
                 )
+                dpg.draw_text(
+                    (lx + margin, ly + margin),
+                    label,
+                    size=11 * scale,
+                    color=base,
+                    show=self._text_visible,
+                    tag=self._edge_tag(node_a.id, node_b.id, "label"),
+                )
+                self._edge_label_lens[(node_a.id, node_b.id)] = len(label)
 
-    def _remove_from_canvas(self, node: Node) -> None:
-        if not node:
+        self._visible_edges.add((node_a.id, node_b.id))
+
+        # Apply current hover/select state in case this edge is adjacent to either
+        self._apply_edge_style(node_a.id, node_b.id)
+
+    def _update_edge_geometry(
+        self,
+        a_id: str,
+        b_id: str,
+        ax: float,
+        ay: float,
+        aw: float,
+        ah: float,
+        bx: float,
+        by: float,
+        bw: float,
+        bh: float,
+        zoom_changed: bool,
+    ) -> None:
+        # Reposition the polygon/line points; update label position and size on zoom
+        tag = self._edge_tag(a_id, b_id)
+        scale = self.zoom_factor
+
+        if self.edge_style == "manhattan":
+            p0x = ax + aw
+            p0y = ay + ah / 2
+            p1x = bx
+            p1y = by + bh / 2
+            mid_x = p1x - self.layout.gap_x * scale / 2
+            dpg.configure_item(
+                tag,
+                points=[(p0x, p0y), (mid_x, p0y), (mid_x, p1y), (p1x, p1y)],
+            )
+        elif self.edge_style == "bezier":
+            p0x = ax + aw / 2
+            p0y = ay + ah / 2
+            p1x = bx + bw / 2
+            p1y = by + bh / 2
+            dpg.draw_bezier_cubic(
+                tag,
+                p0=(p0x, p0y),
+                p1=(p1x, p0y),
+                p2=(p0x, p1y),
+                p3=(p1x, p1y),
+            )
+        else:  # "straight"
+            p0x = ax + aw / 2
+            p0y = ay + ah / 2
+            p1x = bx + bw / 2
+            p1y = by + bh / 2
+            dpg.configure_item(tag, p1=(p0x, p0y), p2=(p1x, p1y))
+
+        if not self._text_visible:
+            # Label is not being drawn, so there is nothing to move
             return
 
-        for child_id in self.graph.successors(node.id):
-            child_node = self.nodes.get(child_id, None)
-            self._remove_from_canvas(child_node)
+        label_tag = self._edge_tag(a_id, b_id, "label")
+        if dpg.does_item_exist(label_tag):
+            # Use cached label length to recompute the bounding box
+            label_len = self._edge_label_lens.get((a_id, b_id), 0)
+            margin = self.layout.text_margin
+            tw, th = estimate_drawn_text_size(
+                label_len, font_size=11, scale=scale, margin=margin
+            )
+            lx = (p0x + p1x) / 2 - tw / 2
+            ly = (p0y + p1y) / 2 - th * 2 / 5
 
-        dpg.delete_item(f"{self.tag}_node_{node.id}")
-        node.visible = False
-        node.unfolded = False
+            if zoom_changed:
+                dpg.configure_item(
+                    label_tag, pos=(lx + margin, ly + margin), size=11 * scale
+                )
+            else:
+                dpg.configure_item(label_tag, pos=(lx + margin, ly + margin))
 
-        # Delete relations
-        for parent_id in self.graph.predecessors(node.id):
-            if dpg.does_item_exist(f"{self.tag}_edge_{parent_id}_TO_{node.id}"):
-                dpg.delete_item(f"{self.tag}_edge_{parent_id}_TO_{node.id}")
+            bg_tag = self._edge_tag(a_id, b_id, "label_bg")
+            if dpg.does_item_exist(bg_tag):
+                dpg.configure_item(bg_tag, pmin=(lx, ly), pmax=(lx + tw, ly + th))

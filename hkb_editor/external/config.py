@@ -1,10 +1,14 @@
 import sys
+from typing import Literal
 from os import path
 import yaml
 import inspect
 from dataclasses import dataclass, field, asdict
+from dearpygui import dearpygui as dpg
+from psygnal import evented
 
 
+@evented
 @dataclass
 class Config:
     recent_files: list[str] = field(default_factory=list)
@@ -12,11 +16,29 @@ class Config:
     hklib_exe: str = None
     witchy_exe: str = None
 
+    pan_button: Literal["left", "middle", "right"] = "middle"
+
     invert_zoom: bool = False
     single_branch_mode: bool = True
     save_backups: bool = True
     session_backup: bool = True
     undo_history: int = 100
+
+    @property
+    def pan_button_id(self) -> int:
+        return {
+            "left": dpg.mvMouseButton_Left,
+            "middle": dpg.mvMouseButton_Middle,
+            "right": dpg.mvMouseButton_Right,
+        }[self.pan_button]
+
+    @pan_button_id.setter
+    def pan_button_id(self, val: int) -> None:
+        self.pan_button = {
+            dpg.mvMouseButton_Left: "left",
+            dpg.mvMouseButton_Middle: "middle",
+            dpg.mvMouseButton_Right: "right",
+        }[val]
 
     def add_recent_file(self, file_path: str) -> None:
         file_path = path.normpath(path.abspath(file_path))
@@ -51,17 +73,17 @@ def get_config() -> Config:
 
 def load_config(config_path: str = None) -> Config:
     global _config
-    
+
     if not config_path:
         config_path = get_default_config_path()
 
     if path.isfile(config_path):
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
-        
+
         sig = inspect.signature(Config.__init__)
         kw = {}
-        
+
         # Match the args from the config to the current implementation in case it changed
         for key, val in cfg.items():
             if key in sig.parameters:

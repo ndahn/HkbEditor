@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any, Iterable, Callable
+from functools import cache
 import numpy as np
 import colorsys
 from dearpygui import dearpygui as dpg
@@ -172,18 +173,37 @@ get_contrast_color: Callable[[], tuple[int, int, int]] = HighContrastColorGenera
 """A global instance to generate sequences of visually distinct colors.
 """
 
-bound_attribute_theme = None
-pointer_attribute_theme = None
-index_attribute_theme = None
+class themes:
+    """Themes created by :func:`setup_styles`; None until it has run."""
 
-notification_info_theme = None
-notification_warning_theme = None
-notification_error_theme = None
+    bound_attribute = None
+    pointer_attribute = None
+    index_attribute = None
 
-input_field_error_theme = None
-input_field_okay_theme = None
+    notification_info = None
+    notification_warning = None
+    notification_error = None
 
-link_button_theme = None
+    input_field_error = None
+    input_field_okay = None
+
+    link_button = None
+    button_transparent = None
+
+    plot_no_borders = None
+    window_no_padding = None
+
+    @cache
+    @staticmethod
+    def get_color_theme(
+        color: RGBA, property: int = dpg.mvThemeCol_Text, item_type: int = dpg.mvAll
+    ) -> int:
+        """A cached theme setting ``property`` of ``item_type`` to ``color``."""
+        with dpg.theme() as theme:
+            with dpg.theme_component(item_type):
+                dpg.add_theme_color(property, color)
+
+        return theme
 
 
 def pastel(color: tuple[int, int, int, int]):
@@ -244,54 +264,58 @@ def setup_styles():
 
     dpg.bind_theme(global_theme)
 
-    global bound_attribute_theme
-    global pointer_attribute_theme
-    global index_attribute_theme
-    global notification_info_theme
-    global notification_warning_theme
-    global notification_error_theme
-    global input_field_okay_theme
-    global input_field_error_theme
-    global link_button_theme
 
-    with dpg.theme() as bound_attribute_theme:
+    with dpg.theme() as themes.bound_attribute:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Text, pink)
 
-    with dpg.theme() as pointer_attribute_theme:
+    with dpg.theme() as themes.pointer_attribute:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Text, blue)
 
-    with dpg.theme() as index_attribute_theme:
+    with dpg.theme() as themes.index_attribute:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Text, green)
 
-    with dpg.theme() as notification_info_theme:
+    with dpg.theme() as themes.notification_info:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_WindowBg, pastel(blue))
             dpg.add_theme_color(dpg.mvThemeCol_Border, white)
             dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 5)
 
-    with dpg.theme() as notification_warning_theme:
+    with dpg.theme() as themes.notification_warning:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_WindowBg, pastel(yellow))
             dpg.add_theme_color(dpg.mvThemeCol_Border, white)
             dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 5)
 
-    with dpg.theme() as notification_error_theme:
+    with dpg.theme() as themes.notification_error:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_WindowBg, pastel(red))
             dpg.add_theme_color(dpg.mvThemeCol_Border, white)
             dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 5)
 
-    with dpg.theme() as input_field_okay_theme:
+    with dpg.theme() as themes.input_field_okay:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Border, white)
 
-    with dpg.theme() as input_field_error_theme:
+    with dpg.theme() as themes.input_field_error:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Border, red)
 
-    with dpg.theme() as link_button_theme:
+    with dpg.theme() as themes.link_button:
         with dpg.theme_component(dpg.mvAll):
             dpg.add_theme_color(dpg.mvThemeCol_Text, blue, category=dpg.mvThemeCat_Core)
+
+    with dpg.theme() as themes.button_transparent:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_color(dpg.mvThemeCol_Button, (0, 0, 0, 0))
+
+    with dpg.theme() as themes.plot_no_borders:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_style(dpg.mvPlotStyleVar_PlotBorderSize, 0, category=dpg.mvThemeCat_Plots)
+            dpg.add_theme_style(dpg.mvPlotStyleVar_PlotPadding, 0, 0, category=dpg.mvThemeCat_Plots)
+
+    with dpg.theme() as themes.window_no_padding:
+        with dpg.theme_component(dpg.mvAll):
+            dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 0, 0)

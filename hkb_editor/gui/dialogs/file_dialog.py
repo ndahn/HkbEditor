@@ -114,10 +114,11 @@ def save_file_dialog(
     if not default_dir:
         default_dir = os.path.dirname(sys.argv[0])
 
-    # TODO default_file and filetypes not supported
     ret = crossfiledialog.save_file(
         title=title,
         start_dir=default_dir,
+        default_file=default_file,
+        filter=filetypes,
     )
 
     _dialog_open = False

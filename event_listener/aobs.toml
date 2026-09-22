@@ -1,0 +1,29 @@
+# TODO strong change in 1.16.2
+# 1.16.1: 0x145ce30
+[[patterns]]
+pattern = ""
+captures = ["PUSHHKSGLOBALS1_RVA"]
+
+[[patterns]]
+pattern = "48 89 5c 24 08 57 48 83 ec 30 49 8b c0 c7 44 24 20 00 00 00 00"
+captures = ["HKS_ADDNAMEDCCLOSURE_RVA"]
+
+[[patterns]]
+pattern = "48 89 5c 24 08 55 56 57 41 56 41 57 48 83 ec 40 45 33 c0 48 8b e9"
+captures = ["HKBFIREEVENTHKS_RVA"]
+
+[[patterns]]
+pattern = "48 89 5c 24 08 48 89 74 24 10 57 48 83 ec 30 49 8b d8 8b f2 48 8b f9 48 85 c9"
+captures = ["LUA_GETSTRING_RVA"]
+
+# TODO same AOB as gethavokstruct!
+# 1.16.1: 1414522e0
+[[patterns]]
+pattern = ""
+captures = ["LUA_GETHKBSELF_RVA"]
+
+# TODO same byte pattern as gethkbself!
+# 1.16.1: 141451760
+[[patterns]]
+pattern = ""
+captures = ["LUA_GETHAVOKSTRUCT_RVA"]

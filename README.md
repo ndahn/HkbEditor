@@ -1,4 +1,4 @@
-![](doc/icon.png)
+![](docs/assets/images/cats_banner.png)
 
 This program allows you to edit Havok behavior graphs which are used in several FromSoft games like *Nightreign*, *Elden Ring*, and *Sekiro - Shadows Die Twice*. 
 
@@ -15,3 +15,7 @@ Behaviors are one of the more obscure subsystems in these games, controling whic
 
 # In case something breaks
 If you find any bugs or missing features, preferably create an issue here on github. Alternatively, ping me *@managarm* over on [?ServerName?](https://discord.gg/wzMynmW).
+
+If actually nothing is broken and you just feel especially grateful:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L4L51Z1RY4)

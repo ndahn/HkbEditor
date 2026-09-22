@@ -8,7 +8,7 @@ theme:
   favicon: assets/images/icon.png
   logo: assets/images/icon.png
   name: material
-  #custom_dir: docs/overrides
+  custom_dir: docs/overrides
   font:
     text: Noto Sans
   features:
@@ -50,6 +50,7 @@ nav:
       - Game Event (Player): templates/er/game_event_player.md
       - Game Event (NPC): templates/er/game_event_npc.md
       #- Gesture: templates/er/gesture.md
+      - Halfblend Action: templates/er/halfblend_action
       - Jump: templates/er/jump.md
       - Jump Attack Type: templates/er/jump_attack.md
       - NPC Attack Slots: templates/er/npc_attack_slots.md

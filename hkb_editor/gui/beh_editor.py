@@ -13,6 +13,7 @@ import pyperclip
 from dearpygui import dearpygui as dpg
 import networkx as nx
 
+from hkb_editor.hkb.tagfile import TagfileFormat
 from hkb_editor.hkb.behavior import HavokBehavior
 from hkb_editor.hkb.hkb_types import (
     XmlValueHandler,
@@ -49,40 +50,35 @@ except (ImportError, AttributeError) as e:
         f"Failed to load character reloader: {e}",
     )
 
-from hkb_editor.hkb.version_updates import fix_variable_defaults
-
 from .widgets.graph_widget import GraphWidget, HorizontalGraphLayout, Node
 from .widgets.attributes_widget import AttributesWidget
 from .widgets.graphmap import GraphMap  # TODO
-from .dialogs import (
-    about_dialog,
-    open_file_dialog,
-    save_file_dialog,
-    edit_simple_array_dialog,
-    search_objects_dialog,
-    mass_rename_dialog,
-)
-from .tools import (
-    skeleton_mirror_dialog,
-    eventlistener_dialog,
-    open_state_graph_viewer,
-)
-from .workflows.aliases import AliasManager, AliasMap
-from .workflows.create_stateinfo import create_stateinfo_dialog
-from .workflows.register_clips import register_clips_dialog
-from .workflows.create_object import create_object_dialog
-from .workflows.apply_template import apply_template_dialog
-from .workflows.update_name_ids import update_name_ids_dialog
-from .workflows.clone_hierarchy import (
+from .widgets import DpgItem, loading_indicator
+from hkb_editor.gui.dialogs.about_dialog import about_dialog
+from hkb_editor.gui.dialogs.file_dialog import open_file_dialog, save_file_dialog
+from hkb_editor.gui.dialogs.edit_simple_array_dialog import edit_simple_array_dialog
+from hkb_editor.gui.dialogs.find_object_dialog import search_objects_dialog
+from hkb_editor.gui.dialogs.mass_rename_dialog import mass_rename_dialog
+from hkb_editor.gui.dialogs.merge_hierarchy_dialog import merge_hierarchy_dialog
+from hkb_editor.gui.dialogs.mirror_skeleton_dialog import mirror_skeleton_dialog
+from hkb_editor.gui.dialogs.event_listener_dialog import event_listener_dialog
+from hkb_editor.gui.dialogs.state_graph_viewer_dialog import state_graph_viewer_dialog
+from hkb_editor.workflows.aliases import AliasManager, AliasMap
+from hkb_editor.gui.dialogs.create_stateinfo_dialog import create_stateinfo_dialog
+from hkb_editor.gui.dialogs.register_clips_dialog import register_clips_dialog
+from hkb_editor.gui.dialogs.create_object_dialog import create_object_dialog
+from hkb_editor.gui.dialogs.apply_template_dialog import apply_template_dialog
+from hkb_editor.gui.dialogs.update_name_ids_dialog import update_name_ids_dialog
+from hkb_editor.workflows.clone_hierarchy import (
     import_hierarchy,
     paste_hierarchy,
     paste_children,
     MergeAction,
 )
-from .workflows.duplicate_clipcat import duplicate_clipcat_dialog
-from .workflows.fix_common_problems import fix_common_problems_dialog
-from .workflows.verify_behavior import verify_behavior
-from .helpers import make_copy_menu, center_window, common_loading_indicator
+from hkb_editor.gui.dialogs.duplicate_clipcat_dialog import duplicate_clipcat_dialog
+from hkb_editor.gui.dialogs.fix_common_problems_dialog import fix_common_problems_dialog
+from hkb_editor.workflows.verify_behavior import verify_behavior
+from hkb_editor.gui.helpers import make_copy_menu, center_window
 from . import style
 
 
@@ -105,7 +101,6 @@ class BehaviorEditor:
         logging.root.addHandler(LogHandler())
 
         self.beh: HavokBehavior = None
-        self._busy = False
         self.alias_manager = AliasManager()
         self.attributes_widget: AttributesWidget = None
         self.pinned_objects_table: str = None
@@ -127,6 +122,8 @@ class BehaviorEditor:
         self.last_save_undo_id: int = -1
         self.selected_roots: set[str] = set()
         self.selected_node: Node = None
+        # {statemachine_id: {toStateId: eventId}}, rebuilt per graph
+        self._wildcard_event_ids: dict[str, dict[int, int]] = {}
 
         with dpg.window() as self.main_window:
             self._setup_content()
@@ -134,7 +131,9 @@ class BehaviorEditor:
         about = about_dialog(
             no_title_bar=True, no_background=True, tag=f"{self.tag}_about_popup"
         )
-        dpg.set_frame_callback(dpg.get_frame_count() + 1, lambda: center_window(about))
+        dpg.set_frame_callback(
+            dpg.get_frame_count() + 1, lambda: center_window(about.tag)
+        )
 
     def notification(self, message: str, severity: int = logging.INFO) -> None:
         if severity < self.min_notification_severity:
@@ -159,11 +158,11 @@ class BehaviorEditor:
                     dpg.add_text(line, color=style.black)
 
             if severity >= logging.ERROR:
-                theme = style.notification_error_theme
+                theme = style.themes.notification_error
             elif severity >= logging.WARNING:
-                theme = style.notification_warning_theme
+                theme = style.themes.notification_warning
             else:
-                theme = style.notification_info_theme
+                theme = style.themes.notification_info
 
             dpg.bind_item_theme(note, theme)
 
@@ -183,18 +182,15 @@ class BehaviorEditor:
 
         Thread(target=remove_notification, daemon=True).start()
 
-    def get_supported_file_extensions(self):
-        return {
-            "All supported files": ["*.xml", "*.hkx", "*.behbnd.dcx"],
-            "Behavior XML": "*.xml",
-            "Behavior HKX": "*.hkx",
-            "DCX Binder": "*.behbnd.dcx",
-        }
-
     def file_open(self):
         ret = open_file_dialog(
             default_dir=os.path.dirname(self.loaded_file or ""),
-            filetypes=self.get_supported_file_extensions(),
+            filetypes={
+                "All supported files": ["*.xml", "*.hkx", "*.behbnd.dcx"],
+                "XML Behavior (.xml)": "*.xml",
+                "HKS Behavior (.hkx)": "*.hkx",
+                "DCX Binder (.behbnd.dcx)": "*.behbnd.dcx",
+            },
         )
 
         if ret:
@@ -256,6 +252,11 @@ class BehaviorEditor:
             self.logger.info("Loading behavior...")
             self.beh = HavokBehavior(file_path, undo=True)
 
+            dpg.set_value(
+                f"{self.tag}_menu_file_save_format_radio",
+                self.beh.get_save_format().value,
+            )
+
             self.config.add_recent_file(file_path)
             self.config.save()
             self._regenerate_recent_files_menu()
@@ -263,9 +264,6 @@ class BehaviorEditor:
             # Save an initial backup that won't be overwritten on save
             if self.config.session_backup:
                 shutil.copy(self.beh.file, self.beh.file + ".session_backup")
-
-            # Fix anything that was amiss in previous versions
-            fix_variable_defaults(self.beh)
 
             filename = os.path.basename(file_path)
             dpg.configure_viewport(0, title=f"HkbEditor - {filename}")
@@ -279,12 +277,6 @@ class BehaviorEditor:
             self._set_menus_enabled(True)
 
             dpg.focus_item(f"{self.tag}_roots_filter")
-        except Exception as e:
-            details = traceback.format_exception_only(e)
-            self.logger.error(
-                f"Loading behavior failed: {details[0]}\nSee log for details!"
-            )
-            raise e
         finally:
             dpg.delete_item(loading_screen)
 
@@ -296,7 +288,7 @@ class BehaviorEditor:
         ret = save_file_dialog(
             default_dir=os.path.dirname(self.loaded_file or ""),
             default_file=os.path.basename(self.loaded_file or ""),
-            filetypes=self.get_supported_file_extensions(),
+            filetypes={"XML Behavior (.xml)": "*.xml"},
         )
 
         if ret:
@@ -308,21 +300,12 @@ class BehaviorEditor:
         return False
 
     def _do_write_to_file(self, file_path):
-        if self._busy:
-            return
-
-        self._busy = True
-        loading = common_loading_indicator("Saving")
-
-        try:
+        with loading_indicator("Saving"):
             if self.config.save_backups:
                 shutil.copy(self.beh.file, self.beh.file + ".backup")
 
             self.beh.save_to_file(file_path)
             self.logger.info(f"Saved to {file_path}")
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def _locate_witchy(self) -> str:
         if not self.config.witchy_exe or not os.path.isfile(self.config.witchy_exe):
@@ -330,7 +313,7 @@ class BehaviorEditor:
                 title="Locate WitchyBND.exe", filetypes={"WitchyBND": "WitchyBND.exe"}
             )
             if not witchy_exe:
-                self.logger.error("WitchyBND is required for repacking behavior")
+                raise RuntimeError("WitchyBND is required for repacking behavior")
 
             self.config.witchy_exe = witchy_exe
             self.config.save()
@@ -343,7 +326,7 @@ class BehaviorEditor:
                 title="Locate HKLib.exe", filetypes={"HKLib": "HKLib.CLI.exe"}
             )
             if not hklib_exe:
-                self.logger.error("HKLib is required for repacking behavior")
+                raise RuntimeError("HKLib is required for repacking behavior")
 
             self.config.hklib_exe = hklib_exe
             self.config.save()
@@ -351,43 +334,23 @@ class BehaviorEditor:
         return self.config.hklib_exe
 
     def _reload_character(self) -> None:
-        if self._busy:
-            return
-
-        self._busy = True
         chr = self.beh.get_character_id()
-        loading = common_loading_indicator(f"Reloading {chr}...")
-
-        try:
+        with loading_indicator(f"Reloading {chr}..."):
             if not self.chr_reloader:
                 if ChrReloader:
                     game_config = detect_game_config()
                     self.chr_reloader = ChrReloader(game_config)
                 else:
-                    self.logger.error("ChrReloader is not available")
-                    return
+                    raise RuntimeError("ChrReloader is not available")
 
             self.chr_reloader.reload_character(chr)
-        except Exception as e:
-            self.logger.error(f"Reloading {chr} failed: {e}")
-            self.chr_reloader = None
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def _repack_binder(self) -> None:
-        if self._busy:
-            return
-
-        self._busy = True
-
         # Locate external tools
         self._locate_witchy()
         self._locate_hklib()
 
-        loading = common_loading_indicator("Repacking binder...")
-
-        try:
+        with loading_indicator("Repacking binder..."):
             self.logger.info("Saving XML...")
             self.file_save()
             self.logger.info("Converting XML to HKX...")
@@ -395,9 +358,6 @@ class BehaviorEditor:
             self.logger.info("Repacking Binder...")
             pack_binder(self.beh.file)
             self.logger.info("Done!")
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def exit_app(self):
         if not self.beh or self.beh.top_undo_id() == self.last_save_undo_id:
@@ -476,14 +436,25 @@ class BehaviorEditor:
                 enabled=False,
                 tag=f"{self.tag}_menu_file_save_as",
             )
+            with dpg.menu(
+                label="Save file format",
+                tag=f"{self.tag}_menu_file_save_format",
+                enabled=False,
+            ):
+                dpg.add_radio_button(
+                    [fmt.value for fmt in TagfileFormat],
+                    callback=lambda s, a, u: self.beh.set_save_format(TagfileFormat(a)),
+                    tag=f"{self.tag}_menu_file_save_format_radio",
+                )
+
+            dpg.add_separator()
+
             dpg.add_menu_item(
                 label="Update name ID files...",
                 callback=self.open_update_name_ids_dialog,
                 enabled=False,
                 tag=f"{self.tag}_menu_file_update_name_ids",
             )
-            dpg.add_separator()
-
             dpg.add_menu_item(
                 label="Repack Binder",
                 shortcut="f4",
@@ -597,7 +568,7 @@ class BehaviorEditor:
 
             dpg.add_menu_item(
                 label="Event Listener...",
-                callback=lambda: self.open_eventlistener_dialog(),
+                callback=lambda: self.open_event_listener_dialog(),
             )
 
             # TODO needs an overhaul, right now it's just wrong
@@ -628,6 +599,15 @@ class BehaviorEditor:
                 tag=f"{self.tag}_config_invert_zoom",
                 user_data="invert_zoom",
             )
+            with dpg.group(horizontal=True):
+                dpg.add_text("Pan button: ")
+                dpg.add_button(
+                    label=self.config.pan_button,
+                    callback=self._toggle_pan_button,
+                    tag=f"{self.tag}_toggle_pan_button",
+                    width=-1,
+                )
+            dpg.add_separator()
             dpg.add_menu_item(
                 label="Single Branch Mode",
                 check=True,
@@ -733,6 +713,18 @@ class BehaviorEditor:
             dpg.add_text("Layout restored - restart to apply!")
             dpg.add_separator()
             dpg.add_button(label="Okay", callback=lambda: dpg.delete_item(wnd))
+
+    def _toggle_pan_button(self, sender: str, app_data: Any, user_data: Any) -> None:
+        buttons = ["left", "middle", "right"]
+        current = dpg.get_item_label(sender)
+
+        for idx, label in enumerate(buttons):
+            if label in current:
+                new_btn = buttons[(idx + 1) % len(buttons)]
+                dpg.set_item_label(sender, new_btn)
+                self.config.pan_button = new_btn
+                self.config.save()
+                break
 
     def _update_config(self, sender: str, app_data: Any, config_key: str) -> None:
         if not hasattr(self.config, config_key):
@@ -878,6 +870,7 @@ class BehaviorEditor:
         func = dpg.enable_item if enabled else dpg.disable_item
         func(f"{self.tag}_menu_file_save")
         func(f"{self.tag}_menu_file_save_as")
+        func(f"{self.tag}_menu_file_save_format")
         func(f"{self.tag}_menu_file_update_name_ids")
         func(f"{self.tag}_menu_repack_binder")
         func(f"{self.tag}_menu_reload_character")
@@ -930,6 +923,7 @@ class BehaviorEditor:
             autosize=True,
             no_close=True,
             no_scrollbar=True,
+            no_scroll_with_mouse=True,
             tag=f"{self.tag}_canvas_window",
         ):
             self.canvas = GraphWidget(
@@ -940,6 +934,8 @@ class BehaviorEditor:
                 get_node_frontpage=self.get_node_frontpage,
                 tag=f"{self.tag}_canvas",
             )
+
+        dpg.bind_item_theme(f"{self.tag}_canvas_window", style.themes.window_no_padding)
 
         # Attributes panel
         with dpg.window(
@@ -1029,11 +1025,11 @@ class BehaviorEditor:
         if selected:
             self.selected_roots.add(root_id)
             graph: nx.DiGraph = self.get_graph(root_id)
-            self.canvas.set_graph(graph)
+            self._set_canvas_graph(graph)
         else:
             if root_id in self.selected_roots:
                 self.selected_roots.remove(root_id)
-            self.canvas.set_graph(None)
+            self._set_canvas_graph(None)
 
     def _update_roots(self) -> None:
         dpg.delete_item(self.roots_table, children_only=True, slot=1)
@@ -1160,6 +1156,45 @@ class BehaviorEditor:
     def get_graph(self, root_id: str) -> nx.DiGraph:
         return self.beh.build_graph(root_id)
 
+    def _set_canvas_graph(self, graph: nx.DiGraph) -> None:
+        """Hand a new graph to the canvas, dropping per-graph frontpage caches.
+
+        Every edit goes through here (see regenerate), so the caches never have
+        to be invalidated separately.
+        """
+        self._wildcard_event_ids.clear()
+        self.canvas.set_graph(graph)
+
+    def _get_wildcard_event_ids(self, sm_id: str) -> dict[int, int]:
+        """{toStateId: eventId} for a statemachine's wildcard transitions.
+
+        Built on first use and cached for the lifetime of the graph. Searching
+        the transition list once per state instead makes unfolding a
+        statemachine O(states * transitions) -- a few hundred ms of stutter for
+        the wide ones, which is exactly when it is most noticeable.
+        """
+        cached = self._wildcard_event_ids.get(sm_id)
+        if cached is not None:
+            return cached
+
+        by_state: dict[int, int] = {}
+        sm = self.beh.objects.get(sm_id)
+        transitions: HkbArray[HkbRecord] = (
+            sm.get_field("wildcardTransitions/transitions", None) if sm else None
+        )
+
+        # Not all statemachines have wildcard transitions; an empty map is still
+        # worth caching so we don't look again for every one of its states
+        if transitions:
+            # First transition to a state wins, matching the previous linear search
+            for trans in transitions:
+                by_state.setdefault(
+                    trans["toStateId"].get_value(), trans["eventId"].get_value()
+                )
+
+        self._wildcard_event_ids[sm_id] = by_state
+        return by_state
+
     def get_node_frontpage(self, node: Node | str) -> list[str]:
         if isinstance(node, Node):
             node = node.id
@@ -1179,22 +1214,13 @@ class BehaviorEditor:
 
             # Assume the immediate parent of a state is always a statemachine
             sm_id = next(self.canvas.graph.predecessors(obj.object_id))
-            sm = self.beh.objects[sm_id]
-            transitions: HkbArray[HkbRecord] = sm.get_field(
-                "wildcardTransitions/transitions", None
+            event_id = self._get_wildcard_event_ids(sm_id).get(
+                obj["stateId"].get_value()
             )
 
-            # Not all statemachines have wildcard transitions
-            if transitions:
-                state_id = obj["stateId"].get_value()
-                for trans in transitions:
-                    if trans["toStateId"].get_value() == state_id:
-                        event_id = trans["eventId"].get_value()
-                        if event_id >= 0:
-                            event = self.beh.get_event(event_id)
-                            lines.insert(0, (f"<{event}>", style.green))
-
-                        break
+            if event_id is not None and event_id >= 0:
+                event = self.beh.get_event(event_id)
+                lines.insert(0, (f"<{event}>", style.green))
 
         if name:
             lines.insert(0, (name, style.yellow))
@@ -1295,11 +1321,15 @@ class BehaviorEditor:
 
                 self.regenerate()
 
-            if children_only:
-                paste_children(self.beh, xml, target_obj, target_path, on_merge_success)
-            else:
-                paste_hierarchy(
-                    self.beh, xml, target_obj, target_path, on_merge_success
+            paste = paste_children if children_only else paste_hierarchy
+            with loading_indicator("Analyzing hierarchy"):
+                paste(
+                    self.beh,
+                    xml,
+                    target_obj,
+                    target_path,
+                    on_merge_success,
+                    conflict_resolver=merge_hierarchy_dialog,
                 )
 
         def attach_children(sender: str, app_data: str, target: tuple[HkbRecord, str]):
@@ -1454,6 +1484,7 @@ class BehaviorEditor:
                 self.add_pinned_object(selector.object_id)
 
             self.regenerate()
+            self.canvas.select(selector.object_id)
 
         create_object_dialog(
             self.beh,
@@ -1485,28 +1516,27 @@ class BehaviorEditor:
             return
 
         root_graph = self.beh.root_graph()
-        node_graph = self.beh.build_graph(node.id)
-
-        delete_list: list[str] = []
+        delete_list: list[str] = [node.id]
         children = set(nx.descendants(root_graph, node.id))
-        for child, in_degree in root_graph.in_degree(children):
-            # Ignore any in-edges from parents in the node's subtree
-            for parent in root_graph.predecessors(child):
-                if parent in node_graph:
-                    in_degree -= 1
 
-            if in_degree == 0:
-                delete_list.append(child)
+        for n in children:
+            for parent in root_graph.predecessors(n):
+                if parent != node.id and parent not in children:
+                    # Found a parent outside the to-be-deleted subtree, keep this child
+                    break
+            else:
+                # All parents are in the to-be-deleted subtree, nuke it
+                delete_list.append(n)
 
         self.logger.info(
             f"Deleting {len(delete_list)} descendants of node {node.id} with no other parents"
         )
         with self.beh.transaction():
+            # Update all references while the node is still alive, then delete all
+            # descendants with no outside parents
             self._on_node_delete(node.id)
-
-            self.beh.delete_object(node.id)
-            for child in delete_list:
-                self.beh.delete_object(child)
+            for n in reversed(delete_list):
+                self.beh.delete_object(n)
 
         self.regenerate()
 
@@ -1523,7 +1553,10 @@ class BehaviorEditor:
                 first_parent = parent_id
 
             parent = self.beh.objects[parent_id]
-            for path, ptr in parent.find_fields_by_class(HkbPointer):
+            references = list(parent.find_fields_by_class(HkbPointer))
+
+            # Reverse so array indices stay valid
+            for path, ptr in reversed(references):
                 if ptr.get_value() == object_id:
                     index_match = re.match(r"^(.*):([0-9]+)$", path)
                     if index_match:
@@ -1612,7 +1645,7 @@ class BehaviorEditor:
             return
 
         root_id = sm.object_id
-        self.canvas.set_graph(self.get_graph(root_id))
+        self._set_canvas_graph(self.get_graph(root_id))
 
         selected = self.selected_node
         if selected and selected.id in self.canvas.graph:
@@ -1690,12 +1723,11 @@ class BehaviorEditor:
             self._on_root_selected("", True, root.object_id)
 
         # Make sure the graph is complete
-        self.canvas.set_graph(self.beh.build_graph(root.object_id))
+        self._set_canvas_graph(self.beh.build_graph(root.object_id))
         # Reveal the node in the state machine graph
-        path = nx.shortest_path(self.canvas.graph, root.object_id, object_id)
         self.clear_attributes()
-        self.canvas.show_node_path(path)
-        self.canvas.look_at_node(object_id)
+        self.canvas.reveal(object_id)
+        self.canvas.select(object_id)
 
     def search_attribute(self, path: str, value: XmlValueHandler):
         path = re.sub(r":[0-9]+", ":*", path)
@@ -1748,7 +1780,7 @@ class BehaviorEditor:
             idx: int,
             old_value: tuple[str, VariableType, int, int, str],
             new_value: tuple[str, VariableType, int, int, str],
-        ):
+        ) -> tuple:
             new_value = list(new_value)
             try:
                 new_value[4] = literal_eval(new_value[4])
@@ -1756,9 +1788,22 @@ class BehaviorEditor:
                 # Assume it's actually a string
                 pass
 
-            # TODO Use update_variable instead, this approach has a lot of problems
+            # Reset the ranges if the type changed
+            if old_value[1] != new_value[1]:
+                new_value[2] = None
+                new_value[3] = None
+
             self.beh.delete_variable(idx)
             self.beh.create_variable(*new_value, idx=idx)
+
+            new_var = self.beh.get_variable(idx)
+            return (
+                new_var.name,
+                new_var.vtype.value,
+                new_var.vmin,
+                new_var.vmax,
+                str(new_var.default),
+            )
 
         def on_delete(idx: int):
             self.beh.delete_variable(idx)
@@ -1915,7 +1960,7 @@ class BehaviorEditor:
         def on_results(sender: str, matches: list[HkbRecord], user_data: Any) -> None:
             self.canvas.clear_highlights()
             for obj in matches:
-                self.canvas.set_highlight(obj.object_id, color=style.red)
+                self.canvas.highlight_node(obj.object_id, color=style.green)
 
         search_objects_dialog(
             self.beh,
@@ -1934,9 +1979,8 @@ class BehaviorEditor:
             return
 
         def on_mass_rename(sender: str, renamed: list[HkbRecord], user_data: Any):
-            # This is a bit ugly, but so is adding more stuff to new_object
-            pin_objects = dpg.get_value(f"{sender}_pin_objects")
-            if pin_objects:
+            dialog: mass_rename_dialog = DpgItem.get_instance(sender)
+            if dialog.pin_objects:
                 for node in renamed:
                     self.add_pinned_object(node.object_id)
 
@@ -1947,6 +1991,9 @@ class BehaviorEditor:
         )
 
     def open_graphmap_dialog(self):
+        if not self.selected_roots:
+            return
+
         tag = f"{self.tag}_graphmap_dialog"
         if dpg.does_item_exist(tag):
             # TODO just for testing
@@ -1975,17 +2022,19 @@ class BehaviorEditor:
             graph_map = GraphMap(
                 g, self.get_node_frontpage, on_graphnode_selected, tag + "_content"
             )
+            name = self.get_active_statemachine().get_field("name", self.canvas.root)
+            dpg.add_text(f"{name} - {len(g)} nodes")
 
         dpg.set_item_user_data(dialog, graph_map)
 
-    def open_eventlistener_dialog(self):
+    def open_event_listener_dialog(self):
         tag = f"{self.tag}_event_listener_dialog"
         if dpg.does_item_exist(tag):
             dpg.show_item(tag)
             dpg.focus_item(tag)
             return
 
-        eventlistener_dialog(tag=tag)
+        event_listener_dialog(tag=tag)
 
     def open_stategraph_dialog(self):
         tag = f"{self.tag}_state_graph_dialog"
@@ -1995,7 +2044,7 @@ class BehaviorEditor:
             return
 
         active_sm = self.get_active_statemachine()
-        open_state_graph_viewer(
+        state_graph_viewer_dialog(
             self.beh,
             active_sm.object_id if active_sm else None,
             jump_callback=lambda s, a, u: self.jump_to_object(a.object_id),
@@ -2111,25 +2160,22 @@ class BehaviorEditor:
         if not file_path:
             return
 
-        try:
-            self.logger.info("Loading bone names from %s", file_path)
+        self.logger.info("Loading bone names from %s", file_path)
 
-            bones = load_skeleton_bones(file_path)
-            self.loaded_skeleton_path = file_path
+        bones = load_skeleton_bones(file_path)
+        self.loaded_skeleton_path = file_path
 
-            boneweights_type_id = self.beh.type_registry.find_first_type_by_name(
-                "hkbBoneWeightArray"
-            )
-            basepath = "boneWeights"
-            aliases = AliasMap()
+        boneweights_type_id = self.beh.type_registry.find_first_type_by_name(
+            "hkbBoneWeightArray"
+        )
+        basepath = "boneWeights"
+        aliases = AliasMap()
 
-            for idx, bone in enumerate(bones):
-                aliases.add(bone, f"{basepath}:{idx}", boneweights_type_id, None)
+        for idx, bone in enumerate(bones):
+            aliases.add(bone, f"{basepath}:{idx}", boneweights_type_id, None)
 
-            # Insert left so that these aliases take priority
-            self.alias_manager.aliases.insert(0, aliases)
-        except ValueError as e:
-            self.logger.error("Loading bone names failed: %s", e, exc_info=True)
+        # Insert left so that these aliases take priority
+        self.alias_manager.aliases.insert(0, aliases)
 
     def open_fix_common_problems_dialog(self):
         tag = f"{self.tag}_fix_common_problems"
@@ -2166,7 +2212,10 @@ class BehaviorEditor:
             self.regenerate()
             self.jump_to_object(hierarchy.root_id)
 
-        import_hierarchy(self.beh, xml, on_import)
+        with loading_indicator("Analyzing hierarchy"):
+            import_hierarchy(
+                self.beh, xml, on_import, conflict_resolver=merge_hierarchy_dialog
+            )
 
     def open_mirror_skeleton_dialog(self):
         tag = f"{self.tag}_bone_mirror_dialog"
@@ -2175,22 +2224,13 @@ class BehaviorEditor:
             dpg.focus_item(tag)
             return
 
-        skeleton_mirror_dialog(self.loaded_skeleton_path, tag=tag)
+        mirror_skeleton_dialog(self.loaded_skeleton_path, tag=tag)
 
     def verify_behavior(self):
-        if self._busy:
-            return
-
-        self._busy = True
-        loading = common_loading_indicator("Validating behavior...")
-
-        try:
+        with loading_indicator("Validating behavior..."):
             verify_behavior(self.beh)
             # TODO summary dialog?
             logging.info("Validation complete, check log for results!")
-        finally:
-            dpg.delete_item(loading)
-            self._busy = False
 
     def open_apply_template_dialog(self, template_file: str):
         tag = f"{self.tag}_apply_template_dialog"
@@ -2226,21 +2266,24 @@ class BehaviorEditor:
         webbrowser.open("https://ndahn.github.io/HkbEditor/howto/")
 
     def close_all_dialogs(self) -> None:
-        dialogs = [
-            "_edit_variables_dialog",
-            "_edit_events_dialog",
-            "_edit_animation_names_dialog",
-            "_search_dialog",
-            "_state_graph_dialog",
-            "_create_object_dialog",
-            "_register_clip_dialog",
-            "_create_cmsg_dialog",
-            "_bone_mirror_dialog",
-            "_apply_template_dialog",
-        ]
+        # Our dialogs are tagged f"{self.tag}_<name>_dialog", so we can find
+        # them all in the DpgItem registry instead of maintaining a list here.
+        # Everything else (the canvas, the attributes widget, ...) is part of
+        # the main window and has to survive.
+        prefix = f"{self.tag}_"
 
-        for dlg in dialogs:
-            dpg.delete_item(f"{self.tag}{dlg}")
+        for item in DpgItem.instances():
+            tag = item.tag
+            if not isinstance(tag, str) or not tag.startswith(prefix):
+                continue
+
+            suffix = tag[len(prefix) :]
+            if "_dialog" not in suffix and not suffix.endswith("_popup"):
+                continue
+
+            item.destroy()
+            if dpg.does_item_exist(tag):
+                dpg.delete_item(tag)
 
     def open_about_dialog(self) -> None:
         tag = f"{self.tag}_about_dialog"

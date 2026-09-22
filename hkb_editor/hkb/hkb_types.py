@@ -271,7 +271,7 @@ class HkbPointer(XmlValueHandler):
         if not oid:
             oid = "object0"
         elif must_exist and oid not in self.tagfile.objects:
-            raise ValueError("Target reference does not exist")
+            raise ValueError(f"Target reference {oid} does not exist")
 
         self.element.set("id", str(oid))
 
@@ -806,8 +806,10 @@ class HkbRecord(XmlValueHandler):
 
     def __getitem__(self, name: str) -> XmlValueHandler:
         ftype = self.get_field_type(name)
-        if ftype is None:
-            raise AttributeError(f"No field '{name}'")
+        if not ftype:
+            if name not in self.fields:
+                raise AttributeError(f"No field '{name}'")
+            raise AttributeError(f"Type of field '{name}' unknown")
 
         field_el = self._get_field_element(name)
         return wrap_element(self.tagfile, field_el, ftype)
