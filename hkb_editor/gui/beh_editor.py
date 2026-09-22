@@ -122,6 +122,8 @@ class BehaviorEditor:
         self.last_save_undo_id: int = -1
         self.selected_roots: set[str] = set()
         self.selected_node: Node = None
+        # {statemachine_id: {toStateId: eventId}}, rebuilt per graph
+        self._wildcard_event_ids: dict[str, dict[int, int]] = {}
 
         with dpg.window() as self.main_window:
             self._setup_content()
@@ -1023,11 +1025,11 @@ class BehaviorEditor:
         if selected:
             self.selected_roots.add(root_id)
             graph: nx.DiGraph = self.get_graph(root_id)
-            self.canvas.set_graph(graph)
+            self._set_canvas_graph(graph)
         else:
             if root_id in self.selected_roots:
                 self.selected_roots.remove(root_id)
-            self.canvas.set_graph(None)
+            self._set_canvas_graph(None)
 
     def _update_roots(self) -> None:
         dpg.delete_item(self.roots_table, children_only=True, slot=1)
@@ -1154,6 +1156,45 @@ class BehaviorEditor:
     def get_graph(self, root_id: str) -> nx.DiGraph:
         return self.beh.build_graph(root_id)
 
+    def _set_canvas_graph(self, graph: nx.DiGraph) -> None:
+        """Hand a new graph to the canvas, dropping per-graph frontpage caches.
+
+        Every edit goes through here (see regenerate), so the caches never have
+        to be invalidated separately.
+        """
+        self._wildcard_event_ids.clear()
+        self.canvas.set_graph(graph)
+
+    def _get_wildcard_event_ids(self, sm_id: str) -> dict[int, int]:
+        """{toStateId: eventId} for a statemachine's wildcard transitions.
+
+        Built on first use and cached for the lifetime of the graph. Searching
+        the transition list once per state instead makes unfolding a
+        statemachine O(states * transitions) -- a few hundred ms of stutter for
+        the wide ones, which is exactly when it is most noticeable.
+        """
+        cached = self._wildcard_event_ids.get(sm_id)
+        if cached is not None:
+            return cached
+
+        by_state: dict[int, int] = {}
+        sm = self.beh.objects.get(sm_id)
+        transitions: HkbArray[HkbRecord] = (
+            sm.get_field("wildcardTransitions/transitions", None) if sm else None
+        )
+
+        # Not all statemachines have wildcard transitions; an empty map is still
+        # worth caching so we don't look again for every one of its states
+        if transitions:
+            # First transition to a state wins, matching the previous linear search
+            for trans in transitions:
+                by_state.setdefault(
+                    trans["toStateId"].get_value(), trans["eventId"].get_value()
+                )
+
+        self._wildcard_event_ids[sm_id] = by_state
+        return by_state
+
     def get_node_frontpage(self, node: Node | str) -> list[str]:
         if isinstance(node, Node):
             node = node.id
@@ -1173,22 +1214,13 @@ class BehaviorEditor:
 
             # Assume the immediate parent of a state is always a statemachine
             sm_id = next(self.canvas.graph.predecessors(obj.object_id))
-            sm = self.beh.objects[sm_id]
-            transitions: HkbArray[HkbRecord] = sm.get_field(
-                "wildcardTransitions/transitions", None
+            event_id = self._get_wildcard_event_ids(sm_id).get(
+                obj["stateId"].get_value()
             )
 
-            # Not all statemachines have wildcard transitions
-            if transitions:
-                state_id = obj["stateId"].get_value()
-                for trans in transitions:
-                    if trans["toStateId"].get_value() == state_id:
-                        event_id = trans["eventId"].get_value()
-                        if event_id >= 0:
-                            event = self.beh.get_event(event_id)
-                            lines.insert(0, (f"<{event}>", style.green))
-
-                        break
+            if event_id is not None and event_id >= 0:
+                event = self.beh.get_event(event_id)
+                lines.insert(0, (f"<{event}>", style.green))
 
         if name:
             lines.insert(0, (name, style.yellow))
@@ -1613,7 +1645,7 @@ class BehaviorEditor:
             return
 
         root_id = sm.object_id
-        self.canvas.set_graph(self.get_graph(root_id))
+        self._set_canvas_graph(self.get_graph(root_id))
 
         selected = self.selected_node
         if selected and selected.id in self.canvas.graph:
@@ -1691,7 +1723,7 @@ class BehaviorEditor:
             self._on_root_selected("", True, root.object_id)
 
         # Make sure the graph is complete
-        self.canvas.set_graph(self.beh.build_graph(root.object_id))
+        self._set_canvas_graph(self.beh.build_graph(root.object_id))
         # Reveal the node in the state machine graph
         self.clear_attributes()
         self.canvas.reveal(object_id)
@@ -1990,6 +2022,8 @@ class BehaviorEditor:
             graph_map = GraphMap(
                 g, self.get_node_frontpage, on_graphnode_selected, tag + "_content"
             )
+            name = self.get_active_statemachine().get_field("name", self.canvas.root)
+            dpg.add_text(f"{name} - {len(g)} nodes")
 
         dpg.set_item_user_data(dialog, graph_map)
 

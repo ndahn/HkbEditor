@@ -32,6 +32,22 @@ class GraphMap(DpgItem):
         self._highlighted_node = None
         self._handler_tag = f"{self.tag}_handlers"
 
+        # Draw items are addressed by integer id rather than looked up by string
+        # tag every frame. Index i of _node_items belongs to _nodes[i], and
+        # index j of _edge_items to _edges[j].
+        self._edges: list[tuple[str, str]] = []
+        self._node_items: list[int] = []
+        self._edge_items: list[int] = []
+        self._node_index: dict[str, int] = {}
+        self._edge_index: dict[tuple[str, str], int] = {}
+        self._items_built = False
+        # Which items currently have show=True, so we only toggle on change
+        self._shown_nodes: set[int] = set()
+        self._shown_edges: set[int] = set()
+        # Last transform seen by _render; used to skip frames where nothing moved
+        self._prev_anchor: tuple[float, float] = None
+        self._prev_scale: float = None
+
         self._setup_content()
         self.set_graph(graph)
 
@@ -146,8 +162,21 @@ class GraphMap(DpgItem):
     def set_graph(self, graph: nx.DiGraph) -> None:
         self.graph = graph
         self._nodes: list[str] = sorted(graph.nodes)
-        # TODO Performance seems to be okayish up until ~1000 nodes
-        print(f"Rendering {len(self._nodes)} nodes...")
+        self._edges = list(graph.edges)
+
+        # Built once here instead of being rebuilt on every render callback
+        self._node_index = {n: i for i, n in enumerate(self._nodes)}
+        self._edge_index = {e: j for j, e in enumerate(self._edges)}
+
+        # The series and all the draw items parented to it are about to go away
+        self._items_built = False
+        self._node_items = []
+        self._edge_items = []
+        self._shown_nodes.clear()
+        self._shown_edges.clear()
+        self._prev_anchor = None
+        self._prev_scale = None
+        self._highlighted_node = None
 
         # Need to create a new series due to the bug mentioned below
         dpg.delete_item(f"{self.tag}_x_axis", children_only=True)
@@ -204,49 +233,124 @@ class GraphMap(DpgItem):
         y_max = max(y_data)
         self._graph_extends = (x_max - x_min, y_max - y_min)
 
+        # Positions moved, so the next render must not take the unchanged-transform
+        # shortcut even if the view itself did not move
+        self._prev_anchor = None
+        self._prev_scale = None
+
+    def _build_items(self, sender: str) -> None:
+        """Create every draw item once, hidden, in back-to-front order.
+
+        Creating them up front (rather than on first sighting) is what keeps
+        edges behind nodes: draw order follows creation order, and a lazily
+        created edge would end up painted over the nodes it connects.
+        """
+        dpg.push_container_stack(sender)
+
+        # Edges first so they render below the nodes
+        self._edge_items = [
+            dpg.draw_line((0, 0), (0, 0), color=style.white, show=False)
+            for _ in self._edges
+        ]
+        self._node_items = [
+            dpg.draw_circle(
+                (0, 0),
+                radius=self._node_radius,
+                color=style.white,
+                fill=style.white,
+                show=False,
+            )
+            for _ in self._nodes
+        ]
+
+        dpg.pop_container_stack()
+        self._items_built = True
+
     def _render(self, sender: str, app_data: list) -> None:
-        if not self.graph:
+        if not self.graph or not self._nodes:
             return
 
         transformed_x = app_data[1]
         transformed_y = app_data[2]
-        node_indices = {n: i for i, n in enumerate(self._nodes)}
-        scale = 1 / max(*self.get_zoom())
+        if not transformed_x:
+            return
 
-        def get_pos(node: str):
-            idx = node_indices[node]
-            return transformed_x[idx], transformed_y[idx]
+        zoom = max(self.get_zoom())
+        scale = 1 / zoom if zoom > 0 else 1.0
 
-        dpg.push_container_stack(sender)
+        # The transform is a uniform scale plus translation, so one anchor point
+        # and the zoom fully describe it. Comparing those is O(1) and lets us
+        # skip the whole pass on frames where nothing actually moved.
+        anchor = (transformed_x[0], transformed_y[0])
+        transform_changed = anchor != self._prev_anchor or scale != self._prev_scale
 
-        # Edges first so they render below the nodes
-        for node0, node1 in self.graph.edges:
-            edge_tag = f"{self.tag}_edge_{node0}_TO_{node1}"
-            if dpg.does_item_exist(edge_tag):
-                dpg.configure_item(edge_tag, p1=get_pos(node0), p2=get_pos(node1))
+        if self._items_built and not transform_changed:
+            return
+
+        if not self._items_built:
+            self._build_items(sender)
+
+        self._prev_anchor = anchor
+        self._prev_scale = scale
+
+        # Cull against the plot rect, in the same pixel space the series reports
+        rx, ry = dpg.get_item_rect_min(f"{self.tag}_plot")
+        rw, rh = dpg.get_item_rect_size(f"{self.tag}_plot")
+        margin = 32.0
+        x0 = rx - margin
+        y0 = ry - margin
+        x1 = rx + rw + margin
+        y1 = ry + rh + margin
+
+        shown_nodes = self._shown_nodes
+        shown_edges = self._shown_edges
+
+        # Edges reference node positions, so both passes read transformed_x/y directly
+        node_idx = self._node_index
+        for j, (node0, node1) in enumerate(self._edges):
+            ia = node_idx[node0]
+            ib = node_idx[node1]
+            ax = transformed_x[ia]
+            ay = transformed_y[ia]
+            bx = transformed_x[ib]
+            by = transformed_y[ib]
+
+            if (
+                max(ax, bx) < x0
+                or min(ax, bx) > x1
+                or max(ay, by) < y0
+                or min(ay, by) > y1
+            ):
+                if j in shown_edges:
+                    dpg.configure_item(self._edge_items[j], show=False)
+                    shown_edges.discard(j)
+                continue
+
+            if j in shown_edges:
+                dpg.configure_item(self._edge_items[j], p1=(ax, ay), p2=(bx, by))
             else:
-                dpg.draw_line(
-                    get_pos(node0),
-                    get_pos(node1),
-                    color=style.white,
-                    tag=edge_tag,
+                dpg.configure_item(
+                    self._edge_items[j], p1=(ax, ay), p2=(bx, by), show=True
                 )
+                shown_edges.add(j)
 
-        for node in self._nodes:
-            node_tag = f"{self.tag}_node_{node}"
-            if dpg.does_item_exist(node_tag):
-                # TODO scale
-                dpg.configure_item(node_tag, center=get_pos(node), radius=self._node_radius * scale)
+        for i in range(len(self._nodes)):
+            px = transformed_x[i]
+            py = transformed_y[i]
+
+            if px < x0 or px > x1 or py < y0 or py > y1:
+                if i in shown_nodes:
+                    dpg.configure_item(self._node_items[i], show=False)
+                    shown_nodes.discard(i)
+                continue
+
+            if i in shown_nodes:
+                dpg.configure_item(self._node_items[i], center=(px, py))
             else:
-                dpg.draw_circle(
-                    get_pos(node),
-                    radius=self._node_radius * scale,
-                    color=style.white,
-                    fill=style.white,
-                    tag=node_tag,
+                dpg.configure_item(
+                    self._node_items[i], center=(px, py), show=True
                 )
-
-        dpg.pop_container_stack()
+                shown_nodes.add(i)
 
     def _on_mouse_move(self) -> None:
         if not self._node_lookup:
@@ -280,18 +384,23 @@ class GraphMap(DpgItem):
 
         self.callback_triggered = False
 
+    def _set_node_color(self, node: str, color: tuple) -> None:
+        idx = self._node_index.get(node)
+        if idx is None or not self._items_built:
+            return
+
+        dpg.configure_item(self._node_items[idx], color=color)
+
     def set_highlighted_node(self, node: str) -> None:
         if self._highlighted_node and self._highlighted_node != node:
-            dpg.configure_item(
-                f"{self.tag}_node_{self._highlighted_node}", color=style.white
-            )
+            self._set_node_color(self._highlighted_node, style.white)
 
             for node1 in nx.all_neighbors(self.graph, self._highlighted_node):
                 if node1 != self._highlighted_node:
                     self._set_edge_highlight(self._highlighted_node, node1, False)
 
         if node and node != self._highlighted_node:
-            dpg.configure_item(f"{self.tag}_node_{node}", color=style.orange)
+            self._set_node_color(node, style.orange)
 
             for node1 in nx.all_neighbors(self.graph, node):
                 if node1 != node:
@@ -300,23 +409,29 @@ class GraphMap(DpgItem):
         self._highlighted_node = node
 
     def _set_edge_highlight(self, node_a: str, node_b: str, highlighted: bool) -> None:
-        tag = f"{self.tag}_edge_{node_a}_TO_{node_b}"
-        if not dpg.does_item_exist(tag):
-            tag = f"{self.tag}_edge_{node_b}_TO_{node_a}"
+        if not self._items_built:
+            return
 
-        if not dpg.does_item_exist(tag):
+        # The edge may be stored in either direction
+        idx = self._edge_index.get((node_a, node_b))
+        if idx is None:
+            idx = self._edge_index.get((node_b, node_a))
+
+        if idx is None:
             return
 
         thickness = 2 if highlighted else 1
         color = style.orange if highlighted else style.white
-        dpg.configure_item(tag, thickness=thickness, color=color)
+        dpg.configure_item(self._edge_items[idx], thickness=thickness, color=color)
 
     def _update_hover_text(self, node: str) -> None:
         if node:
             lines = self.get_node_data(node)
+            colors = None
+
             if isinstance(lines, str):
                 lines = [lines]
-            elif isinstance(lines[0], tuple):
+            elif lines and isinstance(lines[0], tuple):
                 lines, colors = zip(*lines)
 
             if not colors:

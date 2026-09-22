@@ -58,16 +58,27 @@ class GraphLayout:
     zoom_factor: float = 1.3
 
     def compute_layout(
-        self, graph: nx.DiGraph, nodemap: dict[str, Node]
+        self,
+        graph: nx.DiGraph,
+        nodemap: dict[str, Node],
+        order: list[str] = None,
     ) -> dict[str, tuple[float, float]]:
-        """Return {node_id: (x, y)} for all visible nodes."""
+        """Return {node_id: (x, y)} for all visible nodes.
+
+        `order` is a topological ordering of `graph`. Callers that already have
+        one should pass it: topologically sorting a large graph costs more than
+        the rest of the layout pass combined, and the order never changes.
+        """
         return {}
 
 
 @dataclass
 class HorizontalGraphLayout(GraphLayout):
     def compute_layout(
-        self, graph: nx.DiGraph, nodemap: dict[str, Node]
+        self,
+        graph: nx.DiGraph,
+        nodemap: dict[str, Node],
+        order: list[str] = None,
     ) -> dict[str, tuple[float, float]]:
         """
         Place nodes left-to-right by column, top-to-bottom within each column.
@@ -78,7 +89,13 @@ class HorizontalGraphLayout(GraphLayout):
 
         next_y[col] tracks the next free y-coordinate per column so siblings
         from different parents never overlap.
+
+        `order` is a topological ordering of `graph`; it is computed here only
+        if the caller did not supply one.
         """
+        if order is None:
+            order = nx.topological_sort(graph)
+
         scale = self.zoom_factor
         gap_x = self.gap_x * scale
         step_y = self.step_y * scale
@@ -88,7 +105,7 @@ class HorizontalGraphLayout(GraphLayout):
         col_max_x: dict[int, float] = {}  # col index -> max right edge in that col
         next_y: dict[int, float] = {}  # col index -> next free y
 
-        for node_id in nx.topological_sort(graph):
+        for node_id in order:
             node = nodemap[node_id]
             if not node.visible:
                 continue
