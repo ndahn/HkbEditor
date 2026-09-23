@@ -62,6 +62,7 @@ from hkb_editor.gui.dialogs.mass_rename_dialog import mass_rename_dialog
 from hkb_editor.gui.dialogs.merge_hierarchy_dialog import merge_hierarchy_dialog
 from hkb_editor.gui.dialogs.mirror_skeleton_dialog import mirror_skeleton_dialog
 from hkb_editor.gui.dialogs.event_listener_dialog import event_listener_dialog
+from hkb_editor.gui.dialogs.event_map_dialog import event_map_dialog
 from hkb_editor.gui.dialogs.state_graph_viewer_dialog import state_graph_viewer_dialog
 from hkb_editor.workflows.aliases import AliasManager, AliasMap
 from hkb_editor.gui.dialogs.create_stateinfo_dialog import create_stateinfo_dialog
@@ -560,14 +561,18 @@ class BehaviorEditor:
 
         # Tools
         with dpg.menu(label="Tools", enabled=False, tag=f"{self.tag}_menu_tools"):
-            # TODO enable once https://github.com/hoffstadt/DearPyGui/issues/2374 is done
             dpg.add_menu_item(
-                label="Graph Map...",
+                label="Graph Map",
                 callback=lambda: self.open_graphmap_dialog(),
             )
 
             dpg.add_menu_item(
-                label="Event Listener...",
+                label="Event Map",
+                callback=lambda: self.open_event_map_dialog(),
+            )
+
+            dpg.add_menu_item(
+                label="Event Listener",
                 callback=lambda: self.open_event_listener_dialog(),
             )
 
@@ -578,7 +583,7 @@ class BehaviorEditor:
             # )
 
             dpg.add_menu_item(
-                label="Mirror Skeleton...",
+                label="Mirror Skeleton",
                 callback=self.open_mirror_skeleton_dialog,
             )
 
@@ -1409,14 +1414,16 @@ class BehaviorEditor:
             # Copy & attach menus
             dpg.add_selectable(
                 label="Insert Selector",
-                callback=lambda s, a, u: self._insert_selector(u),
+                callback=lambda s, a, u: self._quick_insert_selector(u),
                 user_data=node,
             )
-            # dpg.add_selectable(
-            #     label="Add CMSG + Clip",
-            #     callback=lambda s, a, u: self._add_cmsg_clip(u),
-            #     user_data=node,
-            # )
+            if obj.type_name in ("hkbManualSelectorGenerator",):
+                dpg.add_selectable(
+                    label="Add CMSG",
+                    callback=lambda s, a, u: self._quick_add_cmsg(u),
+                    user_data=node,
+                    tag=f"{self.tag}_context_quick_add_cmsg",
+                )
 
             make_copy_menu(obj)
             self._create_attach_menu(node)
@@ -1451,7 +1458,7 @@ class BehaviorEditor:
                 user_data=obj,
             )
 
-    def _insert_selector(self, node: Node) -> None:
+    def _quick_insert_selector(self, node: Node) -> None:
         parent = next(self.canvas.graph.predecessors(node.id), None)
         if not parent:
             self.logger.warning("Node has no parent in current graph")
@@ -1478,26 +1485,55 @@ class BehaviorEditor:
             )
             return
 
-        def on_object_created(sender: str, selector: HkbRecord, user_data: Any):
-            with self.beh.transaction():
-                selector["generators"].append(target)
-                parent_ptr.set_value(selector)
+        msg_type_id = self.beh.type_registry.find_first_type_by_name(
+            "hkbManualSelectorGenerator"
+        )
+        with self.beh.transaction():
+            msg = HkbRecord.new(self.beh, msg_type_id, object_id=self.beh.new_id())
+            self.beh.add_object(msg)
+            msg["name"] = "MyIncredibleMSG"
+            msg["generators"].append(target)
+            parent_ptr.set_value(msg)
 
-            dialog: create_object_dialog = DpgItem.get_instance(sender)
-            if dialog.pin_objects:
-                self.add_pinned_object(selector.object_id)
+        self.add_pinned_object(msg)
+        self.regenerate()
+        self.canvas.select(msg.object_id)
 
-            self.regenerate()
-            self.canvas.select(selector.object_id)
+        self.logger.info(
+            "MSG created - don't forget to set a name and bind the selectedGeneratorIndex!"
+        )
 
-        create_object_dialog(
-            self.beh,
-            self.alias_manager,
-            on_object_created,
-            allowed_types=[msg_type],
-            include_derived_types=True,
-            selected_type_id=msg_type,
-            title="Insert Selector",
+    def _quick_add_cmsg(self, node: Node) -> None:
+        obj = self.beh.objects[node.id]
+        if "generators" not in obj.fields:
+            self.logger.error("Object does not have a generators field")
+            return
+
+        cmsg_type_id = self.beh.type_registry.find_first_type_by_name(
+            "CustomManualSelectorGenerator"
+        )
+        clip_type_id = self.beh.type_registry.find_first_type_by_name(
+            "hkbClipGenerator"
+        )
+
+        with self.beh.transaction():
+            cmsg = HkbRecord.new(self.beh, cmsg_type_id, object_id=self.beh.new_id())
+            self.beh.add_object(cmsg)
+            obj["name"] = "MyAwesomeCMSG"
+            obj["generators"].append(cmsg)
+
+            clip = HkbRecord.new(self.beh, clip_type_id, object_id=self.beh.new_id())
+            self.beh.add_object(clip)
+            clip["name"] = "MyFabulousClip"
+            cmsg["generators"].append(clip)
+
+        self.add_pinned_object(cmsg)
+        self.add_pinned_object(clip)
+        self.regenerate()
+        self.canvas.select(cmsg.object_id)
+
+        self.logger.info(
+            "CMSG + ClipGen created - don't forget to assign names and animation IDs!"
         )
 
     def _delete_node(self, node: Node) -> None:
@@ -2030,6 +2066,15 @@ class BehaviorEditor:
             dpg.add_text(f"{name} - {len(g)} nodes")
 
         dpg.set_item_user_data(dialog, graph_map)
+
+    def open_event_map_dialog(self):
+        tag = f"{self.tag}_event_map_dialog"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        event_map_dialog(self.beh, tag=tag)
 
     def open_event_listener_dialog(self):
         tag = f"{self.tag}_event_listener_dialog"
