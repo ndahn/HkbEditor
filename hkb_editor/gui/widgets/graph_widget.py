@@ -67,6 +67,7 @@ class GraphWidget(DpgItem):
         self.default_axis_range = default_axis_range
 
         self._manual_highlights: dict[str, style.RGBA] = {}
+        self._was_drag: bool = False
 
         self._x_scale = 1.0
         self._x_offset = 0.0
@@ -195,12 +196,9 @@ class GraphWidget(DpgItem):
         dpg.bind_item_theme(self.tag, style.themes.plot_no_borders)
 
         with dpg.handler_registry(tag=f"{self.tag}_handler_registry"):
-            dpg.add_mouse_release_handler(
-                dpg.mvMouseButton_Left, callback=self._on_left_click
-            )
-            dpg.add_mouse_release_handler(
-                dpg.mvMouseButton_Right, callback=self._on_right_click
-            )
+            dpg.add_mouse_down_handler(callback=self._on_mouse_down)
+            dpg.add_mouse_drag_handler(callback=self._on_mouse_drag)
+            dpg.add_mouse_release_handler(callback=self._on_mouse_release)
 
     def set_graph(self, graph: nx.DiGraph) -> None:
         self.clear()
@@ -357,6 +355,23 @@ class GraphWidget(DpgItem):
         self._unlock_axes()
 
     # === Canvas interactions ==============================
+
+    def _on_mouse_down(self) -> None:
+        self._was_drag = False
+
+    def _on_mouse_drag(self, sender: str, delta: tuple[float, float], user_data: Any) -> None:
+        _, dx, dy = delta
+        if dx**2 + dy**2 >= 25:
+            self._was_drag = True
+
+    def _on_mouse_release(self, sender: str, button: int, user_data: Any) -> None:
+        if self._was_drag:
+            return
+
+        if button == dpg.mvMouseButton_Left:
+            self._on_left_click()
+        elif button == dpg.mvMouseButton_Right:
+            self._on_right_click()
 
     def _on_left_click(self) -> None:
         if not dpg.is_item_hovered(self.tag):

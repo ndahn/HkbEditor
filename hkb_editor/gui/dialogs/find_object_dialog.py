@@ -130,11 +130,15 @@ class find_dialog(DpgItem):
         modal: bool,
     ) -> None:
         if self._context_menu_func:
-            with dpg.item_handler_registry(tag=self._t("right_click_handler")):
-                dpg.add_item_clicked_handler(
-                    button=dpg.mvMouseButton_Right,
-                    callback=self._on_context_menu,
-                )
+            handler = self._t("right_click_handler")
+            if not dpg.does_item_exist(handler):
+                dpg.add_item_handler_registry(tag=handler)
+            
+            dpg.add_item_clicked_handler(
+                button=dpg.mvMouseButton_Right,
+                callback=self._on_context_menu,
+                parent=handler,
+            )
 
         with dpg.window(
             width=600,
