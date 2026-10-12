@@ -1409,7 +1409,7 @@ class AttributesWidget(DpgItem):
         dpg.set_value(sender, False)
 
         # Late import to avoid cyclic import
-        from ..workflows.create_object import create_object_dialog
+        from hkb_editor.gui.dialogs.create_object_dialog import create_object_dialog
 
         attribute = self._selected_attribute_info.attribute
         path = self._selected_attribute_info.path
