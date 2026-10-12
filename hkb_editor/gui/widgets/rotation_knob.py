@@ -2,8 +2,10 @@ from typing import Callable, Any
 import math
 import dearpygui.dearpygui as dpg
 
+from .dpg_item import DpgItem
 
-class RotationKnob:
+
+class RotationKnob(DpgItem):
     def __init__(
         self,
         *,
@@ -21,8 +23,9 @@ class RotationKnob:
         user_data: Any = None,
     ) -> None:
         """Create a full-circle rotation knob. Builds immediately."""
-        self.tag = tag or f"rotation_knob_{dpg.generate_uuid()}"
-        self.size = size
+        # self.tag comes from DpgItem
+        super().__init__(tag or f"rotation_knob_{dpg.generate_uuid()}")
+        self._size = size
         self.label = label
         self.ring_color = ring_color
         self.indicator_color = indicator_color
@@ -34,7 +37,7 @@ class RotationKnob:
         self._value_deg = float(default_value % 360.0)
 
         # build UI
-        W = H = float(self.size)
+        W = H = float(self._size)
         cx, cy = W * 0.5, H * 0.5
         radius = W * 0.40
         indicator_len = radius * 0.84
@@ -82,6 +85,15 @@ class RotationKnob:
             parent=self.handler_tag,
         )
 
+    def destroy(self) -> None:
+        # This is a global handler registry, so leaving it behind means the
+        # knob keeps reacting to mouse input long after it is gone
+        self._delete_item(self.handler_tag)
+
+    def __del__(self) -> None:
+        self.destroy()
+        super().__del__()
+
     @property
     def degrees(self) -> float:
         return self._value_deg
@@ -89,10 +101,6 @@ class RotationKnob:
     @property
     def radians(self) -> float:
         return math.radians(self.degrees)
-
-    def __del__(self):
-        if dpg.does_item_exist(self.handler_tag):
-            dpg.delete_item(self.handler_tag)
 
     def set_value_deg(self, new_val: float) -> None:
         self._value_deg = new_val
@@ -103,7 +111,7 @@ class RotationKnob:
         self.set_value_deg(math.degrees(new_val))
 
     def _angle_from_mouse(self) -> float:
-        W = H = float(self.size)
+        W = H = float(self._size)
         cx, cy = W * 0.5, H * 0.5
         x, y = dpg.get_drawing_mouse_pos()
         return math.degrees(math.atan2(y - cy, x - cx)) % 360.0
@@ -117,7 +125,7 @@ class RotationKnob:
             dpg.set_value(tid, txt)
 
     def _update_needle(self) -> None:
-        W = H = float(self.size)
+        W = H = float(self._size)
         cx, cy = W * 0.5, H * 0.5
         radius = W * 0.40
         indicator_len = radius * 0.84
