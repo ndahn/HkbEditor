@@ -668,8 +668,7 @@ class HavokBehavior(Tagfile):
             var_path = bnd["memberPath"].get_value()
             var_idx = bnd["variableIndex"].get_value()
             binding_type = bnd["bindingType"].get_value()
-            # TODO band aid for supporting DS3
-            if binding_type not in (0, "VARIABLE", "BINDING_TYPE_VARIABLE"):
+            if binding_type != 0:
                 logging.getLogger().warning(
                     f"Unknown binding type {binding_type} ({var_path}:{var_idx})"
                 )
