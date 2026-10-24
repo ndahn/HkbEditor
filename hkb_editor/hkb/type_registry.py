@@ -14,6 +14,16 @@ if TYPE_CHECKING:
 _logger = getLogger(__name__)
 
 
+def parse_hklib_xml(xml: str) -> ET._Element:
+    """Parse a HKLib type dump.
+
+    The dump may be a complete file or just a list of <HavokType> elements.
+    """
+    xml = xml.lstrip("﻿ \t\r\n")
+    xml = re.sub(r"^<\?xml[^>]*\?>", "", xml)
+    return xml_from_str(f"<HavokTypes>{xml}</HavokTypes>")
+
+
 class TypeMismatch(Exception):
     def __init__(self, message: str, missing: list[str], extra: list[str]):
         super().__init__(message)
@@ -209,7 +219,33 @@ Failed to verify object {obj.object_id} ({obj.type_id} / {obj.type_name})
 
         return known
 
-    def insert_types_from_hklib_xml(self, xml: str, types: list[str]) -> list[str]:
+    def find_missing_hklib_types(self, xml: "str | ET._Element") -> list[str]:
+        """List the record types of a HKLib type dump that the registry doesn't know.
+
+        Parameters
+        ----------
+        xml : str | ET._Element
+            Content of a HKLib type dump, or the result of parse_hklib_xml.
+
+        Returns
+        -------
+        list[str]
+            Sorted names of the missing record types.
+        """
+        root = parse_hklib_xml(xml) if isinstance(xml, str) else xml
+        known = {info["name"] for info in self.types.values()}
+
+        missing = {
+            el.get("Name")
+            for el in root.iter("HavokType")
+            # Only records (classes and structs), everything else is pulled in by them
+            if int(el.get("Format", "0")) & 0xF == 7 and el.get("Name") not in known
+        }
+        return sorted(missing)
+
+    def insert_types_from_hklib_xml(
+        self, xml: "str | ET._Element", types: list[str]
+    ) -> list[str]:
         """Add types from a HKLib type dump to the registry.
 
         The requested types are added together with all types they depend on (parents,
@@ -219,8 +255,9 @@ Failed to verify object {obj.object_id} ({obj.type_id} / {obj.type_name})
 
         Parameters
         ----------
-        xml : str
-            Content of a HKLib type dump, i.e. a list of <HavokType> elements.
+        xml : str | ET._Element
+            Content of a HKLib type dump, i.e. a list of <HavokType> elements, or
+            the result of parse_hklib_xml.
         types : list[str]
             Names of the types to insert, e.g. "hkbManualSelectorGenerator".
 
@@ -231,9 +268,7 @@ Failed to verify object {obj.object_id} ({obj.type_id} / {obj.type_name})
             The tagfile that owns this registry will include them when saving, see
             write_new_types().
         """
-        xml = xml.lstrip("﻿ \t\r\n")
-        xml = re.sub(r"^<\?xml[^>]*\?>", "", xml)
-        root = xml_from_str(f"<HavokTypes>{xml}</HavokTypes>")
+        root = parse_hklib_xml(xml) if isinstance(xml, str) else xml
 
         hk_types: dict[str, ET._Element] = {
             el.get("Id"): el for el in root.iter("HavokType")
