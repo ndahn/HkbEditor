@@ -78,6 +78,7 @@ from hkb_editor.workflows.clone_hierarchy import (
 )
 from hkb_editor.gui.dialogs.duplicate_clipcat_dialog import duplicate_clipcat_dialog
 from hkb_editor.gui.dialogs.fix_common_problems_dialog import fix_common_problems_dialog
+from hkb_editor.gui.dialogs.insert_types_dialog import insert_types_dialog
 from hkb_editor.workflows.verify_behavior import verify_behavior
 from hkb_editor.gui.helpers import make_copy_menu, center_window
 from . import style
@@ -551,6 +552,10 @@ class BehaviorEditor:
             dpg.add_menu_item(
                 label="Fix Common Problems...",
                 callback=self.open_fix_common_problems_dialog,
+            )
+            dpg.add_menu_item(
+                label="Insert Types...",
+                callback=self.open_insert_types_dialog,
             )
 
             dpg.add_separator()
@@ -1130,16 +1135,16 @@ class BehaviorEditor:
             no_saved_settings=True,
             autosize=True,
         ) as popup:
-            dpg.add_selectable(
+            dpg.add_menu_item(
                 label="Unpin",
                 callback=lambda s, a, u: self.remove_pinned_object(u),
                 user_data=object_id,
             )
-            dpg.add_selectable(
+            dpg.add_menu_item(
                 label="Unpin All",
                 callback=self.remove_all_pinned_objects,
             )
-            dpg.add_selectable(
+            dpg.add_menu_item(
                 label="Jump To",
                 callback=lambda s, a, u: self.jump_to_object(u),
                 user_data=object_id,
@@ -1347,31 +1352,31 @@ class BehaviorEditor:
                 label += " <array>"
 
             with dpg.menu(label=label):
-                dpg.add_selectable(
+                dpg.add_menu_item(
                     label="New Object",
                     callback=attach_new_object,
                     user_data=(record, path),
                 )
-                dpg.add_selectable(
+                dpg.add_menu_item(
                     label="New from XML",
                     callback=attach_from_xml,
                     user_data=(record, path),
                 )
 
                 if isinstance(obj, HkbArray):
-                    dpg.add_selectable(
+                    dpg.add_menu_item(
                         label="Hierarchy (full)",
                         callback=attach_hierarchy,
                         user_data=(record, path),
                     )
 
-                    dpg.add_selectable(
+                    dpg.add_menu_item(
                         label="Hierarchy (children only)",
                         callback=attach_children,
                         user_data=(record, path),
                     )
                 else:
-                    dpg.add_selectable(
+                    dpg.add_menu_item(
                         label="Hierarchy",
                         callback=attach_hierarchy,
                         user_data=(record, path),
@@ -1412,13 +1417,13 @@ class BehaviorEditor:
             dpg.add_separator()
 
             # Copy & attach menus
-            dpg.add_selectable(
+            dpg.add_menu_item(
                 label="Insert Selector",
                 callback=lambda s, a, u: self._quick_insert_selector(u),
                 user_data=node,
             )
             if obj.type_name in ("hkbManualSelectorGenerator",):
-                dpg.add_selectable(
+                dpg.add_menu_item(
                     label="Add CMSG",
                     callback=lambda s, a, u: self._quick_add_cmsg(u),
                     user_data=node,
@@ -1429,12 +1434,12 @@ class BehaviorEditor:
             self._create_attach_menu(node)
 
             with dpg.menu(label="Delete"):
-                dpg.add_selectable(
+                dpg.add_menu_item(
                     label="Subtree",
                     callback=lambda s, a, u: self._delete_node_cascade(u),
                     user_data=node,
                 )
-                dpg.add_selectable(
+                dpg.add_menu_item(
                     label="Single node",
                     callback=lambda s, a, u: self._delete_node(u),
                     user_data=node,
@@ -1442,17 +1447,22 @@ class BehaviorEditor:
 
             dpg.add_separator()
 
-            dpg.add_selectable(
+            dpg.add_menu_item(
                 label="Search children",
                 callback=lambda s, a, u: self.open_search_dialog(f"parent={u.id}"),
                 user_data=node,
             )
-            dpg.add_selectable(
+            dpg.add_menu_item(
+                label="Go to parent",
+                callback=lambda s, a, u: self.jump_to_parent(self.selected_node),
+                user_data=node,
+            )
+            dpg.add_menu_item(
                 label="Mass rename",
                 callback=lambda s, a, u: self.open_mass_rename_dialog(u),
                 user_data=node,
             )
-            dpg.add_selectable(
+            dpg.add_menu_item(
                 label="Pin object",
                 callback=lambda s, a, u: self.add_pinned_object(u),
                 user_data=obj,
@@ -1741,8 +1751,21 @@ class BehaviorEditor:
                 candidates.extend(self.canvas.graph.predecessors(oid))
 
         return None
+    
+    def jump_to_parent(self, node: Node) -> None:
+        parents = self.beh.get_immediate_parents(node.id)
+        if not parents:
+            return
 
-    def jump_to_object(self, object_id: str):
+        for parent_rec in parents:
+            parent_node = self.canvas.nodes.get(parent_rec.object_id)
+            if parent_node and parent_node.visible:
+                self.jump_to(parent_rec)
+                return
+
+        self.jump_to_object(next(parents.__iter__()))
+
+    def jump_to_object(self, object_id: str | HkbRecord):
         if isinstance(object_id, HkbRecord):
             object_id = object_id.object_id
 
@@ -2230,6 +2253,27 @@ class BehaviorEditor:
             return
 
         fix_common_problems_dialog(self.beh, tag=tag)
+
+    def open_insert_types_dialog(self):
+        tag = f"{self.tag}_insert_types"
+        if dpg.does_item_exist(tag):
+            dpg.show_item(tag)
+            dpg.focus_item(tag)
+            return
+
+        file_path = open_file_dialog(
+            title="Select HKLib types", filetypes={"HKLib types": "*.xml"}
+        )
+
+        if not file_path:
+            return
+
+        def on_types_inserted(sender: str, new_type_ids: list[str], user_data: Any):
+            if new_type_ids:
+                # New types are not tracked by the undo stack, but must still be saved
+                self.last_save_undo_id = None
+
+        insert_types_dialog(self.beh, file_path, on_types_inserted, tag=tag)
 
     def open_hierarchy_import_dialog(self):
         file_path = open_file_dialog(
