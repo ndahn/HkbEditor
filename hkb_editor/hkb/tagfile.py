@@ -17,7 +17,6 @@ import networkx as nx
 from .xml import (
     xml_from_file,
     xml_from_str,
-    xml_to_str,
     add_type_comments,
     HkbXmlElement,
     MutationType,
@@ -228,6 +227,7 @@ class Tagfile:
             # Add comments on the copy. We don't want to keep these as they can mess up
             # parsing and object evaluation (e.g. locating fields)
             tmp = deepcopy(self._tree)
+            self.type_registry.write_new_types(tmp)
             add_type_comments(tmp, self)
             ET.indent(tmp)
             tmp.getroottree().write(str(file_path))
@@ -235,10 +235,9 @@ class Tagfile:
         elif format == TagfileFormat.HK2014:
             from .tagfile_convert import hk2018_to_2014
 
-            conv = hk2018_to_2014(
-                xml_to_str(self._tree, xml_declaration=True, standalone=False)
-            )
-            Path(file_path).write_text(conv, "utf-8")
+            tmp = deepcopy(self._tree)
+            self.type_registry.write_new_types(tmp)
+            Path(file_path).write_text(hk2018_to_2014(tmp), "utf-8")
 
         self.file = str(file_path)
 
