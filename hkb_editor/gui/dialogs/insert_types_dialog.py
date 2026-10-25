@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Callable
 from dearpygui import dearpygui as dpg
 from lxml import etree as ET
+import webbrowser
 
 from hkb_editor.hkb import Tagfile
 from hkb_editor.hkb.type_registry import parse_hklib_xml
@@ -13,9 +14,7 @@ from .file_dialog import open_file_dialog
 
 
 _instructions = """\
-Select a type dump created by HKLib to add types this behavior doesn't have yet. Any types they depend on will be added as well.
-
-The new types are saved together with the behavior. This cannot be undone!
+Use this when you want to use nodes whose types are not present in this behavior yet. Any types they depend on will be added as well. This operation cannot be undone!
 """
 
 
@@ -87,6 +86,12 @@ class insert_types_dialog(DpgItem):
                     hint="HKLib types .xml",
                     tag=self._t("file_path"),
                 )
+                dpg.add_button(
+                    label="HKLib",
+                    callback=lambda s, a, u: webbrowser.open(u),
+                    user_data="https://github.com/The12thAvenger/HKLib/tree/main/HKLib.Reflection/Res",
+                )
+                dpg.bind_item_theme(dpg.last_item(), style.themes.link_button)
                 dpg.add_button(label="Load...", callback=self._on_select_file)
 
             dpg.add_spacer(height=3)
@@ -184,9 +189,7 @@ class insert_types_dialog(DpgItem):
             self.show_message(f"Failed: {e}")
             return
 
-        self._logger.info(
-            "Added %d types (%s)", len(new_type_ids), ", ".join(selected)
-        )
+        self._logger.info("Added %d types (%s)", len(new_type_ids), ", ".join(selected))
         self.show_message(f"Added {len(new_type_ids)} types", color=style.blue)
 
         # The new types and their dependencies are no longer missing
@@ -235,9 +238,7 @@ class insert_types_dialog(DpgItem):
     # === Helpers ======================================================
 
     def _refresh(self) -> None:
-        missing = self._tagfile.type_registry.find_missing_hklib_types(
-            self._hklib_root
-        )
+        missing = self._tagfile.type_registry.find_missing_hklib_types(self._hklib_root)
         self._fill_type_list(missing)
 
     def _apply_filter(self, filt: str) -> None:

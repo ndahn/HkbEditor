@@ -2261,19 +2261,12 @@ class BehaviorEditor:
             dpg.focus_item(tag)
             return
 
-        file_path = open_file_dialog(
-            title="Select HKLib types", filetypes={"HKLib types": "*.xml"}
-        )
-
-        if not file_path:
-            return
-
         def on_types_inserted(sender: str, new_type_ids: list[str], user_data: Any):
             if new_type_ids:
                 # New types are not tracked by the undo stack, but must still be saved
                 self.last_save_undo_id = None
 
-        insert_types_dialog(self.beh, file_path, on_types_inserted, tag=tag)
+        insert_types_dialog(self.beh, None, on_types_inserted, tag=tag)
 
     def open_hierarchy_import_dialog(self):
         file_path = open_file_dialog(
